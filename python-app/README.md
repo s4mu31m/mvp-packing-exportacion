@@ -152,12 +152,24 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+## Restricciones técnicas actuales
+
+En el estado actual del módulo, existen restricciones y supuestos técnicos que deben considerarse durante el desarrollo:
+
+- la aplicación está preparada principalmente para **desarrollo local**, no como entorno productivo cerrado
+- la persistencia actualmente visible corresponde a **`db.sqlite3`**, por lo que la base de datos definitiva aún debe confirmarse según la arquitectura final del MVP
+- la configuración está separada en `base.py`, `local.py` y `production.py`, pero la estrategia final de variables sensibles, secretos y despliegue seguro todavía debe formalizarse
+- la integración con **Dataverse** existe como base técnica inicial, pero aún debe validarse su alcance real dentro del flujo definitivo del proyecto
+- la estructura de **dominio** e **infraestructura** ya está iniciada, aunque sus contratos, repositorios y casos de uso todavía están en fase de construcción
+- el entorno virtual `.venv`, los archivos compilados y carpetas como `__pycache__` corresponden a artefactos locales de desarrollo y no deben considerarse parte del entregable funcional
+- el módulo mantiene una arquitectura abierta para convivir con `power-platform`, por lo que algunas responsabilidades del sistema todavía dependen de decisiones funcionales y técnicas del proyecto general
+
 ## Consideraciones de desarrollo
 
-- `.venv` corresponde al entorno local y no debería versionarse como parte del código del proyecto.
-- `__pycache__` y archivos compilados de Python tampoco deberían formar parte del repositorio.
-- `db.sqlite3` puede servir para desarrollo inicial, pero la persistencia definitiva dependerá de la arquitectura acordada para el MVP.
-- La separación entre `domain` e `infrastructure` deja una base útil para evitar que toda la lógica quede acoplada directamente a Django.
+- `.venv` corresponde al entorno local y no debería versionarse como parte del código del proyecto
+- `__pycache__` y archivos compilados de Python tampoco deberían formar parte del repositorio
+- `db.sqlite3` puede servir para desarrollo inicial, pero la persistencia definitiva dependerá de la arquitectura acordada para el MVP
+- la separación entre `domain` e `infrastructure` deja una base útil para evitar que toda la lógica quede acoplada directamente a Django
 
 ## Próximos avances sugeridos
 
