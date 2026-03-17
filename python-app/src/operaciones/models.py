@@ -8,12 +8,9 @@ from core.models import AuditSourceModel
 class TipoEvento(models.TextChoices):
     BIN_REGISTRADO = "BIN_REGISTRADO", "Bin registrado"
     LOTE_CREADO = "LOTE_CREADO", "Lote creado"
-    BIN_ASIGNADO_LOTE = "BIN_ASIGNADO_LOTE", "Bin asignado a lote"
-    LOTE_INGRESO_CAMARA = "LOTE_INGRESO_CAMARA", "Lote ingresa a cámara"
-    LOTE_SALIDA_CAMARA = "LOTE_SALIDA_CAMARA", "Lote sale de cámara"
     PALLET_CREADO = "PALLET_CREADO", "Pallet creado"
     LOTE_ASIGNADO_PALLET = "LOTE_ASIGNADO_PALLET", "Lote asignado a pallet"
-    ETAPA_REGISTRADA = "ETAPA_REGISTRADA", "Etapa registrada"
+    PALLET_CERRADO = "PALLET_CERRADO", "Pallet cerrado"
 
 
 class MaestroOperacionalModel(AuditSourceModel):
