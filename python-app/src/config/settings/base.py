@@ -10,22 +10,27 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
+DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if os.getenv("DJANGO_ALLOWED_HOSTS") else []
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+# Dataverse
+DATAVERSE_URL = os.getenv("DATAVERSE_URL", "").rstrip("/")
+DATAVERSE_TENANT_ID = os.getenv("DATAVERSE_TENANT_ID", "")
+DATAVERSE_CLIENT_ID = os.getenv("DATAVERSE_CLIENT_ID", "")
+DATAVERSE_CLIENT_SECRET = os.getenv("DATAVERSE_CLIENT_SECRET", "")
+DATAVERSE_API_VERSION = os.getenv("DATAVERSE_API_VERSION", "v9.2")
+DATAVERSE_TIMEOUT = int(os.getenv("DATAVERSE_TIMEOUT", "30"))
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-(=j@as)d)-jt_!#4x4z+(@2xjsc0$d)psl66%5z$(=%mzjj_fx'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+LANGUAGE_CODE = "es-cl"
+TIME_ZONE = os.getenv("TIME_ZONE", "America/Santiago")
+USE_I18N = True
+USE_TZ = True
 
 
 # Application definition
