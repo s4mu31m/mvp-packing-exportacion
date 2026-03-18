@@ -15,6 +15,10 @@ env/
 .env.*
 !.env.example
 
+# Archivos .env específicos del proyecto
+python-app/src/.env
+python-app/.env
+
 # Django
 db.sqlite3
 db.sqlite3-journal
