@@ -6,11 +6,20 @@ from core.models import AuditSourceModel
 
 
 class TipoEvento(models.TextChoices):
-    BIN_REGISTRADO = "BIN_REGISTRADO", "Bin registrado"
-    LOTE_CREADO = "LOTE_CREADO", "Lote creado"
-    PALLET_CREADO = "PALLET_CREADO", "Pallet creado"
-    LOTE_ASIGNADO_PALLET = "LOTE_ASIGNADO_PALLET", "Lote asignado a pallet"
-    PALLET_CERRADO = "PALLET_CERRADO", "Pallet cerrado"
+    BIN_REGISTRADO           = "BIN_REGISTRADO",           "Bin registrado"
+    LOTE_CREADO              = "LOTE_CREADO",              "Lote creado"
+    PALLET_CREADO            = "PALLET_CREADO",            "Pallet creado"
+    LOTE_ASIGNADO_PALLET     = "LOTE_ASIGNADO_PALLET",     "Lote asignado a pallet"
+    PALLET_CERRADO           = "PALLET_CERRADO",           "Pallet cerrado"
+    PESAJE                   = "PESAJE",                   "Pesaje y asignación de lote"
+    DESVERDIZADO_INGRESO     = "DESVERDIZADO_INGRESO",     "Ingreso a desverdizado"
+    DESVERDIZADO_SALIDA      = "DESVERDIZADO_SALIDA",      "Salida de desverdizado"
+    CAMARA_MANTENCION        = "CAMARA_MANTENCION",        "Ingreso a cámara de mantención"
+    CAMARA_MANTENCION_SALIDA = "CAMARA_MANTENCION_SALIDA", "Salida de cámara de mantención"
+    PACKING_PROCESO          = "PACKING_PROCESO",          "Proceso de packing"
+    CONTROL_CALIDAD          = "CONTROL_CALIDAD",          "Control de calidad"
+    CAMARA_FRIO_INGRESO      = "CAMARA_FRIO_INGRESO",      "Ingreso a cámara de frío"
+    CONTROL_TEMPERATURA      = "CONTROL_TEMPERATURA",      "Control de temperatura en cámara"
 
 
 class MaestroOperacionalModel(AuditSourceModel):

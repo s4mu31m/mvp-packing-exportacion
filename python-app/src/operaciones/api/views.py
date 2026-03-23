@@ -8,6 +8,7 @@ from operaciones.application.use_cases import (
     registrar_bin_recibido,
     crear_lote_recepcion,
     cerrar_pallet,
+    registrar_evento_etapa,
 )
 from operaciones.models import Bin, Lote, Pallet, RegistroEtapa
 
@@ -41,6 +42,18 @@ def api_crear_lote(request):
 def api_cerrar_pallet(request):
     payload = json.loads(request.body)
     result = cerrar_pallet(payload)
+    return JsonResponse(
+        {"ok": result.ok, "code": result.code, "message": result.message,
+         "data": result.data, "errors": result.errors},
+        status=200 if result.ok else 400
+    )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_registrar_evento(request):
+    payload = json.loads(request.body)
+    result = registrar_evento_etapa(payload)
     return JsonResponse(
         {"ok": result.ok, "code": result.code, "message": result.message,
          "data": result.data, "errors": result.errors},

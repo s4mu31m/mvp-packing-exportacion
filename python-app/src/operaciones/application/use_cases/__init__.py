@@ -1,3 +1,4 @@
 from .registrar_bin_recibido import registrar_bin_recibido
 from .crear_lote_recepcion import crear_lote_recepcion
 from .cerrar_pallet import cerrar_pallet
+from .registrar_evento_etapa import registrar_evento_etapa
