@@ -20,4 +20,5 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/dataverse/', include('core.dataverse_urls')),
+    path("api/operaciones/", include("operaciones.urls")),
 ]
