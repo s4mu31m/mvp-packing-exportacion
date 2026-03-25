@@ -1,0 +1,74 @@
+/* ============================================================
+   VARIABLES.CSS — Design Tokens & Reset
+   CFN Packing Exportación · MVP v0.1
+   ============================================================ */
+
+/* ============ RESET ============ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ============ ROOT TOKENS ============ */
+:root {
+  /* Backgrounds */
+  --bg-base:      #0e1623;
+  --bg-surface:   #162032;
+  --bg-card:      #1a2840;
+  --bg-raised:    #203050;
+
+  /* Brand — Teal */
+  --teal-500:     #14b8a6;
+  --teal-400:     #2dd4bf;
+  --teal-600:     #0d9488;
+  --teal-800:     #0f5a52;
+  --teal-glow:    rgba(20, 184, 166, 0.15);
+
+  /* Slate */
+  --slate-200:    #e2e8f0;
+  --slate-300:    #cbd5e1;
+  --slate-400:    #94a3b8;
+  --slate-600:    #475569;
+
+  /* Semantic */
+  --danger:       #f87171;
+  --warning:      #fbbf24;
+  --success:      #34d399;
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-muted:   #94a3b8;
+  --text-dim:     #64748b;
+
+  /* Borders */
+  --border:       rgba(148, 163, 184, 0.12);
+  --border-focus: rgba(20, 184, 166, 0.5);
+
+  /* Radius */
+  --radius-sm:    6px;
+  --radius:       10px;
+  --radius-lg:    16px;
+
+  /* Shadows */
+  --shadow:       0 4px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg:    0 8px 40px rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --font-sans:    'DM Sans', 'Inter', sans-serif;
+}
+
+/* ============ BASE ============ */
+html, body {
+  height: 100%;
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============ SCROLLBARS ============ */
+::-webkit-scrollbar          { width: 6px; height: 6px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: var(--slate-600); border-radius: 3px; }

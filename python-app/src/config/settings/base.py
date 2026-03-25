@@ -24,7 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if os.getenv("DJANGO_ALLOWED_HOSTS") else []
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "").split(
+    ",") if os.getenv("DJANGO_ALLOWED_HOSTS") else []
 
 # Dataverse
 DATAVERSE_URL = os.getenv("DATAVERSE_URL", "").rstrip("/")
@@ -67,19 +68,53 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
+
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+
+        # DIRS: templates/ compartidos (base.html, layout_app.html)
+
+        "DIRS": [BASE_DIR / "templates"],
+
+        # APP_DIRS: busca templates/ dentro de cada app instalada
+
+        "APP_DIRS": True,
+
+        "OPTIONS": {
+
+            "context_processors": [
+
+                "django.template.context_processors.debug",
+
+                "django.template.context_processors.request",
+
+                "django.contrib.auth.context_processors.auth",
+
+                "django.contrib.messages.context_processors.messages",
+
+                # AGREGAR: inyecta planta, exportador, nav a todos los templates
+
+                "core.context_processors.cfn_context",
+
             ],
+
         },
+
     },
+
 ]
+
+STATIC_URL = "/static/"
+
+STATICFILES_DIRS = [BASE_DIR / "static"]  # src/static/
+
+LOGIN_URL = "/usuarios/login/"
+
+LOGIN_REDIRECT_URL = "/usuarios/portal/"
+
+LOGOUT_REDIRECT_URL = "/usuarios/login/"
+
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
@@ -117,16 +152,16 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+# LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# TIME_ZONE = 'UTC'
 
-USE_I18N = True
+# USE_I18N = True
 
-USE_TZ = True
+# USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
+# # Static files (CSS, JavaScript, Images)
+# # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+# STATIC_URL = 'static/'

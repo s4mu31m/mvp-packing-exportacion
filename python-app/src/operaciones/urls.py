@@ -6,9 +6,9 @@ from operaciones.api.views import (
 )
 
 urlpatterns = [
-    path("bins/", api_registrar_bin),
-    path("lotes/", api_crear_lote),
-    path("pallets/", api_cerrar_pallet),
+    path("bins/",         api_registrar_bin),
+    path("lotes/",        api_crear_lote),
+    path("pallets/",      api_cerrar_pallet),
     path("trazabilidad/", api_trazabilidad),
-    path("eventos/", api_registrar_evento),
+    path("eventos/",      api_registrar_evento),
 ]

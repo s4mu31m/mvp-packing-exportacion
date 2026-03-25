@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<!-- TOPNAV -->
+<nav class="topnav">
+  <div class="topnav-logo">
+    <a href="{% url 'operaciones:dashboard' %}" class="topnav-logo-link">
+      <div class="topnav-logo-icon">🍇</div>
+      <div>
+        <div class="topnav-title">{{ page_title|default:"Producción Packing" }}</div>
+        <div class="topnav-subtitle">{{ planta_seleccionada.nombre }}</div>
+      </div>
+    </a>
+  </div>
+  <div class="topnav-actions">
+    <span class="badge badge-teal badge-dot">En línea</span>
+    <div class="topnav-user">
+      <div class="user-avatar">{{ request.user.username|slice:":2"|upper }}</div>
+      <div>
+        <div class="user-name">{{ request.user.get_full_name|default:request.user.username }}</div>
+        <div class="user-role">{{ request.user.perfil.rol_display }}</div>
+      </div>
+    </div>
+    <a href="{% url 'usuarios:logout' %}" class="btn btn-ghost btn-sm">⎋</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <!-- SIDEBAR — generado desde context processor -->
+  <nav class="sidebar">
+    {% for section in nav_sections %}
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">{{ section.label }}</div>
+        {% for item in section.items %}
+          <a href="{{ item.url }}"
+             class="sidebar-item {% if request.resolver_match.url_name == item.url_name %}active{% endif %}">
+            <span class="icon">{{ item.icon }}</span>
+            {{ item.name }}
+            {% if item.badge %}
+              <span class="badge-count">{{ item.badge }}</span>
+            {% endif %}
+          </a>
+        {% endfor %}
+      </div>
+      {% if not forloop.last %}<div class="sidebar-divider"></div>{% endif %}
+    {% endfor %}
+  </nav>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <div class="page-title">{% block page_title %}{% endblock %}</div>
+        <div class="page-subtitle">{% block page_subtitle %}{% endblock %}</div>
+      </div>
+      <div class="flex-row">
+        {% block page_actions %}{% endblock %}
+      </div>
+    </div>
+
+    <div class="page-body animate-in">
+      {% block page_body %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<!-- MOBILE NAV -->
+<div class="mobile-nav">
+  {% for item in mobile_nav_items %}
+    <a href="{{ item.url }}"
+       class="mobile-nav-item {% if request.resolver_match.url_name == item.url_name %}active{% endif %}">
+      <span class="icon">{{ item.icon }}</span>{{ item.name }}
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

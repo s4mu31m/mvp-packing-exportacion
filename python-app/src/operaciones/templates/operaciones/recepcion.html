@@ -1,0 +1,73 @@
+{% extends "layout_app.html" %}
+{% load static %}
+
+{% block title %}Recepción Bins — CFN{% endblock %}
+
+{% block page_title %}Recepción de Bins{% endblock %}
+{% block page_subtitle %}Lote activo: {{ lote.codigo }} — {{ lote.exportador }}{% endblock %}
+
+{% block page_actions %}
+  <span class="badge badge-teal">{{ lote.codigo }}</span>
+  <button class="btn btn-primary btn-sm" form="form-recepcion" type="submit">
+    💾 Guardar Bin
+  </button>
+{% endblock %}
+
+{% block page_body %}
+  <!-- INDICADOR DE PROGRESO (pasos del flujo) -->
+  {% include "packing/_step_indicator.html" with active_step="recepcion" %}
+
+  <div class="op-layout">
+    <!-- FORMULARIO PRINCIPAL -->
+    <div class="flex-col">
+      <div class="scan-box" id="scan-box">
+        <div class="scan-box-icon">📷</div>
+        <div class="scan-box-label">Escanear código de barra del bin</div>
+        <input type="text" id="scan-input" style="opacity:0;position:absolute"
+               autofocus autocomplete="off">
+      </div>
+
+      <div class="card">
+        <form method="post" id="form-recepcion">
+          {% csrf_token %}
+          {{ form.as_div }}   {# O renderizar campo a campo con template tags #}
+          <div class="flex-row mt-4">
+            <button type="reset" class="btn btn-ghost">🗑 Limpiar</button>
+            <button type="submit" class="btn btn-primary ml-auto">
+              + Agregar Bin a Lote
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- PANEL LATERAL BINS DEL LOTE -->
+    <div class="op-sidebar-panel">
+      <div class="op-sidebar-title">Bins en {{ lote.codigo }}</div>
+      <div id="bins-list">
+        {% for bin in bins_del_lote %}
+          {% include "packing/_bin_item.html" with bin=bin %}
+        {% empty %}
+          <div class="empty-state">
+            <div class="empty-state-desc">Sin bins registrados aún</div>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="section-divider"></div>
+      <div class="flex-row" style="font-size:.82rem">
+        <span style="color:var(--text-muted)">Total bins:</span>
+        <strong style="margin-left:auto">{{ bins_del_lote|length }}</strong>
+      </div>
+      <div class="flex-row mt-4" style="font-size:.82rem">
+        <span style="color:var(--text-muted)">Total neto:</span>
+        <strong style="color:var(--teal-400);margin-left:auto">
+          {{ total_peso_neto|floatformat:0 }} kg
+        </strong>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{% static 'js/scan.js' %}"></script>
+{% endblock %}
