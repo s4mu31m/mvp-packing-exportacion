@@ -2,14 +2,28 @@ from django.db import transaction
 
 from operaciones.application.results import UseCaseResult
 from operaciones.application.exceptions import PayloadValidationError
-from operaciones.models import Bin, Lote, BinLote, TipoEvento
+from operaciones.models import TipoEvento
 from operaciones.services.validators import require_fields
 from operaciones.services.normalizers import normalize_code, normalize_temporada, normalize_operator_code
-from operaciones.services.event_builder import build_event_key, create_registro_etapa
+from operaciones.services.event_builder import build_event_key
+from infrastructure.repository_factory import get_repositories
+from domain.repositories.base import Repositories
 
 
 @transaction.atomic
-def crear_lote_recepcion(payload: dict) -> UseCaseResult:
+def crear_lote_recepcion(payload: dict, *, repos: Repositories | None = None) -> UseCaseResult:
+    """
+    Crea un lote en recepción y asocia los bins que lo componen.
+
+    Reglas:
+    - Todos los bins referenciados deben existir en la temporada.
+    - El lote_code debe ser único por temporada.
+    - Ningún bin puede estar ya asignado a otro lote (estrategia strict).
+    - Se registra un evento LOTE_CREADO para trazabilidad.
+    """
+    if repos is None:
+        repos = get_repositories()
+
     try:
         require_fields(payload, ["temporada", "lote_code", "bin_codes"])
     except PayloadValidationError as exc:
@@ -19,11 +33,11 @@ def crear_lote_recepcion(payload: dict) -> UseCaseResult:
             errors=exc.errors,
         )
 
-    temporada = normalize_temporada(payload["temporada"])
-    lote_code = normalize_code(payload["lote_code"])
-    bin_codes = payload.get("bin_codes", [])
-    operator_code = normalize_operator_code(payload.get("operator_code", ""))
-    source_system = payload.get("source_system", "local").strip() or "local"
+    temporada      = normalize_temporada(payload["temporada"])
+    lote_code      = normalize_code(payload["lote_code"])
+    bin_codes      = payload.get("bin_codes", [])
+    operator_code  = normalize_operator_code(payload.get("operator_code", ""))
+    source_system  = payload.get("source_system", "local").strip() or "local"
     source_event_id = payload.get("source_event_id", "").strip()
 
     if not isinstance(bin_codes, list) or not bin_codes:
@@ -35,11 +49,7 @@ def crear_lote_recepcion(payload: dict) -> UseCaseResult:
 
     bin_codes = [normalize_code(code) for code in bin_codes]
 
-    lote_existente = Lote.objects.filter(
-        temporada=temporada,
-        lote_code=lote_code,
-    ).first()
-
+    lote_existente = repos.lotes.find_by_code(temporada, lote_code)
     if lote_existente:
         return UseCaseResult.reject(
             code="LOTE_ALREADY_EXISTS",
@@ -47,14 +57,9 @@ def crear_lote_recepcion(payload: dict) -> UseCaseResult:
             errors=[f"Ya existe lote {lote_code} en temporada {temporada}"],
         )
 
-    bins = list(
-        Bin.objects.filter(
-            temporada=temporada,
-            bin_code__in=bin_codes,
-        )
-    )
+    bin_records = repos.bins.filter_by_codes(temporada, bin_codes)
 
-    found_codes = {b.bin_code for b in bins}
+    found_codes   = {b.bin_code for b in bin_records}
     missing_codes = [code for code in bin_codes if code not in found_codes]
 
     if missing_codes:
@@ -64,14 +69,12 @@ def crear_lote_recepcion(payload: dict) -> UseCaseResult:
             errors=[f"Bins no encontrados: {', '.join(missing_codes)}"],
         )
 
-    # Regla opcional fuerte:
-    # rechazar bins que ya estén ligados a otro lote
-    bins_ya_asignados = BinLote.objects.filter(
-        bin__in=bins).select_related("bin", "lote")
-    if bins_ya_asignados.exists():
+    bin_ids = [b.id for b in bin_records]
+    conflicts = repos.bin_lotes.find_existing_assignments(bin_ids)
+    if conflicts:
         errores = [
-            f"El bin {rel.bin.bin_code} ya está asociado al lote {rel.lote.lote_code}"
-            for rel in bins_ya_asignados
+            f"El bin {c.bin_code} ya está asociado al lote {c.lote_code}"
+            for c in conflicts
         ]
         return UseCaseResult.reject(
             code="BINS_ALREADY_ASSIGNED",
@@ -79,44 +82,38 @@ def crear_lote_recepcion(payload: dict) -> UseCaseResult:
             errors=errores,
         )
 
-    lote_obj = Lote.objects.create(
-        temporada=temporada,
-        lote_code=lote_code,
+    lote_record = repos.lotes.create(
+        temporada,
+        lote_code,
         operator_code=operator_code,
         source_system=source_system,
         source_event_id=source_event_id,
     )
 
+    bins_por_code = {b.bin_code: b for b in bin_records}
     relaciones = []
-    for bin_obj in bins:
-        relacion = BinLote.objects.create(
-            bin=bin_obj,
-            lote=lote_obj,
+    for code in bin_codes:
+        bin_r = bins_por_code[code]
+        bin_lote_record = repos.bin_lotes.create(
+            bin_r.id,
+            lote_record.id,
             operator_code=operator_code,
             source_system=source_system,
             source_event_id=source_event_id,
         )
-        relaciones.append(
-            {
-                "bin_id": bin_obj.id,
-                "bin_code": bin_obj.bin_code,
-                "bin_lote_id": relacion.id,
-            }
-        )
+        relaciones.append({
+            "bin_id":      bin_r.id,
+            "bin_code":    bin_r.bin_code,
+            "bin_lote_id": bin_lote_record.id,
+        })
 
-    event_key = build_event_key(
-        temporada,
-        "LOTE",
-        lote_code,
-        "RECEPCION",
-        "CREACION",
-    )
+    event_key = build_event_key(temporada, "LOTE", lote_code, "RECEPCION", "CREACION")
 
-    create_registro_etapa(
+    repos.registros.create(
         temporada=temporada,
         event_key=event_key,
         tipo_evento=TipoEvento.LOTE_CREADO,
-        lote_obj=lote_obj,
+        lote_id=lote_record.id,
         operator_code=operator_code,
         source_system=source_system,
         source_event_id=source_event_id,
@@ -132,9 +129,9 @@ def crear_lote_recepcion(payload: dict) -> UseCaseResult:
         code="LOTE_CREATED",
         message="Lote creado en recepción correctamente",
         data={
-            "lote_id": lote_obj.id,
-            "lote_code": lote_obj.lote_code,
-            "temporada": lote_obj.temporada,
-            "bins": relaciones,
+            "lote_id":   lote_record.id,
+            "lote_code": lote_record.lote_code,
+            "temporada": lote_record.temporada,
+            "bins":      relaciones,
         },
     )

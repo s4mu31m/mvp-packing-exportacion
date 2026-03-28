@@ -18,8 +18,11 @@ class TipoEvento(models.TextChoices):
     CAMARA_MANTENCION_SALIDA = "CAMARA_MANTENCION_SALIDA", "Salida de cámara de mantención"
     PACKING_PROCESO          = "PACKING_PROCESO",          "Proceso de packing"
     CONTROL_CALIDAD          = "CONTROL_CALIDAD",          "Control de calidad"
+    INGRESO_PACKING          = "INGRESO_PACKING",          "Ingreso a proceso de packing"
     CAMARA_FRIO_INGRESO      = "CAMARA_FRIO_INGRESO",      "Ingreso a cámara de frío"
     CONTROL_TEMPERATURA      = "CONTROL_TEMPERATURA",      "Control de temperatura en cámara"
+    CALIDAD_DESVERDIZADO     = "CALIDAD_DESVERDIZADO",     "Control de calidad posterior a desverdizado"
+    CALIDAD_PALLET           = "CALIDAD_PALLET",           "Control de calidad posterior a pallet"
 
 
 class MaestroOperacionalModel(AuditSourceModel):
