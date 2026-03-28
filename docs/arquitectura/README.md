@@ -1,177 +1,130 @@
-# Arquitectura
+# Arquitectura del sistema
+
+> Referencia completa: [04 Arquitectura de la solución — Wiki](https://github.com/s4mu31m/mvp-packing-exportacion/wiki/04-Arquitectura-de-la-solucion)
+
+---
 
 ## Objetivo
 
-Documentar la arquitectura base del módulo Python del proyecto **MVP Packing Exportación**, dejando registro de la estructura inicial, la separación lógica de componentes y los criterios técnicos mínimos que guiarán la implementación del sistema.
+Documentar la arquitectura base del MVP y la separación lógica de responsabilidades entre los componentes del sistema.
+
+---
+
+## Responsabilidades por componente
+
+| Componente | Rol en la arquitectura |
+|---|---|
+| **Dataverse** | Base estructural principal de datos del MVP. Solicitado por el cliente para mantener consistencia con sus otros módulos. Es donde viven las tablas, columnas, relaciones y la estructura de datos objetivo. |
+| **Django/Python** | Framework de desarrollo del módulo de exportación. Capa de lógica, validaciones, cálculos e inserción de datos. Motor de ejecución del módulo. No es el sistema rector de datos. |
+| **Wiki** | Centro de conocimiento centralizado. Consolida y explica. No reemplaza al contrato funcional ni al repositorio ni a Dataverse. |
+| **Repositorio** | Espacio de trabajo donde se materializa técnicamente el proyecto. Fuente primaria de la implementación en código. |
+
+---
+
+## Vista general de la arquitectura
+
+```
+UI tablet-first / navegador
+    ↓ HTTPS
+Backend Python — Django
+    ↓ OAuth2 client credentials
+Microsoft Entra ID
+    ↓ Access token
+Dataverse
+    ↓
+Tablas del MVP: Bin / LotePlanta / Pallet / ...
+```
+
+---
+
+## Capas principales
+
+- **Configuración:** Settings del proyecto Django separados por entorno (`base.py`, `local.py`, `production.py`).
+
+- **Aplicación:** Apps Django (`core`, `operaciones`, `usuarios`) con la capa de lógica de negocio centralizada en `operaciones/application/use_cases/`.
+
+- **Dominio:** Entidades, servicios y contratos del negocio. Carpeta `domain/` reservada para esta capa.
+
+- **Infraestructura:** Integraciones técnicas, autenticación, clientes y repositorios externos. Capa `infrastructure/dataverse/` como frontera de integración con Dataverse.
+
+---
+
+## Arquitectura interna de la app `operaciones`
+
+```
+operaciones/
+├── models.py                         # Modelos de dominio (ORM Django)
+├── application/
+│   ├── use_cases/                    # Casos de uso: orquestación de la lógica de negocio
+│   │   ├── registrar_bin_recibido.py
+│   │   ├── crear_lote_recepcion.py
+│   │   ├── cerrar_pallet.py
+│   │   └── registrar_evento_etapa.py
+│   ├── results.py                    # Objetos de resultado estandarizados
+│   ├── dto.py                        # Data Transfer Objects
+│   └── exceptions.py                 # Excepciones de dominio
+├── services/
+│   ├── normalizers.py                # Normalización de datos de entrada
+│   ├── validators.py                 # Validaciones de negocio reutilizables
+│   └── event_builder.py              # Construcción de registros de etapa
+└── api/
+    ├── views.py                      # Endpoints REST
+    └── serializers.py                # Serializers (pendiente de implementar)
+```
+
+**Principio rector:** la lógica de negocio no reside en las vistas. Las vistas solo reciben la solicitud y delegan al caso de uso correspondiente.
+
+---
+
+## Criterios arquitectónicos
+
+1. **Separación entre configuración, negocio e integración** — no deben quedar mezclados.
+2. **Crecimiento modular por componentes** — cada funcionalidad en un módulo con responsabilidades claras.
+3. **Múltiples entornos sin cambios al código** — controlado via settings y variables de entorno.
+4. **Integraciones encapsuladas** — todo acceso a Dataverse concentrado en `infrastructure/dataverse/`.
+5. **Lógica de negocio centralizada fuera de vistas** — los casos de uso son reutilizables desde cualquier punto de entrada.
+
+---
 
 ## Estado actual de la arquitectura
 
-Actualmente el proyecto cuenta con una base inicial de arquitectura para el desarrollo en Python, organizada sobre Django y preparada para crecer de forma modular.
+| Aspecto | Estado |
+|---|---|
+| Estructura del proyecto Django | ✅ Implementada |
+| Modelo de datos local (Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa) | ✅ Implementado — Paso 2 |
+| Casos de uso (registrar_bin_recibido, crear_lote_recepcion, cerrar_pallet, registrar_evento_etapa) | ✅ Implementados y testeados — Paso 3 |
+| API REST básica (5 endpoints) | ✅ Implementada |
+| Preparación para integración Dataverse (client, auth, estructura) | ✅ Preparada, no activa en ambiente real |
+| Autenticación con Entra ID / credenciales reales | 🔲 Pendiente — depende de accesos del cliente |
+| Integración activa con Dataverse (mapping, sync) | 🔲 Pendiente — etapa posterior |
+| UI funcional tablet-first | 🔲 Pendiente |
 
-El módulo `python-app` ya dispone de:
+---
 
-- entorno local de desarrollo en Python
-- archivo `requirements.txt` para dependencias
-- proyecto Django inicializado en `src/`
-- archivo `manage.py`
-- configuración separada por entornos en `config/settings`
-- apps base del proyecto
-- capas iniciales para dominio e integración externa
+## Preparación para integración Dataverse
 
-Esta base permite iniciar el desarrollo del MVP con una estructura ordenada, evitando mezclar configuración, lógica de negocio e integración técnica desde las primeras iteraciones.
+Se formalizó una preparación técnica del backend sin depender todavía de accesos productivos:
 
-## Estructura general registrada
+- Separación explícita de settings por entorno.
+- Capa `infrastructure/dataverse/` como frontera de integración externa.
+- Campo `dataverse_id` nullable en entidades maestras para preparación sin migraciones adicionales.
+- `DataverseTokenProvider` (OAuth2) y `DataverseClient` (HTTP) implementados y funcionales.
 
-La arquitectura actual se organiza en dos niveles:
+**Alcance real:** este avance deja preparada la estructura, pero no constituye una conexión operativa. La conexión efectiva sigue dependiendo de accesos, credenciales y validación del ambiente del cliente.
 
-### 1. Documentación del proyecto
-
-La carpeta `docs/` concentra la documentación funcional y técnica del repositorio:
-
-- `actas/`
-- `alcance/`
-- `arquitectura/`
-- `levantamiento/`
-- `planning/`
-
-La carpeta `docs/arquitectura/` tiene como propósito registrar decisiones técnicas, estructura general del sistema, lineamientos de integración y evolución de la solución.
-
-### 2. Módulo Python
-
-El desarrollo técnico del framework Python se encuentra en `python-app/`, con una estructura base orientada a backend modular.
-
-## Componentes principales definidos
-
-### Configuración del proyecto
-
-Dentro de `src/config/` se concentra la configuración principal de Django:
-
-- `urls.py`
-- `asgi.py`
-- `wsgi.py`
-
-Además, la configuración está separada en `config/settings/`, lo que permite diferenciar entornos y mantener orden técnico desde etapas tempranas:
-
-- `base.py`
-- `local.py`
-- `production.py`
-
-Esta separación es consistente con una arquitectura escalable y facilita futuras configuraciones para desarrollo, pruebas y despliegue.
-
-### Apps base del sistema
-
-Actualmente existen tres apps iniciales:
-
-- `core`
-- `operaciones`
-- `usuarios`
-
-Estas apps representan una primera separación funcional del sistema:
-
-- `core`: componentes base o transversales
-- `operaciones`: lógica relacionada al proceso operativo del MVP
-- `usuarios`: elementos vinculados a usuarios, perfiles o gestión asociada
-
-La definición exacta de responsabilidades podrá ajustarse en sprints posteriores, pero la separación inicial ya se encuentra establecida.
-
-### Capa de dominio
-
-Existe una carpeta `domain/` con la siguiente orientación:
-
-- `entities/`
-- `repositories/`
-- `services/`
-
-Esta capa busca desacoplar la lógica de negocio del framework y de las integraciones técnicas. Su objetivo es que las reglas del negocio del módulo puedan mantenerse organizadas y reutilizables.
-
-### Capa de infraestructura
-
-Existe una carpeta `infrastructure/` con integración inicial hacia `dataverse/`, incluyendo:
-
-- `auth.py`
-- `client.py`
-- `mapping.py`
-- `repositories/`
-
-Esto deja registrada desde la base la intención de separar la integración externa del resto del sistema, evitando que el acceso a servicios o datos quede mezclado con la lógica del dominio o con las vistas del framework.
-
-## Separación lógica inicial
-
-La arquitectura actual ya refleja una separación lógica mínima entre capas:
-
-### Configuración
-Todo lo relativo al arranque y comportamiento global del proyecto se concentra en `config/` y `config/settings/`.
-
-### Aplicación
-Las apps Django (`core`, `operaciones`, `usuarios`) concentran la organización funcional inicial del sistema.
-
-### Dominio
-La carpeta `domain/` queda reservada para entidades, servicios y contratos de repositorio asociados a las reglas del negocio.
-
-### Infraestructura
-La carpeta `infrastructure/dataverse/` concentra autenticación, cliente técnico, mapeos y repositorios de integración.
-
-Esta separación constituye una base válida para continuar en Sprint 2 con implementación sin partir desde una estructura improvisada.
-
-## Criterios de organización documentados
-
-La arquitectura base del módulo Python se regirá por los siguientes criterios iniciales:
-
-1. **Separación entre configuración, negocio e integración**  
-   La configuración del framework, la lógica del dominio y la infraestructura externa no deben quedar mezcladas.
-
-2. **Crecimiento modular por componentes**  
-   Las funcionalidades deberán incorporarse en módulos o apps con responsabilidades claras.
-
-3. **Preparación para múltiples entornos**  
-   La configuración debe mantenerse separada al menos entre entorno local y producción.
-
-4. **Integraciones encapsuladas**  
-   Todo acceso a Dataverse u otros servicios externos debe concentrarse en la capa de infraestructura.
-
-5. **Documentación progresiva**  
-   Este documento podrá ampliarse en siguientes sprints con decisiones técnicas, modelo de datos, convenciones y diagramas.
+---
 
 ## Restricciones técnicas actuales
 
-En la etapa actual se identifican las siguientes restricciones o condiciones:
+- Base de datos: **SQLite** para desarrollo local (no apta para producción con concurrencia).
+- Autenticación API: sin autenticación activa en endpoints — debe resolverse antes del piloto.
+- Serializers DRF: archivo vacío — respuestas manuales en JSON.
+- Vistas web (Dashboard, Recepción, Consulta): stubs con datos mock, pendientes de conectar con casos de uso.
 
-- la arquitectura aún está en fase base y no representa una solución cerrada
-- el modelo de datos definitivo todavía no está documentado en esta carpeta
-- la integración con Dataverse está iniciada a nivel estructural, pero no se considera documentada funcionalmente en detalle
-- existe una base local con `db.sqlite3`, útil para desarrollo inicial, pero no necesariamente representativa del entorno final
-- la carpeta `.venv` corresponde al entorno local y no forma parte de la arquitectura funcional del producto
+---
 
-## Decisiones técnicas registradas hasta ahora
+## Documentos relacionados
 
-A la fecha quedan registradas las siguientes decisiones iniciales:
-
-- uso de **Python + Django** como base del módulo web/backend
-- uso de **settings separados por entorno**
-- uso de **apps Django** para organización funcional inicial
-- preparación de una **capa de dominio**
-- preparación de una **capa de infraestructura** para integración con Dataverse
-
-## Próximos registros de arquitectura
-
-Este documento deberá ampliarse en siguientes iteraciones con:
-
-- diagrama lógico del módulo Python
-- definición de responsabilidades por app
-- modelo de datos inicial
-- estrategia de integración Python ↔ Dataverse
-- flujo entre frontend, backend e integraciones
-- decisiones técnicas relevantes del proyecto
-
-## Relación con otros documentos
-
-Este README de arquitectura complementa:
-
-- la documentación general del repositorio raíz
-- el README local de `python-app`
-- los documentos de alcance, levantamiento y planificación del proyecto
-
-## Conclusión
-
-La arquitectura base del módulo Python ya se encuentra definida a nivel estructural mínimo.  
-Existe una organización inicial de carpetas, módulos y separación lógica suficiente para considerar cerrada la etapa de definición base y continuar con la implementación del MVP en los siguientes sprints.
+- `docs/arquitectura/reestructura-planificaion.md` — documento de planificación v2 (referencia histórica).
+- [04 Arquitectura — Wiki](https://github.com/s4mu31m/mvp-packing-exportacion/wiki/04-Arquitectura-de-la-solucion)
+- [05.1 Backend Python Django — Wiki](https://github.com/s4mu31m/mvp-packing-exportacion/wiki/05.1-%C2%B7-Backend-Python-%E2%80%94-Django)

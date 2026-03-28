@@ -1,5 +1,9 @@
 # Actualización del plan de preparación y entrega del MVP utilizable en terreno con bins preconstruidos
 
+> **Nota:** Este documento es un **artefacto de planificación histórico** (versión 2 del plan). Refleja el diseño y alcance acordado antes del inicio del desarrollo. Los Pasos 1, 2 y 3 descritos en el roadmap están completados. Para el estado actual del proyecto, ver [docs/planning/README.md](../planning/README.md) y la [wiki del proyecto](https://github.com/s4mu31m/mvp-packing-exportacion/wiki/09-Planificacion-y-roadmap).
+
+---
+
 ## Propósito del documento
 
 Este documento corresponde a la **versión 2** del plan de preparación para el MVP y consolida las actualizaciones entregadas por el cliente sobre el flujo real de operación.

@@ -49,3 +49,10 @@ python-app/.venv/
 python-app/**/__pycache__/
 python-app/**/*.pyc
 python-app/db.sqlite3
+
+
+
+# =========================
+# Claude Code
+# =========================
+.claude/

@@ -2,20 +2,41 @@
 
 Repositorio principal del proyecto **MVP Packing Exportación**, orientado a la digitalización operativa del módulo de **packing y exportación**.
 
-Este repositorio concentra la **documentación base**, la **organización del trabajo en GitHub** y dos líneas iniciales de implementación:
+> **Documentación centralizada:** La [wiki del proyecto](https://github.com/s4mu31m/mvp-packing-exportacion/wiki) es el centro de conocimiento del MVP. Este repositorio es la materialización técnica; la wiki consolida y explica.
 
-- **Python**, para el desarrollo técnico de la aplicación.
-- **Power Platform**, para la exploración y documentación de la línea low-code.
+---
 
 ## Propósito
 
-El objetivo de este MVP es establecer una base ordenada para levantar requerimientos, definir alcance, documentar la arquitectura inicial y coordinar el desarrollo de una primera solución funcional.
+Establecer una base ordenada para levantar requerimientos, definir alcance, documentar la arquitectura y construir una primera solución funcional orientada al uso en terreno.
+
+---
 
 ## Estado actual
 
-El proyecto se encuentra en una etapa inicial de **estructuración y documentación**, con una base de gestión ya creada en GitHub y un entorno de trabajo en Python ya levantado.
+El proyecto completó los tres primeros pasos del MVP:
 
-## Estructura actual del repositorio
+| Paso | Estado | Descripción |
+|------|--------|-------------|
+| Paso 1 — Configuración del proyecto | ✅ Completado | Proyecto Django inicializado, estructura base definida |
+| Paso 2 — Modelo de datos local en Django | ✅ Completado | Entidades Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa implementadas |
+| Paso 3 — Lógica de negocio por casos de uso | ✅ Completado | Capa de aplicación con casos de uso implementados y validados con tests |
+| Paso 4 — Interfaz operativa mínima (REST) | 🔲 Pendiente | Exposición de casos de uso vía endpoints |
+| Paso 5 — Integración con Dataverse | 🔲 Pendiente | Sincronización con Dataverse como base estructural de datos |
+
+---
+
+## Eje funcional principal
+
+```
+Bin → Lote → Etapa → Pallet
+```
+
+Los bins llegan **preconstruidos** desde el módulo previo. Este módulo recibe, valida, relaciona y traza.
+
+---
+
+## Estructura del repositorio
 
 ```text
 mvp-packing-exportacion/
@@ -26,68 +47,68 @@ mvp-packing-exportacion/
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── docs/
 │   ├── actas/
-│   │   └── README.md
 │   ├── alcance/
-│   │   └── README.md
 │   ├── arquitectura/
-│   │   └── README.md
 │   ├── levantamiento/
-│   │   └── README.md
 │   └── planning/
-│       └── README.md
 ├── power-platform/
-│   └── README.md
 ├── python-app/
 │   ├── README.md
 │   ├── requirements.txt
-│   └── .venv/
+│   └── src/
+│       ├── manage.py
+│       ├── config/
+│       ├── core/
+│       ├── operaciones/
+│       ├── usuarios/
+│       ├── domain/
+│       └── infrastructure/
 └── README.md
 ```
+
+---
 
 ## Descripción de carpetas
 
 ### `.github/`
-Contiene la base de gestión colaborativa del repositorio, incluyendo plantillas para issues y pull requests.
+Plantillas de issues y pull requests para gestión colaborativa del repositorio.
 
 ### `docs/`
-Agrupa la documentación principal del proyecto, organizada por tema:
+Documentación funcional y técnica del proyecto, organizada por dominio:
 
-- **actas**: registro de acuerdos o sesiones de trabajo.
-- **alcance**: definición del alcance funcional del MVP.
-- **arquitectura**: lineamientos y decisiones de arquitectura.
-- **levantamiento**: recopilación inicial de necesidades, procesos o requerimientos.
-- **planning**: planificación general del trabajo.
+- **actas/**: minutas y acuerdos de reuniones.
+- **alcance/**: definición del alcance funcional del MVP.
+- **arquitectura/**: decisiones y lineamientos de arquitectura.
+- **levantamiento/**: flujo operativo, actores y hallazgos del levantamiento.
+- **planning/**: roadmap, estado de avance y planificación.
 
 ### `power-platform/`
-Espacio reservado para documentar y desarrollar la línea de trabajo asociada a Microsoft Power Platform.
+Espacio reservado para documentar la línea de trabajo asociada a Microsoft Power Platform y Dataverse.
 
 ### `python-app/`
-Contiene la base técnica de la aplicación en Python, incluyendo el archivo de dependencias y un entorno virtual local de desarrollo.
-
-> Se recomienda no versionar `.venv/` en el repositorio remoto, ya que corresponde a un entorno local.
-
-## Gestión del proyecto
-
-La organización del trabajo se apoya en GitHub mediante:
-
-- **Issues** para tareas y bloqueos.
-- **Pull Request Template** para estandarizar revisiones.
-- **Documentación por dominio** dentro de `docs/`.
-
-## Próximos pasos sugeridos
-
-- completar el contenido de cada `README.md` dentro de `docs/`,
-- definir la arquitectura inicial del MVP,
-- formalizar el backlog técnico y funcional,
-- comenzar la implementación de la primera versión operativa.
-
-## Tecnologías consideradas
-
-- **Python**
-- **Microsoft Power Platform**
-- **GitHub**
+Módulo backend en Python/Django. Contiene la lógica de negocio, modelos de dominio, casos de uso, servicios y la capa de integración con Dataverse.
 
 ---
 
-**Estado del repositorio:** en construcción  
-**Enfoque:** documentación, organización y desarrollo inicial del MVP
+## Tecnologías
+
+- **Python + Django** — backend, lógica de negocio, casos de uso
+- **Django REST Framework** — exposición de API REST
+- **Microsoft Dataverse / Power Platform** — base estructural de datos (integración preparada, pendiente de activar)
+- **SQLite** — base de datos local para desarrollo
+- **GitHub** — gestión del proyecto
+
+---
+
+## Gestión del proyecto
+
+El trabajo se organiza en GitHub mediante:
+
+- **Issues** para tareas y bloqueos.
+- **Pull Request Template** para estandarizar revisiones.
+- **Wiki** como centro de conocimiento del proyecto.
+- **Documentación por dominio** dentro de `docs/`.
+
+---
+
+**Wiki del proyecto:** https://github.com/s4mu31m/mvp-packing-exportacion/wiki

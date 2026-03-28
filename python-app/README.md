@@ -2,52 +2,44 @@
 
 Componente Python del proyecto **MVP Packing Exportación**.
 
-Este módulo concentra la base del desarrollo backend sobre **Django**, junto con una organización inicial orientada a separar configuración, aplicaciones del proyecto, dominio e integración con servicios externos. Su objetivo es servir como base técnica para la construcción del MVP y para la evolución posterior del sistema.
+Este módulo concentra el backend Django con la lógica de negocio, modelos de dominio, casos de uso y la capa de integración con Dataverse.
+
+> Referencia completa: [05.1 Backend Python Django — Wiki](https://github.com/s4mu31m/mvp-packing-exportacion/wiki/05.1-%C2%B7-Backend-Python-%E2%80%94-Django)
+
+---
 
 ## Estado actual
 
-Actualmente `python-app` ya no es solo un espacio reservado: cuenta con una base funcional de proyecto Django, entorno local de desarrollo, dependencias definidas y una estructura inicial para crecer de forma ordenada.
+**Pasos 1, 2 y 3 completados.** El núcleo operacional está implementado, testeado y listo para ser extendido.
 
-A la fecha, este componente incluye:
+| Paso | Estado | Descripción |
+|------|--------|-------------|
+| Paso 1 — Configuración del proyecto | ✅ Completado | Proyecto Django inicializado, settings por entorno |
+| Paso 2 — Modelo de datos local | ✅ Completado | Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa |
+| Paso 3 — Casos de uso | ✅ Completado | 4 casos de uso implementados y validados con tests |
+| Paso 4 — Interfaz operativa (REST + UI) | 🔲 Pendiente | Endpoints funcionales, UI tablet-first |
+| Paso 5 — Integración Dataverse | 🔲 Pendiente | Mapping y sync con Dataverse activo |
 
-- entorno virtual local en `.venv`
-- archivo `requirements.txt` para dependencias del proyecto
-- proyecto Django inicializado dentro de `src`
-- base de datos local `db.sqlite3` para desarrollo
-- archivo `manage.py` para la administración del proyecto
-- configuración desacoplada por ambiente en `config/settings`
-- apps iniciales del sistema: `core`, `operaciones` y `usuarios`
-- estructura de dominio separada en `domain`
-- base de integración externa en `infrastructure/dataverse`
+---
 
 ## Responsable principal
 
 **Samuel Montiel**
 
-## Propósito del módulo
+---
 
-Este componente está pensado para cubrir el desarrollo técnico del backend y de la lógica del MVP, incluyendo:
-
-- lógica de negocio del proceso operativo
-- modelado y persistencia de datos
-- vistas, formularios o endpoints según la arquitectura definida
-- organización del dominio del sistema
-- integración con servicios o fuentes externas
-- soporte a procesos complementarios de Power Platform cuando corresponda
-
-## Estructura actual resumida
+## Estructura actual
 
 ```text
 python-app/
-├── .venv/
 ├── requirements.txt
 ├── README.md
 └── src/
     ├── db.sqlite3
     ├── manage.py
     ├── config/
-    │   ├── asgi.py
     │   ├── urls.py
+    │   ├── asgi.py
     │   ├── wsgi.py
     │   └── settings/
     │       ├── base.py
@@ -55,75 +47,105 @@ python-app/
     │       ├── production.py
     │       └── __init__.py
     ├── core/
+    │   ├── models.py              # TimeStampedModel, AuditSourceModel (abstractos)
+    │   └── dataverse_views.py     # Endpoints de prueba Dataverse
     ├── operaciones/
+    │   ├── models.py              # Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa
+    │   ├── application/
+    │   │   ├── use_cases/
+    │   │   │   ├── registrar_bin_recibido.py
+    │   │   │   ├── crear_lote_recepcion.py
+    │   │   │   ├── cerrar_pallet.py
+    │   │   │   └── registrar_evento_etapa.py
+    │   │   ├── results.py
+    │   │   ├── dto.py
+    │   │   └── exceptions.py
+    │   ├── services/
+    │   │   ├── normalizers.py
+    │   │   ├── validators.py
+    │   │   └── event_builder.py
+    │   ├── api/
+    │   │   ├── views.py           # Endpoints REST
+    │   │   └── serializers.py     # Pendiente de implementar
+    │   ├── views.py               # Vistas web (stubs pendientes de conectar)
+    │   ├── urls.py
+    │   ├── web_urls.py
+    │   └── test/
+    │       ├── test_registrar_bin_recibido.py
+    │       ├── test_crear_lote_recepcion.py
+    │       ├── test_cerrar_pallet.py
+    │       ├── test_registrar_evento_etapa.py
+    │       └── test_flujo_mvp.py
     ├── usuarios/
-    ├── domain/
-    │   ├── entities/
-    │   ├── repositories/
-    │   └── services/
+    │   ├── views.py               # Login, logout, portal
+    │   └── templates/usuarios/
+    ├── domain/                    # Reservado para capa de dominio
     └── infrastructure/
         └── dataverse/
-            ├── auth.py
-            ├── client.py
-            ├── mapping.py
-            └── repositories/
+            ├── auth.py            # DataverseTokenProvider (OAuth2)
+            ├── client.py          # DataverseClient (HTTP)
+            ├── mapping.py         # Pendiente de implementar
+            └── repositories/     # Pendiente de implementar
 ```
 
-## Descripción de la estructura
+---
 
-### `src/`
-Contiene el código fuente principal del módulo Python y el proyecto Django activo.
+## Casos de uso implementados
 
-### `config/`
-Agrupa la configuración global del proyecto Django.
+### `registrar_bin_recibido`
+Registra la recepción de un bin preconstruido.
+- Valida que el bin no exista para la temporada
+- Crea el `Bin` y registra evento `BIN_REGISTRADO` en `RegistroEtapa`
 
-- `urls.py`: enrutamiento principal
-- `asgi.py` y `wsgi.py`: puntos de entrada para despliegue
-- `settings/`: separación de configuración por entorno
+### `crear_lote_recepcion`
+Crea un lote agrupando bins.
+- Valida que todos los bins existan y no estén ya asignados a otro lote
+- Crea el `Lote`, las relaciones `BinLote` y registra evento `LOTE_CREADO`
 
-### `config/settings/`
-La configuración está organizada por archivos, lo que facilita escalar el proyecto y separar responsabilidades:
+### `cerrar_pallet`
+Consolida lotes en un pallet.
+- Opera con `get_or_create` (idempotente)
+- Crea `Pallet`, relaciones `PalletLote` y registra eventos `PALLET_CREADO`, `LOTE_ASIGNADO_PALLET`, `PALLET_CERRADO`
 
-- `base.py`: configuración común del proyecto
-- `local.py`: configuración de desarrollo local
-- `production.py`: configuración prevista para despliegue
+### `registrar_evento_etapa`
+Registra cualquier evento del flujo operativo.
+- Flexible: acepta bin, lote y/o pallet según el tipo de evento
+- Soporta 14 tipos de evento (PESAJE, DESVERDIZADO_INGRESO, CONTROL_CALIDAD, etc.)
 
-### `core/`
-App base del proyecto. Sirve como punto de partida para componentes transversales o funcionalidades comunes del sistema.
+---
 
-### `operaciones/`
-App destinada al dominio operativo del MVP. Por su nombre y ubicación, está alineada con la futura lógica del módulo de packing y exportación.
+## API REST disponible
 
-### `usuarios/`
-App destinada a encapsular la gestión o lógica relacionada con usuarios dentro del sistema.
+| Método | Endpoint | Caso de uso |
+|--------|----------|-------------|
+| POST | `/api/operaciones/bins/` | `registrar_bin_recibido` |
+| POST | `/api/operaciones/lotes/` | `crear_lote_recepcion` |
+| POST | `/api/operaciones/pallets/` | `cerrar_pallet` |
+| POST | `/api/operaciones/eventos/` | `registrar_evento_etapa` |
+| GET | `/api/operaciones/trazabilidad/` | Consulta de RegistroEtapa |
 
-### `domain/`
-Estructura orientada a separar reglas de negocio del framework.
+---
 
-- `entities/`: entidades del dominio
-- `repositories/`: contratos o abstracciones de acceso a datos
-- `services/`: servicios de negocio
+## Reglas de negocio implementadas
 
-### `infrastructure/dataverse/`
-Base inicial para integración con Dataverse u otra capa externa similar.
+- Un bin no puede registrarse más de una vez con el mismo código en la misma temporada
+- Un lote no puede crearse si alguno de los bins referenciados no existe
+- Un bin no puede pertenecer a más de un lote al mismo tiempo
+- Un pallet solo se crea si los lotes que lo conforman existen previamente
+- Todo evento operacional queda registrado en `RegistroEtapa` para trazabilidad
 
-- `auth.py`: autenticación
-- `client.py`: cliente de conexión
-- `mapping.py`: transformación o mapeo de datos
-- `repositories/`: implementación de repositorios de infraestructura
+---
 
 ## Ejecución local
 
 ### 1. Activar entorno virtual
 
 En Windows:
-
 ```bash
 .venv\Scripts\activate
 ```
 
-En Linux o macOS:
-
+En Linux / macOS:
 ```bash
 source .venv/bin/activate
 ```
@@ -152,34 +174,44 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+---
+
+## Verificación técnica
+
+```bash
+# Verificar integridad del proyecto
+python manage.py check
+
+# Ejecutar suite de tests
+python manage.py test operaciones
+
+# Verificar conectividad con Dataverse (requiere .env configurado)
+python manage.py dataverse_ping
+```
+
+---
+
 ## Restricciones técnicas actuales
 
-En el estado actual del módulo, existen restricciones y supuestos técnicos que deben considerarse durante el desarrollo:
+- Base de datos **SQLite** para desarrollo. No apta para producción con concurrencia — migrar a PostgreSQL antes del piloto.
+- Endpoints REST sin autenticación activa — debe resolverse antes de exponer en cualquier entorno compartido.
+- Serializers DRF: archivo `api/serializers.py` vacío — respuestas en JSON manual.
+- Vistas web (Dashboard, Recepción, Consulta): stubs con datos mock, pendientes de conectar con casos de uso.
+- Integración Dataverse: client y auth implementados, `mapping.py` y repositorios pendientes.
 
-- la aplicación está preparada principalmente para **desarrollo local**, no como entorno productivo cerrado
-- la persistencia actualmente visible corresponde a **`db.sqlite3`**, por lo que la base de datos definitiva aún debe confirmarse según la arquitectura final del MVP
-- la configuración está separada en `base.py`, `local.py` y `production.py`, pero la estrategia final de variables sensibles, secretos y despliegue seguro todavía debe formalizarse
-- la integración con **Dataverse** existe como base técnica inicial, pero aún debe validarse su alcance real dentro del flujo definitivo del proyecto
-- la estructura de **dominio** e **infraestructura** ya está iniciada, aunque sus contratos, repositorios y casos de uso todavía están en fase de construcción
-- el entorno virtual `.venv`, los archivos compilados y carpetas como `__pycache__` corresponden a artefactos locales de desarrollo y no deben considerarse parte del entregable funcional
-- el módulo mantiene una arquitectura abierta para convivir con `power-platform`, por lo que algunas responsabilidades del sistema todavía dependen de decisiones funcionales y técnicas del proyecto general
+---
 
-## Consideraciones de desarrollo
+## Configuración de Dataverse
 
-- `.venv` corresponde al entorno local y no debería versionarse como parte del código del proyecto
-- `__pycache__` y archivos compilados de Python tampoco deberían formar parte del repositorio
-- `db.sqlite3` puede servir para desarrollo inicial, pero la persistencia definitiva dependerá de la arquitectura acordada para el MVP
-- la separación entre `domain` e `infrastructure` deja una base útil para evitar que toda la lógica quede acoplada directamente a Django
+Variables requeridas en `.env`:
 
-## Próximos avances sugeridos
+```
+DATAVERSE_URL=
+DATAVERSE_TENANT_ID=
+DATAVERSE_CLIENT_ID=
+DATAVERSE_CLIENT_SECRET=
+DATAVERSE_API_VERSION=v9.2
+DATAVERSE_TIMEOUT=30
+```
 
-- definir modelos de negocio en las apps del proyecto
-- conectar entidades del dominio con repositorios reales
-- implementar casos de uso del módulo de operaciones
-- formalizar integración con Dataverse si será parte del flujo definitivo
-- documentar endpoints, flujos y decisiones de arquitectura
-- preparar configuración segura para entorno productivo
-
-## Relación con el proyecto general
-
-`python-app` es uno de los componentes del repositorio principal del MVP, junto con la documentación funcional en `docs/` y el módulo `power-platform/`. Su rol es aportar la base backend y técnica para las piezas que requieran una implementación más controlada, extensible y mantenible dentro de la solución.
+Ver `SETUP.md` para instrucciones detalladas de configuración.
