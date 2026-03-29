@@ -9,7 +9,7 @@ from django.views.generic import TemplateView
 from django.urls import reverse_lazy
 
 
-class CFNLoginView(LoginView):
+class CaliProLoginView(LoginView):
 
     """Login usando AuthenticationForm de Django + template personalizado."""
 
@@ -22,7 +22,7 @@ class CFNLoginView(LoginView):
         return reverse_lazy("usuarios:portal")
 
 
-class CFNLogoutView(LogoutView):
+class CaliProLogoutView(LogoutView):
 
     next_page = reverse_lazy("usuarios:login")
 

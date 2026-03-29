@@ -1,6 +1,6 @@
 /* ============================================================
    SCAN.JS — Lógica de scanner de código de barras
-   CFN Packing Exportación · MVP v0.1
+   CaliPro Packing Exportación · MVP v0.1
 
    Cargado SOLO en páginas que tienen un #scan-box.
    Captura la entrada del lector de código de barras (USB HID)

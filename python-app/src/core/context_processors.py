@@ -3,7 +3,7 @@
 from django.urls import reverse
 
 
-def cfn_context(request):
+def CaliPro_context(request):
     """
 
     Inyecta en todos los templates:

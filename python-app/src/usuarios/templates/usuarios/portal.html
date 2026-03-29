@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Portal — CaliPro{% endblock %}
+
+{% block content %}
+<div class="container" style="padding: 32px;">
+  <div style="margin-bottom: 24px;">
+    <h1 style="margin-bottom: 8px;">Portal de módulos</h1>
+    <p>Bienvenido, {{ user.username }}.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px;">
+    {% for modulo in modulos %}
+      <div style="border:1px solid #ddd; border-radius:12px; padding:20px; background:#fff;">
+        <div style="font-size:32px; margin-bottom:8px;">{{ modulo.icono }}</div>
+        <h2 style="margin:0 0 8px 0; font-size:20px;">{{ modulo.nombre }}</h2>
+        <p style="margin:0 0 16px 0;">{{ modulo.descripcion }}</p>
+
+        {% if modulo.disponible %}
+          <a href="{% url modulo.url_name %}" style="display:inline-block; padding:10px 14px; border-radius:8px; text-decoration:none; border:1px solid #111;">
+            Entrar
+          </a>
+        {% else %}
+          <span style="display:inline-block; padding:10px 14px; border-radius:8px; background:#f3f3f3; color:#666;">
+            No disponible
+          </span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div style="margin-top: 24px;">
+    <a href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+  </div>
+</div>
+{% endblock %}

@@ -100,7 +100,7 @@ TEMPLATES = [
 
                 # AGREGAR: inyecta planta, exportador, nav a todos los templates
 
-                "core.context_processors.cfn_context",
+                "core.context_processors.CaliPro_context",
 
             ],
 

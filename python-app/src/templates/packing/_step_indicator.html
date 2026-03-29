@@ -1,0 +1,11 @@
+<div class="card" style="margin-bottom:16px; padding:12px;">
+  <strong>Flujo:</strong>
+  <span {% if active_step == "recepcion" %}style="font-weight:700;"{% endif %}>Recepción</span> →
+  <span {% if active_step == "pesaje" %}style="font-weight:700;"{% endif %}>Lote</span> →
+  <span {% if active_step == "desverdizado" %}style="font-weight:700;"{% endif %}>Desverdizado</span> →
+  <span {% if active_step == "ingreso_packing" %}style="font-weight:700;"{% endif %}>Ingreso Packing</span> →
+  <span {% if active_step == "proceso" %}style="font-weight:700;"{% endif %}>Proceso</span> →
+  <span {% if active_step == "control" %}style="font-weight:700;"{% endif %}>Control</span> →
+  <span {% if active_step == "paletizado" %}style="font-weight:700;"{% endif %}>Paletizado</span> →
+  <span {% if active_step == "camaras" %}style="font-weight:700;"{% endif %}>Cámaras</span>
+</div>
