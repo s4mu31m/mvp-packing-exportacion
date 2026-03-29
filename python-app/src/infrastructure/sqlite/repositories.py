@@ -1,12 +1,8 @@
 """
 Implementaciones SQLite (Django ORM) de los repositorios de dominio.
 
-Cada clase envuelve las operaciones del ORM de Django y convierte los objetos
-del modelo a record types del dominio. Esto permite que los casos de uso sean
-agnósticos al mecanismo de persistencia.
-
-Las importaciones de operaciones.models se hacen dentro de los métodos para
-evitar problemas de orden de inicialización del registro de apps de Django.
+Las importaciones de operaciones.models se hacen dentro de los metodos para
+evitar problemas de orden de inicializacion del registro de apps de Django.
 """
 from __future__ import annotations
 
@@ -27,11 +23,30 @@ from domain.repositories.base import (
     Repositories,
     RegistroEtapaRecord,
     RegistroEtapaRepository,
+    # Nuevas entidades
+    CamaraMantencionRecord,
+    CamaraMantencionRepository,
+    DesverdizadoRecord,
+    DesverdizadoRepository,
+    CalidadDesverdizadoRecord,
+    CalidadDesverdizadoRepository,
+    IngresoAPackingRecord,
+    IngresoAPackingRepository,
+    RegistroPackingRecord,
+    RegistroPackingRepository,
+    ControlProcesoPackingRecord,
+    ControlProcesoPackingRepository,
+    CalidadPalletRecord,
+    CalidadPalletRepository,
+    CamaraFrioRecord,
+    CamaraFrioRepository,
+    MedicionTemperaturaSalidaRecord,
+    MedicionTemperaturaSalidaRepository,
 )
 
 
 # ---------------------------------------------------------------------------
-# Helpers: model instance → record type
+# Helpers: model instance → record type (entidades base)
 # ---------------------------------------------------------------------------
 
 def _bin_to_record(obj) -> BinRecord:
@@ -44,6 +59,11 @@ def _bin_to_record(obj) -> BinRecord:
         source_event_id=obj.source_event_id,
         dataverse_id=obj.dataverse_id,
         is_active=obj.is_active,
+        id_bin=obj.id_bin or "",
+        fecha_cosecha=obj.fecha_cosecha,
+        variedad_fruta=obj.variedad_fruta or "",
+        kilos_bruto_ingreso=obj.kilos_bruto_ingreso,
+        kilos_neto_ingreso=obj.kilos_neto_ingreso,
     )
 
 
@@ -57,6 +77,13 @@ def _lote_to_record(obj) -> LoteRecord:
         source_event_id=obj.source_event_id,
         dataverse_id=obj.dataverse_id,
         is_active=obj.is_active,
+        id_lote_planta=obj.id_lote_planta or "",
+        fecha_conformacion=obj.fecha_conformacion,
+        cantidad_bins=obj.cantidad_bins or 0,
+        kilos_bruto_conformacion=obj.kilos_bruto_conformacion,
+        kilos_neto_conformacion=obj.kilos_neto_conformacion,
+        requiere_desverdizado=obj.requiere_desverdizado,
+        disponibilidad_camara_desverdizado=obj.disponibilidad_camara_desverdizado,
     )
 
 
@@ -70,6 +97,12 @@ def _pallet_to_record(obj) -> PalletRecord:
         source_event_id=obj.source_event_id,
         dataverse_id=obj.dataverse_id,
         is_active=obj.is_active,
+        id_pallet=obj.id_pallet or "",
+        fecha=obj.fecha,
+        tipo_caja=obj.tipo_caja or "",
+        cajas_por_pallet=obj.cajas_por_pallet,
+        peso_total_kg=obj.peso_total_kg,
+        destino_mercado=obj.destino_mercado or "",
     )
 
 
@@ -112,8 +145,172 @@ def _registro_to_record(obj) -> RegistroEtapaRecord:
     )
 
 
+# Helpers para nuevas entidades
+
+def _camara_mantencion_to_record(obj) -> CamaraMantencionRecord:
+    return CamaraMantencionRecord(
+        id=obj.id,
+        lote_id=obj.lote_id,
+        camara_numero=obj.camara_numero or "",
+        fecha_ingreso=obj.fecha_ingreso,
+        hora_ingreso=obj.hora_ingreso or "",
+        fecha_salida=obj.fecha_salida,
+        hora_salida=obj.hora_salida or "",
+        temperatura_camara=obj.temperatura_camara,
+        humedad_relativa=obj.humedad_relativa,
+        observaciones=obj.observaciones or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _desverdizado_to_record(obj) -> DesverdizadoRecord:
+    return DesverdizadoRecord(
+        id=obj.id,
+        lote_id=obj.lote_id,
+        fecha_ingreso=obj.fecha_ingreso,
+        hora_ingreso=obj.hora_ingreso or "",
+        fecha_salida=obj.fecha_salida,
+        hora_salida=obj.hora_salida or "",
+        kilos_enviados_terreno=obj.kilos_enviados_terreno,
+        kilos_recepcionados=obj.kilos_recepcionados,
+        kilos_procesados=obj.kilos_procesados,
+        kilos_bruto_salida=obj.kilos_bruto_salida,
+        kilos_neto_salida=obj.kilos_neto_salida,
+        color_salida=obj.color_salida or "",
+        proceso=obj.proceso or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _calidad_desv_to_record(obj) -> CalidadDesverdizadoRecord:
+    return CalidadDesverdizadoRecord(
+        id=obj.id,
+        lote_id=obj.lote_id,
+        fecha=obj.fecha,
+        hora=obj.hora or "",
+        temperatura_fruta=obj.temperatura_fruta,
+        color_evaluado=obj.color_evaluado or "",
+        estado_visual=obj.estado_visual or "",
+        presencia_defectos=obj.presencia_defectos,
+        aprobado=obj.aprobado,
+        observaciones=obj.observaciones or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _ingreso_packing_to_record(obj) -> IngresoAPackingRecord:
+    return IngresoAPackingRecord(
+        id=obj.id,
+        lote_id=obj.lote_id,
+        fecha_ingreso=obj.fecha_ingreso,
+        hora_ingreso=obj.hora_ingreso or "",
+        kilos_bruto_ingreso_packing=obj.kilos_bruto_ingreso_packing,
+        kilos_neto_ingreso_packing=obj.kilos_neto_ingreso_packing,
+        via_desverdizado=obj.via_desverdizado,
+        observaciones=obj.observaciones or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _registro_packing_to_record(obj) -> RegistroPackingRecord:
+    return RegistroPackingRecord(
+        id=obj.id,
+        lote_id=obj.lote_id,
+        fecha=obj.fecha,
+        hora_inicio=obj.hora_inicio or "",
+        linea_proceso=obj.linea_proceso or "",
+        categoria_calidad=obj.categoria_calidad or "",
+        calibre=obj.calibre or "",
+        tipo_envase=obj.tipo_envase or "",
+        cantidad_cajas_producidas=obj.cantidad_cajas_producidas,
+        peso_promedio_caja_kg=obj.peso_promedio_caja_kg,
+        merma_seleccion_pct=obj.merma_seleccion_pct,
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _control_proceso_to_record(obj) -> ControlProcesoPackingRecord:
+    return ControlProcesoPackingRecord(
+        id=obj.id,
+        lote_id=obj.lote_id,
+        fecha=obj.fecha,
+        hora=obj.hora or "",
+        n_bins_procesados=obj.n_bins_procesados,
+        temp_agua_tina=obj.temp_agua_tina,
+        ph_agua=obj.ph_agua,
+        recambio_agua=obj.recambio_agua,
+        rendimiento_lote_pct=obj.rendimiento_lote_pct,
+        observaciones_generales=obj.observaciones_generales or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _calidad_pallet_to_record(obj) -> CalidadPalletRecord:
+    return CalidadPalletRecord(
+        id=obj.id,
+        pallet_id=obj.pallet_id,
+        fecha=obj.fecha,
+        hora=obj.hora or "",
+        temperatura_fruta=obj.temperatura_fruta,
+        peso_caja_muestra=obj.peso_caja_muestra,
+        estado_visual_fruta=obj.estado_visual_fruta or "",
+        presencia_defectos=obj.presencia_defectos,
+        aprobado=obj.aprobado,
+        observaciones=obj.observaciones or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _camara_frio_to_record(obj) -> CamaraFrioRecord:
+    return CamaraFrioRecord(
+        id=obj.id,
+        pallet_id=obj.pallet_id,
+        camara_numero=obj.camara_numero or "",
+        temperatura_camara=obj.temperatura_camara,
+        humedad_relativa=obj.humedad_relativa,
+        fecha_ingreso=obj.fecha_ingreso,
+        hora_ingreso=obj.hora_ingreso or "",
+        fecha_salida=obj.fecha_salida,
+        hora_salida=obj.hora_salida or "",
+        destino_despacho=obj.destino_despacho or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _medicion_temp_to_record(obj) -> MedicionTemperaturaSalidaRecord:
+    return MedicionTemperaturaSalidaRecord(
+        id=obj.id,
+        pallet_id=obj.pallet_id,
+        fecha=obj.fecha,
+        hora=obj.hora or "",
+        temperatura_pallet=obj.temperatura_pallet,
+        punto_medicion=obj.punto_medicion or "",
+        dentro_rango=obj.dentro_rango,
+        observaciones=obj.observaciones or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
 # ---------------------------------------------------------------------------
-# Concrete repositories
+# Concrete repositories — entidades base
 # ---------------------------------------------------------------------------
 
 class SqliteBinRepository(BinRepository):
@@ -131,14 +328,17 @@ class SqliteBinRepository(BinRepository):
         operator_code: str = "",
         source_system: str = "local",
         source_event_id: str = "",
+        extra: Optional[dict] = None,
     ) -> BinRecord:
         from operaciones.models import Bin
+        fields = dict(extra or {})
         obj = Bin.objects.create(
             temporada=temporada,
             bin_code=bin_code,
             operator_code=operator_code,
             source_system=source_system,
             source_event_id=source_event_id,
+            **{k: v for k, v in fields.items() if hasattr(Bin, k)},
         )
         return _bin_to_record(obj)
 
@@ -163,14 +363,17 @@ class SqliteLoteRepository(LoteRepository):
         operator_code: str = "",
         source_system: str = "local",
         source_event_id: str = "",
+        extra: Optional[dict] = None,
     ) -> LoteRecord:
         from operaciones.models import Lote
+        fields = dict(extra or {})
         obj = Lote.objects.create(
             temporada=temporada,
             lote_code=lote_code,
             operator_code=operator_code,
             source_system=source_system,
             source_event_id=source_event_id,
+            **{k: v for k, v in fields.items() if hasattr(Lote, k)},
         )
         return _lote_to_record(obj)
 
@@ -178,6 +381,12 @@ class SqliteLoteRepository(LoteRepository):
         from operaciones.models import Lote
         objs = list(Lote.objects.filter(temporada=temporada, lote_code__in=lote_codes))
         return [_lote_to_record(obj) for obj in objs]
+
+    def update(self, lote_id: Any, fields: dict) -> LoteRecord:
+        from operaciones.models import Lote
+        Lote.objects.filter(pk=lote_id).update(**fields)
+        obj = Lote.objects.get(pk=lote_id)
+        return _lote_to_record(obj)
 
 
 class SqlitePalletRepository(PalletRepository):
@@ -195,16 +404,20 @@ class SqlitePalletRepository(PalletRepository):
         operator_code: str = "",
         source_system: str = "local",
         source_event_id: str = "",
+        extra: Optional[dict] = None,
     ) -> tuple[PalletRecord, bool]:
         from operaciones.models import Pallet
+        defaults = {
+            "operator_code": operator_code,
+            "source_system": source_system,
+            "source_event_id": source_event_id,
+        }
+        if extra:
+            defaults.update({k: v for k, v in extra.items() if hasattr(Pallet, k)})
         obj, created = Pallet.objects.get_or_create(
             temporada=temporada,
             pallet_code=pallet_code,
-            defaults={
-                "operator_code": operator_code,
-                "source_system": source_system,
-                "source_event_id": source_event_id,
-            },
+            defaults=defaults,
         )
         return _pallet_to_record(obj), created
 
@@ -261,6 +474,11 @@ class SqlitePalletLoteRepository(PalletLoteRepository):
             },
         )
         return _pallet_lote_to_record(obj), created
+
+    def find_by_lote(self, lote_id: Any) -> Optional[PalletLoteRecord]:
+        from operaciones.models import PalletLote
+        obj = PalletLote.objects.filter(lote_id=lote_id).first()
+        return _pallet_lote_to_record(obj) if obj else None
 
 
 class SqliteRegistroEtapaRepository(RegistroEtapaRepository):
@@ -334,6 +552,217 @@ class SqliteRegistroEtapaRepository(RegistroEtapaRepository):
 
 
 # ---------------------------------------------------------------------------
+# Concrete repositories — nuevas entidades del flujo operativo
+# ---------------------------------------------------------------------------
+
+class SqliteCamaraMantencionRepository(CamaraMantencionRepository):
+
+    def find_by_lote(self, lote_id: Any) -> Optional[CamaraMantencionRecord]:
+        from operaciones.models import CamaraMantencion
+        obj = CamaraMantencion.objects.filter(lote_id=lote_id).first()
+        return _camara_mantencion_to_record(obj) if obj else None
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> CamaraMantencionRecord:
+        from operaciones.models import CamaraMantencion
+        fields = dict(extra or {})
+        obj = CamaraMantencion.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(CamaraMantencion, k)},
+        )
+        return _camara_mantencion_to_record(obj)
+
+    def update(self, record_id: Any, fields: dict) -> CamaraMantencionRecord:
+        from operaciones.models import CamaraMantencion
+        CamaraMantencion.objects.filter(pk=record_id).update(**fields)
+        obj = CamaraMantencion.objects.get(pk=record_id)
+        return _camara_mantencion_to_record(obj)
+
+
+class SqliteDesverdizadoRepository(DesverdizadoRepository):
+
+    def find_by_lote(self, lote_id: Any) -> Optional[DesverdizadoRecord]:
+        from operaciones.models import Desverdizado
+        obj = Desverdizado.objects.filter(lote_id=lote_id).first()
+        return _desverdizado_to_record(obj) if obj else None
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> DesverdizadoRecord:
+        from operaciones.models import Desverdizado
+        fields = dict(extra or {})
+        obj = Desverdizado.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(Desverdizado, k)},
+        )
+        return _desverdizado_to_record(obj)
+
+    def update(self, record_id: Any, fields: dict) -> DesverdizadoRecord:
+        from operaciones.models import Desverdizado
+        Desverdizado.objects.filter(pk=record_id).update(**fields)
+        obj = Desverdizado.objects.get(pk=record_id)
+        return _desverdizado_to_record(obj)
+
+
+class SqliteCalidadDesverdizadoRepository(CalidadDesverdizadoRepository):
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> CalidadDesverdizadoRecord:
+        from operaciones.models import CalidadDesverdizado
+        fields = dict(extra or {})
+        obj = CalidadDesverdizado.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(CalidadDesverdizado, k)},
+        )
+        return _calidad_desv_to_record(obj)
+
+    def list_by_lote(self, lote_id: Any) -> list[CalidadDesverdizadoRecord]:
+        from operaciones.models import CalidadDesverdizado
+        objs = CalidadDesverdizado.objects.filter(lote_id=lote_id).order_by("-created_at")
+        return [_calidad_desv_to_record(obj) for obj in objs]
+
+
+class SqliteIngresoAPackingRepository(IngresoAPackingRepository):
+
+    def find_by_lote(self, lote_id: Any) -> Optional[IngresoAPackingRecord]:
+        from operaciones.models import IngresoAPacking
+        obj = IngresoAPacking.objects.filter(lote_id=lote_id).first()
+        return _ingreso_packing_to_record(obj) if obj else None
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> IngresoAPackingRecord:
+        from operaciones.models import IngresoAPacking
+        fields = dict(extra or {})
+        obj = IngresoAPacking.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(IngresoAPacking, k)},
+        )
+        return _ingreso_packing_to_record(obj)
+
+
+class SqliteRegistroPackingRepository(RegistroPackingRepository):
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> RegistroPackingRecord:
+        from operaciones.models import RegistroPacking
+        fields = dict(extra or {})
+        obj = RegistroPacking.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(RegistroPacking, k)},
+        )
+        return _registro_packing_to_record(obj)
+
+    def list_by_lote(self, lote_id: Any) -> list[RegistroPackingRecord]:
+        from operaciones.models import RegistroPacking
+        objs = RegistroPacking.objects.filter(lote_id=lote_id).order_by("-created_at")
+        return [_registro_packing_to_record(obj) for obj in objs]
+
+
+class SqliteControlProcesoPackingRepository(ControlProcesoPackingRepository):
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> ControlProcesoPackingRecord:
+        from operaciones.models import ControlProcesoPacking
+        fields = dict(extra or {})
+        obj = ControlProcesoPacking.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(ControlProcesoPacking, k)},
+        )
+        return _control_proceso_to_record(obj)
+
+    def list_by_lote(self, lote_id: Any) -> list[ControlProcesoPackingRecord]:
+        from operaciones.models import ControlProcesoPacking
+        objs = ControlProcesoPacking.objects.filter(lote_id=lote_id).order_by("-created_at")
+        return [_control_proceso_to_record(obj) for obj in objs]
+
+
+class SqliteCalidadPalletRepository(CalidadPalletRepository):
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> CalidadPalletRecord:
+        from operaciones.models import CalidadPallet
+        fields = dict(extra or {})
+        obj = CalidadPallet.objects.create(
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(CalidadPallet, k)},
+        )
+        return _calidad_pallet_to_record(obj)
+
+    def list_by_pallet(self, pallet_id: Any) -> list[CalidadPalletRecord]:
+        from operaciones.models import CalidadPallet
+        objs = CalidadPallet.objects.filter(pallet_id=pallet_id).order_by("-created_at")
+        return [_calidad_pallet_to_record(obj) for obj in objs]
+
+
+class SqliteCamaraFrioRepository(CamaraFrioRepository):
+
+    def find_by_pallet(self, pallet_id: Any) -> Optional[CamaraFrioRecord]:
+        from operaciones.models import CamaraFrio
+        obj = CamaraFrio.objects.filter(pallet_id=pallet_id).first()
+        return _camara_frio_to_record(obj) if obj else None
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> CamaraFrioRecord:
+        from operaciones.models import CamaraFrio
+        fields = dict(extra or {})
+        obj = CamaraFrio.objects.create(
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(CamaraFrio, k)},
+        )
+        return _camara_frio_to_record(obj)
+
+    def update(self, record_id: Any, fields: dict) -> CamaraFrioRecord:
+        from operaciones.models import CamaraFrio
+        CamaraFrio.objects.filter(pk=record_id).update(**fields)
+        obj = CamaraFrio.objects.get(pk=record_id)
+        return _camara_frio_to_record(obj)
+
+
+class SqliteMedicionTemperaturaSalidaRepository(MedicionTemperaturaSalidaRepository):
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> MedicionTemperaturaSalidaRecord:
+        from operaciones.models import MedicionTemperaturaSalida
+        fields = dict(extra or {})
+        obj = MedicionTemperaturaSalida.objects.create(
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(MedicionTemperaturaSalida, k)},
+        )
+        return _medicion_temp_to_record(obj)
+
+    def list_by_pallet(self, pallet_id: Any) -> list[MedicionTemperaturaSalidaRecord]:
+        from operaciones.models import MedicionTemperaturaSalida
+        objs = MedicionTemperaturaSalida.objects.filter(pallet_id=pallet_id).order_by("-created_at")
+        return [_medicion_temp_to_record(obj) for obj in objs]
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
@@ -345,4 +774,13 @@ def build_sqlite_repositories() -> Repositories:
         bin_lotes=SqliteBinLoteRepository(),
         pallet_lotes=SqlitePalletLoteRepository(),
         registros=SqliteRegistroEtapaRepository(),
+        camara_mantencions=SqliteCamaraMantencionRepository(),
+        desverdizados=SqliteDesverdizadoRepository(),
+        calidad_desverdizados=SqliteCalidadDesverdizadoRepository(),
+        ingresos_packing=SqliteIngresoAPackingRepository(),
+        registros_packing=SqliteRegistroPackingRepository(),
+        control_proceso_packings=SqliteControlProcesoPackingRepository(),
+        calidad_pallets=SqliteCalidadPalletRepository(),
+        camara_frios=SqliteCamaraFrioRepository(),
+        mediciones_temperatura=SqliteMedicionTemperaturaSalidaRepository(),
     )

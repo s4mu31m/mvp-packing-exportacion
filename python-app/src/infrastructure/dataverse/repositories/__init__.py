@@ -35,6 +35,25 @@ from domain.repositories.base import (
     Repositories,
     RegistroEtapaRecord,
     RegistroEtapaRepository,
+    # Nuevas entidades
+    CamaraMantencionRecord,
+    CamaraMantencionRepository,
+    DesverdizadoRecord,
+    DesverdizadoRepository,
+    CalidadDesverdizadoRecord,
+    CalidadDesverdizadoRepository,
+    IngresoAPackingRecord,
+    IngresoAPackingRepository,
+    RegistroPackingRecord,
+    RegistroPackingRepository,
+    ControlProcesoPackingRecord,
+    ControlProcesoPackingRepository,
+    CalidadPalletRecord,
+    CalidadPalletRepository,
+    CamaraFrioRecord,
+    CamaraFrioRepository,
+    MedicionTemperaturaSalidaRecord,
+    MedicionTemperaturaSalidaRepository,
 )
 from infrastructure.dataverse.mapping import (
     ENTITY_SET_BIN,
@@ -334,10 +353,40 @@ class DataverseBinLoteRepository(BinLoteRepository):
         return conflicts
 
 
+class DataverseLoteRepositoryExtended(DataverseLoteRepository):
+    """Extiende con metodo update para cumplir la interfaz completa de LoteRepository."""
+
+    def update(self, lote_id: Any, fields: dict) -> LoteRecord:
+        # Dataverse PATCH — pendiente validacion de esquema real
+        raise NotImplementedError(
+            "DataverseLoteRepository.update: implementacion OData pendiente de "
+            "validacion del esquema real con el equipo de Power Platform."
+        )
+
+
 class DataversePalletLoteRepository(PalletLoteRepository):
 
     def __init__(self, client) -> None:
         self._client = client
+
+    def find_by_lote(self, lote_id: Any) -> Optional[PalletLoteRecord]:
+        from infrastructure.dataverse.mapping import PALLET_LOTE_FIELDS
+        f = f"_{PALLET_LOTE_FIELDS['lote_id']}_value eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_PALLET_LOTE,
+            select=[PALLET_LOTE_FIELDS["id"]],
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        if rows:
+            row = rows[0]
+            return PalletLoteRecord(
+                id=row.get(PALLET_LOTE_FIELDS["id"]),
+                pallet_id=row.get(f"_{PALLET_LOTE_FIELDS['pallet_id']}_value"),
+                lote_id=lote_id,
+            )
+        return None
 
     def get_or_create(
         self,
@@ -484,6 +533,118 @@ class DataverseRegistroEtapaRepository(RegistroEtapaRepository):
 
 
 # ---------------------------------------------------------------------------
+# Stub implementations para nuevas entidades
+# Las implementaciones completas OData estan pendientes de validacion del
+# esquema real en el ambiente Dataverse.  Los stubs elevan NotImplementedError
+# con un mensaje claro para facilitar el diagnostico durante el desarrollo.
+# ---------------------------------------------------------------------------
+
+class _DataverseStubMixin:
+    """Helper para generar NotImplementedError descriptivo."""
+    _entity_name: str = "entidad"
+
+    def _not_implemented(self, method: str):
+        raise NotImplementedError(
+            f"DataverseRepository para {self._entity_name}.{method} "
+            "no esta implementado aun. Valide el esquema con el equipo de "
+            "Power Platform y complete la implementacion OData en este modulo."
+        )
+
+
+class DataverseCamaraMantencionRepository(_DataverseStubMixin, CamaraMantencionRepository):
+    _entity_name = "CamaraMantencion"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def find_by_lote(self, lote_id: Any): self._not_implemented("find_by_lote")
+    def create(self, lote_id, **kw): self._not_implemented("create")
+    def update(self, record_id, fields): self._not_implemented("update")
+
+
+class DataverseDesverdizadoRepository(_DataverseStubMixin, DesverdizadoRepository):
+    _entity_name = "Desverdizado"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def find_by_lote(self, lote_id: Any): self._not_implemented("find_by_lote")
+    def create(self, lote_id, **kw): self._not_implemented("create")
+    def update(self, record_id, fields): self._not_implemented("update")
+
+
+class DataverseCalidadDesverdizadoRepository(_DataverseStubMixin, CalidadDesverdizadoRepository):
+    _entity_name = "CalidadDesverdizado"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, lote_id, **kw): self._not_implemented("create")
+    def list_by_lote(self, lote_id): self._not_implemented("list_by_lote")
+
+
+class DataverseIngresoAPackingRepository(_DataverseStubMixin, IngresoAPackingRepository):
+    _entity_name = "IngresoAPacking"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def find_by_lote(self, lote_id: Any): self._not_implemented("find_by_lote")
+    def create(self, lote_id, **kw): self._not_implemented("create")
+
+
+class DataverseRegistroPackingRepository(_DataverseStubMixin, RegistroPackingRepository):
+    _entity_name = "RegistroPacking"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, lote_id, **kw): self._not_implemented("create")
+    def list_by_lote(self, lote_id): self._not_implemented("list_by_lote")
+
+
+class DataverseControlProcesoPackingRepository(_DataverseStubMixin, ControlProcesoPackingRepository):
+    _entity_name = "ControlProcesoPacking"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, lote_id, **kw): self._not_implemented("create")
+    def list_by_lote(self, lote_id): self._not_implemented("list_by_lote")
+
+
+class DataverseCalidadPalletRepository(_DataverseStubMixin, CalidadPalletRepository):
+    _entity_name = "CalidadPallet"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, pallet_id, **kw): self._not_implemented("create")
+    def list_by_pallet(self, pallet_id): self._not_implemented("list_by_pallet")
+
+
+class DataverseCamaraFrioRepository(_DataverseStubMixin, CamaraFrioRepository):
+    _entity_name = "CamaraFrio"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def find_by_pallet(self, pallet_id: Any): self._not_implemented("find_by_pallet")
+    def create(self, pallet_id, **kw): self._not_implemented("create")
+    def update(self, record_id, fields): self._not_implemented("update")
+
+
+class DataverseMedicionTemperaturaSalidaRepository(_DataverseStubMixin, MedicionTemperaturaSalidaRepository):
+    _entity_name = "MedicionTemperaturaSalida"
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, pallet_id, **kw): self._not_implemented("create")
+    def list_by_pallet(self, pallet_id): self._not_implemented("list_by_pallet")
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
@@ -492,9 +653,18 @@ def build_dataverse_repositories() -> Repositories:
     client = DataverseClient()
     return Repositories(
         bins=DataverseBinRepository(client),
-        lotes=DataverseLoteRepository(client),
+        lotes=DataverseLoteRepositoryExtended(client),
         pallets=DataversePalletRepository(client),
         bin_lotes=DataverseBinLoteRepository(client),
         pallet_lotes=DataversePalletLoteRepository(client),
         registros=DataverseRegistroEtapaRepository(client),
+        camara_mantencions=DataverseCamaraMantencionRepository(client),
+        desverdizados=DataverseDesverdizadoRepository(client),
+        calidad_desverdizados=DataverseCalidadDesverdizadoRepository(client),
+        ingresos_packing=DataverseIngresoAPackingRepository(client),
+        registros_packing=DataverseRegistroPackingRepository(client),
+        control_proceso_packings=DataverseControlProcesoPackingRepository(client),
+        calidad_pallets=DataverseCalidadPalletRepository(client),
+        camara_frios=DataverseCamaraFrioRepository(client),
+        mediciones_temperatura=DataverseMedicionTemperaturaSalidaRepository(client),
     )

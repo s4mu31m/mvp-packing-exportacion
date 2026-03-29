@@ -2,3 +2,12 @@ from .registrar_bin_recibido import registrar_bin_recibido
 from .crear_lote_recepcion import crear_lote_recepcion
 from .cerrar_pallet import cerrar_pallet
 from .registrar_evento_etapa import registrar_evento_etapa
+from .registrar_camara_mantencion import registrar_camara_mantencion
+from .registrar_desverdizado import registrar_desverdizado
+from .registrar_calidad_desverdizado import registrar_calidad_desverdizado
+from .registrar_ingreso_packing import registrar_ingreso_packing
+from .registrar_registro_packing import registrar_registro_packing
+from .registrar_control_proceso_packing import registrar_control_proceso_packing
+from .registrar_calidad_pallet import registrar_calidad_pallet
+from .registrar_camara_frio import registrar_camara_frio
+from .registrar_medicion_temperatura import registrar_medicion_temperatura
