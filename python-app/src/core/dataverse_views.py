@@ -1,3 +1,4 @@
+
 """
 Vistas de prueba para la conexión con Dataverse.
 """
@@ -9,6 +10,93 @@ from infrastructure.dataverse.auth import DataverseAuthError
 import logging
 
 logger = logging.getLogger(__name__)
+
+@require_http_methods(["GET"])
+def check_tables_available(request):
+    """
+    Endpoint para verificar si las 14 tablas del modelo están accesibles y obtener un sample_count de cada una.
+    GET /api/dataverse/check_tables/
+    """
+    try:
+        client = DataverseClient()
+        tables_to_check = [
+            "crf21_bins",
+            "crf21_calidad_desverdizados",
+            "crf21_camara_mantencions",
+            "crf21_lote_plantas",
+            "crf21_bin_lote_plantas",
+            "crf21_calidad_pallets",
+            "crf21_camara_frios",
+            "crf21_control_proceso_packings",
+            "crf21_desverdizados",
+            "crf21_ingreso_packings",
+            "crf21_lote_planta_pallets",
+            "crf21_medicion_temperatura_salidas",
+            "crf21_pallets",
+            "crf21_registro_packings"
+        ]
+        results = {}
+        for table in tables_to_check:
+            try:
+                data = client.list_rows(entity_set_name=table, top=1)
+                sample_count = len(data.get("value", []))
+                pk_value = None
+                sample_record = None
+                if sample_count > 0:
+                    logical_name = table[:-1] if table.endswith('s') else table
+                    pk_field = f"{logical_name}id"
+                    pk_value = data["value"][0].get(pk_field)
+                    if table in ["crf21_bins", "crf21_bin_lote_plantas", 
+                                "crf21_lote_plantas", 
+                                "crf21_camara_mantencions", 
+                                "crf21_desverdizados" , 
+                                "crf21_calidad_desverdizados" , 
+                                "crf21_ingreso_packings" , 
+                                "crf21_registro_packings" , 
+                                "crf21_control_proceso_packings" ,
+                                "crf21_pallets", 
+                                "crf21_lote_planta_pallets" , 
+                                "crf21_calidad_pallets" , 
+                                "crf21_camara_frios" , 
+                                "crf21_medicion_temperatura_salidas" ]:
+                        sample_record = data["value"][0]
+                result = {
+                    "accessible": True,
+                    "sample_count": sample_count,
+                    "pk": pk_value
+                }
+                if table in ["crf21_bins", 
+                            "crf21_bin_lote_plantas", 
+                            "crf21_lote_plantas", 
+                            "crf21_camara_mantencions" , 
+                            "crf21_desverdizados" , 
+                            "crf21_calidad_desverdizados" , 
+                            "crf21_ingreso_packings" , 
+                            "crf21_registro_packings" , 
+                            "crf21_control_proceso_packings" , 
+                            "crf21_pallets" , 
+                            "crf21_lote_planta_pallets" , 
+                            "crf21_calidad_pallets" , 
+                            "crf21_camara_frios" , 
+                            "crf21_medicion_temperatura_salidas" ]:
+                    result["sample_record"] = sample_record
+                results[table] = result
+            except Exception as e:
+                results[table] = {
+                    "accessible": False,
+                    "error": str(e)
+                }
+        return JsonResponse({
+            "status": "success",
+            "tables": results
+        })
+    except Exception as e:
+        logger.error(f"Error en check_tables_available: {e}")
+        return JsonResponse({
+            "status": "error",
+            "message": "Error al verificar tablas",
+            "details": str(e)
+        }, status=500)
 
 
 @require_http_methods(["GET"])
@@ -55,100 +143,48 @@ def ping_dataverse(request):
             "message": "Error inesperado",
             "details": str(e)
         }, status=500)
-
-
+    
+@require_http_methods(["POST"])
+@csrf_exempt
+def save_first_bin_code(request):
+    """
+    Guarda el valor de bin_code del primer registro de la tabla crf21_bins en un archivo local.
+    POST /api/dataverse/save_first_bin_code/
+    """
+    try:
+        client = DataverseClient()
+        data = client.list_rows(entity_set_name="crf21_bins", top=1)
+        if data.get("value"):
+            bin_code = data["value"][0].get("crf21_bin_code")
+            if bin_code:
+                mensaje = f"El bin code de bin es: {bin_code}"
+                return JsonResponse({"status": "success", "bin_code": bin_code, "mensaje": mensaje})
+            else:
+                return JsonResponse({"status": "error", "message": "No se encontró el campo crf21_bin_code en el primer registro."}, status=404)
+        else:
+            return JsonResponse({"status": "error", "message": "No se encontraron registros en crf21_bins."}, status=404)
+    except Exception as e:
+        logger.error(f"Error en save_first_bin_code: {e}")
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+    
 @require_http_methods(["GET"])
-def test_accounts(request):
+def get_first_bin_code(request):
     """
-    Endpoint para consultar las cuentas (accounts) de Dataverse.
-    
-    GET /api/dataverse/accounts/
-    """
-    try:
-        client = DataverseClient()
-        
-        # Consultar las primeras 5 cuentas
-        accounts = client.list_rows(
-            entity_set_name="accounts",
-            select=["accountid", "name", "accountnumber", "createdon"],
-            top=5
-        )
-        
-        return JsonResponse({
-            "status": "success",
-            "message": "Consulta exitosa de cuentas",
-            "data": accounts.get("value", []),
-            "count": len(accounts.get("value", []))
-        })
-        
-    except DataverseAuthError as e:
-        logger.error(f"Error de autenticación Dataverse: {e}")
-        return JsonResponse({
-            "status": "error",
-            "message": "Error de autenticación con Dataverse",
-            "details": str(e)
-        }, status=401)
-        
-    except DataverseAPIError as e:
-        logger.error(f"Error de API Dataverse: {e}")
-        return JsonResponse({
-            "status": "error",
-            "message": "Error en la API de Dataverse",
-            "details": str(e)
-        }, status=500)
-        
-    except Exception as e:
-        logger.error(f"Error inesperado: {e}")
-        return JsonResponse({
-            "status": "error",
-            "message": "Error inesperado",
-            "details": str(e)
-        }, status=500)
-
-
-@require_http_methods(["GET"])  
-def test_entities(request):
-    """
-    Endpoint para listar algunas entidades disponibles en Dataverse.
-    
-    GET /api/dataverse/entities/
+    Devuelve el valor de bin_code del primer registro de la tabla crf21_bins en JSON.
+    GET /api/dataverse/get_first_bin_code/
     """
     try:
         client = DataverseClient()
-        
-        # Lista de entidades comunes para probar
-        test_entities = ["accounts", "contacts", "systemusers"]
-        results = {}
-        
-        for entity in test_entities:
-            try:
-                # Intentar obtener solo 1 registro de cada entidad
-                data = client.list_rows(
-                    entity_set_name=entity,
-                    top=1
-                )
-                results[entity] = {
-                    "exists": True,
-                    "sample_count": len(data.get("value", [])),
-                    "message": "Entidad accesible"
-                }
-            except Exception as e:
-                results[entity] = {
-                    "exists": False,
-                    "error": str(e),
-                    "message": "Entidad no accesible o no existe"
-                }
-        
-        return JsonResponse({
-            "status": "success", 
-            "message": "Prueba de entidades completada",
-            "entities": results
-        })
-        
+        data = client.list_rows(entity_set_name="crf21_bins", top=1)
+        if data.get("value"):
+            bin_code = data["value"][0].get("crf21_bin_code")
+            if bin_code:
+                return JsonResponse({"bin_code": bin_code})
+            else:
+                return JsonResponse({"error": "No se encontró el campo crf21_bin_code en el primer registro."}, status=404)
+        else:
+            return JsonResponse({"error": "No se encontraron registros en crf21_bins."}, status=404)
     except Exception as e:
-        logger.error(f"Error inesperado: {e}")
-        return JsonResponse({
-            "status": "error",
-            "message": "Error inesperado",
-            "details": str(e)
-        }, status=500)
+        logger.error(f"Error en get_first_bin_code: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+

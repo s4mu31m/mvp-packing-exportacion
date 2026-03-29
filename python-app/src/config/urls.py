@@ -20,6 +20,7 @@ from django.views.generic import RedirectView
 
 urlpatterns = [
     path("api/operaciones/", include("operaciones.urls")),
+    path("api/dataverse/", include("core.dataverse_urls")),
     path("operaciones/",     include("operaciones.web_urls")),
     path("usuarios/",        include("usuarios.urls")),
     path("",  RedirectView.as_view(url="/usuarios/login/", permanent=False)),
