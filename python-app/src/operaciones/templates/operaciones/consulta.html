@@ -1,0 +1,34 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Consulta Jefatura — CFN{% endblock %}
+{% block page_title %}Consulta Jefatura{% endblock %}
+{% block page_subtitle %}Trazabilidad y estado de lotes{% endblock %}
+
+{% block page_body %}
+<div class="card">
+  <p style="color:var(--text-muted)">Consulta de lotes en construccion.</p>
+  {% if lotes %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Codigo</th><th>Temporada</th><th>Etapa</th><th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lote in lotes %}
+          <tr>
+            <td>{{ lote.lote_code }}</td>
+            <td>{{ lote.temporada }}</td>
+            <td>{{ lote.etapa }}</td>
+            <td>{{ lote.estado }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-desc">Sin lotes para mostrar</div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
