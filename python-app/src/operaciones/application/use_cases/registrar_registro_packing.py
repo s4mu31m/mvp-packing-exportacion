@@ -73,8 +73,8 @@ def registrar_registro_packing(
     )
 
     return UseCaseResult.success(
-        code="REGISTRO_PACKING_CREATED",
-        message="Registro de produccion packing creado correctamente",
+        code="REGISTRO_PACKING_REGISTERED",
+        message="Registro de produccion packing registrado correctamente",
         data={
             "id": record.id,
             "lote_code": lote_code,

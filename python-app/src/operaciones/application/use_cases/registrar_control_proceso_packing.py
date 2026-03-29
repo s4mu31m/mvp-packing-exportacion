@@ -72,7 +72,7 @@ def registrar_control_proceso_packing(
     )
 
     return UseCaseResult.success(
-        code="CONTROL_PROCESO_CREATED",
+        code="CONTROL_PROCESO_PACKING_REGISTERED",
         message="Control de proceso packing registrado correctamente",
         data={
             "id": record.id,
