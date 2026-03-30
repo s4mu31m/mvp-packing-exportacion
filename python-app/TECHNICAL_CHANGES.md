@@ -1,3 +1,84 @@
+# Cambios Técnicos — Iteración 2026-03-30: Flujo Operativo con Contexto de Lote
+
+**Branch:** `main`
+**Fecha:** 2026-03-30
+
+---
+
+## Resumen iteración 2026-03-30
+
+Avance funcional sobre el flujo operativo: recepción con lote abierto y campos base bloqueados,
+selectores de lote en desverdizado e ingreso packing, consulta jefatura con datos reales,
+dashboard con KPIs reales, y DesverdizadoForm refactorizado.
+
+### Archivos modificados
+- `python-app/src/operaciones/forms.py`
+- `python-app/src/operaciones/views.py`
+- `python-app/src/operaciones/templates/operaciones/recepcion.html`
+- `python-app/src/operaciones/templates/operaciones/desverdizado.html`
+- `python-app/src/operaciones/templates/operaciones/ingreso_packing.html`
+- `python-app/src/operaciones/templates/operaciones/dashboard.html`
+- `python-app/src/operaciones/templates/operaciones/consulta.html`
+
+### Cambios funcionales
+1. **Recepcion** — nuevo flujo de 3 acciones: `iniciar`, `agregar_bin`, `cerrar`.
+   El `lote_code` se almacena en sesión. Tras el primer bin, los campos base del lote
+   (codigo_productor, tipo_cultivo, variedad_fruta, color, fecha_cosecha) se bloquean
+   como readonly. El backend valida incompatibilidades entre bins del mismo lote.
+2. **BinForm** — añadidos `tipo_cultivo`, `numero_cuartel`, `color` (necesarios para
+   generación del bin_code y para campos base del lote).
+3. **IniciarLoteForm** / **CerrarLoteForm** — nuevos formularios para el flujo de lote abierto.
+4. **DesverdizadoForm** — `proceso` renombrado a `color` + `horas_desverdizado`. El campo
+   `color` mapea a `color_salida` en el modelo; `horas_desverdizado` se persiste en `proceso`
+   como texto (pendiente: agregar columna `horas_desverdizado` al modelo Desverdizado).
+5. **DesverdizadoView** — muestra selector de lotes cerrados pendientes; auto-selección de
+   tab mantencion/desverdizado según disponibilidad_camara del lote.
+6. **IngresoPackingView** — muestra selector de lotes pendientes; `via_desverdizado` se
+   auto-detecta desde el historial del lote.
+7. **ConsultaJefaturaView** — datos reales con etapa derivada, filtros por productor y estado.
+8. **DashboardView** — KPIs reales desde DB (lotes abiertos/cerrados, bins hoy, total lotes).
+
+### Decisiones técnicas
+- Los campos base del lote se guardan en `request.session["lote_activo_campos_base"]`.
+- La función `_etapa_lote()` determina la etapa actual revisando existencia de registros asociados.
+- Los selectores de lote en desverdizado e ingreso packing usan ORM directo en la vista
+  (consultas de lectura, no pasan por repositorios). Compatible con SQLite y Dataverse.
+
+### Brechas pendientes
+- `horas_desverdizado`: agregar campo al modelo `Desverdizado` en próxima migración.
+- Etapas proceso/control/paletizado/camaras: reciben `lote_pendientes` en contexto pero
+  aún piden `lote_code` manual (pendiente mismo patrón de selector).
+- Calidad de cítricos: múltiples muestras por pallet no implementadas aún.
+- Tests de vistas: no existen tests de integración para las vistas web.
+
+---
+
+## Iteración 2026-03-30 (patch): Fecha/hora en tiempo real y via_desverdizado oculto
+
+### Archivos modificados
+- `python-app/src/operaciones/templates/operaciones/control.html`
+- `python-app/src/operaciones/templates/operaciones/pesaje.html`
+- `python-app/src/operaciones/templates/operaciones/ingreso_packing.html`
+
+### Cambios funcionales
+
+1. **Fecha y hora en tiempo real — todas las vistas**
+   Se añadió el snippet JS de auto-fill a las dos vistas que faltaban (`control.html` y `pesaje.html`).
+   Todas las vistas operacionales tienen ahora el comportamiento uniforme:
+   - `input[type="date"]` → pre-poblado con la fecha local del dispositivo al cargar la página.
+   - `input.campo-hora` → pre-poblado con la hora local (HH:MM) al cargar la página.
+   El valor solo se aplica si el campo está vacío; el usuario puede modificarlo libremente.
+   Vistas cubiertas: `recepcion`, `desverdizado`, `ingreso_packing`, `proceso`, `control`, `pesaje`, `paletizado`, `camaras`.
+
+2. **`via_desverdizado` oculto en Ingreso Packing**
+   El campo `via_desverdizado` dejó de ser un control visible en el formulario de ingreso a packing.
+   - Se mueve al **panel de contexto del lote** como dato informativo ("Via desv.: Sí / No").
+   - Se envía automáticamente al backend mediante un `<input type="hidden" name="via_desverdizado">`.
+   - El valor se establece por JS al seleccionar el lote: `"on"` si `LOTES_DATA[code].via_desverdizado === true`, `""` si `false` (Django BooleanField interpreta ausencia de valor como `False`).
+   - El operador no puede modificarlo; queda determinado por el historial del lote (existencia de registro de desverdizado).
+
+---
+
 # Cambios Técnicos — Generación Dinámica de Códigos, Flujo de Recepción con Lote Abierto y Adaptación al Schema Real de Dataverse
 
 **Branch:** `feature/mvp-dataverse-backend-switch`

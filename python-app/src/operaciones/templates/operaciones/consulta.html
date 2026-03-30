@@ -2,33 +2,140 @@
 
 {% block title %}Consulta Jefatura — CaliPro{% endblock %}
 {% block page_title %}Consulta Jefatura{% endblock %}
-{% block page_subtitle %}Trazabilidad y estado de lotes{% endblock %}
+{% block page_subtitle %}Trazabilidad y estado de lotes — Temporada {{ temporada }}{% endblock %}
 
 {% block page_body %}
+
+<!-- Filtros -->
+<div class="card" style="margin-bottom:1rem">
+  <form method="get" id="form-filtros">
+    <div style="display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-end">
+
+      <div class="form-group" style="margin-bottom:0;min-width:180px">
+        <label class="form-label">Productor / codigo</label>
+        <input type="text" class="form-control" name="productor"
+               value="{{ filtro_productor }}" placeholder="Filtrar por productor...">
+      </div>
+
+      <div class="form-group" style="margin-bottom:0;min-width:160px">
+        <label class="form-label">Estado</label>
+        <select class="form-control" name="estado">
+          <option value="">— Todos —</option>
+          {% for value, label in estados_choices %}
+            <option value="{{ value }}" {% if filtro_estado == value %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display:flex;gap:.5rem;padding-bottom:1px">
+        <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+        <a href="{% url 'operaciones:consulta' %}" class="btn btn-ghost btn-sm">Limpiar</a>
+      </div>
+
+    </div>
+  </form>
+</div>
+
+<!-- Resumen rapido -->
+<div style="display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.82rem;color:var(--text-muted)">
+  <span>{{ lotes|length }} lote{{ lotes|length|pluralize:"s" }} mostrado{{ lotes|length|pluralize:"s" }}</span>
+  {% if filtro_productor or filtro_estado %}
+    <span>·</span>
+    <span style="color:var(--teal-400,#2dd4bf)">Filtros activos</span>
+  {% endif %}
+</div>
+
+<!-- Tabla principal -->
 <div class="card">
-  <p style="color:var(--text-muted)">Consulta de lotes en construccion.</p>
   {% if lotes %}
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Codigo</th><th>Temporada</th><th>Etapa</th><th>Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for lote in lotes %}
+    <div style="overflow-x:auto">
+      <table class="table" style="font-size:.83rem">
+        <thead>
           <tr>
-            <td>{{ lote.lote_code }}</td>
-            <td>{{ lote.temporada }}</td>
-            <td>{{ lote.etapa }}</td>
-            <td>{{ lote.estado }}</td>
+            <th>Lote</th>
+            <th>Fecha</th>
+            <th>Productor</th>
+            <th>Variedad</th>
+            <th style="text-align:center">Bins</th>
+            <th style="text-align:right">Kg neto</th>
+            <th>Etapa actual</th>
+            <th>Estado</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for item in lotes %}
+            <tr style="cursor:pointer" title="Ver detalle de {{ item.lote_code }}">
+              <td style="font-family:monospace;font-weight:600;white-space:nowrap">
+                {{ item.lote_code }}
+              </td>
+              <td style="white-space:nowrap;color:var(--text-muted)">
+                {{ item.fecha|date:"d/m/Y"|default:"—" }}
+              </td>
+              <td>{{ item.productor|default:"—" }}</td>
+              <td>{{ item.variedad|default:"—" }}</td>
+              <td style="text-align:center">{{ item.cantidad_bins }}</td>
+              <td style="text-align:right;font-weight:600">
+                {% if item.kilos_neto %}
+                  {{ item.kilos_neto|floatformat:0 }} kg
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge"
+                  style="background:var(--surface-2);color:var(--text-muted);font-size:.75rem;white-space:nowrap">
+                  {{ item.etapa }}
+                </span>
+              </td>
+              <td>
+                {% if item.estado == "abierto" %}
+                  <span style="color:var(--teal-400,#2dd4bf);white-space:nowrap">● Abierto</span>
+                {% elif item.estado == "cerrado" %}
+                  <span style="color:var(--text-muted);white-space:nowrap">● Cerrado</span>
+                {% elif item.estado == "finalizado" %}
+                  <span style="color:var(--success,#22c55e);white-space:nowrap">✓ Finalizado</span>
+                {% elif item.estado == "anulado" %}
+                  <span style="color:var(--danger,#ef4444);white-space:nowrap">✕ Anulado</span>
+                {% else %}
+                  {{ item.estado_display }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <div class="empty-state">
-      <div class="empty-state-desc">Sin lotes para mostrar</div>
+    <div class="empty-state" style="padding:2rem 0">
+      <div class="empty-state-desc">
+        {% if filtro_productor or filtro_estado %}
+          Sin lotes que coincidan con los filtros aplicados.
+        {% else %}
+          Sin lotes registrados en temporada {{ temporada }}.
+        {% endif %}
+      </div>
     </div>
   {% endif %}
 </div>
+
+<!-- Leyenda de etapas -->
+<div style="margin-top:1rem;font-size:.78rem;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:.5rem 1.2rem">
+  <span style="font-weight:600">Etapas:</span>
+  <span>Recepcion</span>
+  <span>→</span>
+  <span>Pesado / Pendiente</span>
+  <span>→</span>
+  <span>Mantencion / Desv.</span>
+  <span>→</span>
+  <span>Ingreso Packing</span>
+  <span>→</span>
+  <span>Packing / Proceso</span>
+  <span>→</span>
+  <span>Pallet Cerrado</span>
+  <span>→</span>
+  <span>Camara Frio</span>
+</div>
+
 {% endblock %}

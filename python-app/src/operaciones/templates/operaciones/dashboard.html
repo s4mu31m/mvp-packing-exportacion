@@ -1,8 +1,96 @@
 {% extends "layout_app.html" %}
 
+{% block title %}Dashboard — CaliPro{% endblock %}
 {% block page_title %}Dashboard — Turno Actual{% endblock %}
-{% block page_subtitle %}Temporada 2025/2026{% endblock %}
+{% block page_subtitle %}Temporada {{ temporada }}{% endblock %}
 
 {% block page_body %}
-  <p style="color:var(--text-muted)">Dashboard en construcción.</p>
+
+<!-- KPIs -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem">
+
+  <div class="card" style="text-align:center;padding:1.2rem">
+    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+      {{ kpis.lotes_abiertos|default:"0" }}
+    </div>
+    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes en recepcion</div>
+  </div>
+
+  <div class="card" style="text-align:center;padding:1.2rem">
+    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+      {{ kpis.lotes_cerrados|default:"0" }}
+    </div>
+    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes cerrados / en proceso</div>
+  </div>
+
+  <div class="card" style="text-align:center;padding:1.2rem">
+    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+      {{ kpis.bins_hoy|default:"0" }}
+    </div>
+    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Bins recibidos hoy</div>
+  </div>
+
+  <div class="card" style="text-align:center;padding:1.2rem">
+    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+      {{ kpis.total_lotes|default:"0" }}
+    </div>
+    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Total lotes temporada</div>
+  </div>
+
+</div>
+
+<!-- Tabla de lotes activos -->
+<div class="card">
+  <div class="flex-row" style="margin-bottom:1rem;align-items:center">
+    <div class="card-title" style="margin-bottom:0">Lotes activos</div>
+    <a href="{% url 'operaciones:consulta' %}" class="btn btn-ghost btn-sm ml-auto">
+      Ver todos →
+    </a>
+  </div>
+
+  {% if lotes_activos %}
+    <div style="overflow-x:auto">
+      <table class="table" style="font-size:.85rem">
+        <thead>
+          <tr>
+            <th>Codigo</th>
+            <th>Bins</th>
+            <th>Etapa actual</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lote in lotes_activos %}
+            <tr>
+              <td style="font-family:monospace;font-weight:600">{{ lote.codigo }}</td>
+              <td>{{ lote.bins }}</td>
+              <td>
+                <span class="badge"
+                  style="background:var(--surface-2);color:var(--text-muted);font-size:.75rem">
+                  {{ lote.etapa }}
+                </span>
+              </td>
+              <td>
+                {% if lote.estado == "abierto" %}
+                  <span style="color:var(--teal-400,#2dd4bf)">● Abierto</span>
+                {% elif lote.estado == "cerrado" %}
+                  <span style="color:var(--text-muted)">● Cerrado</span>
+                {% elif lote.estado == "finalizado" %}
+                  <span style="color:var(--success,#22c55e)">✓ Finalizado</span>
+                {% else %}
+                  {{ lote.estado }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-desc">Sin lotes registrados en temporada {{ temporada }}</div>
+    </div>
+  {% endif %}
+</div>
+
 {% endblock %}

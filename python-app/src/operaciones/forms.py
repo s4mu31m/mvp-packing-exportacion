@@ -6,21 +6,68 @@ from django import forms
 from operaciones.models import DisponibilidadCamara, AOR
 
 
+# ---------------------------------------------------------------------------
+# Recepcion — flujo de lote abierto
+# ---------------------------------------------------------------------------
+
+class IniciarLoteForm(forms.Form):
+    """Inicia una sesion de recepcion (crea lote en estado abierto)."""
+    operator_code = forms.CharField(
+        max_length=50, required=False, label="Codigo operador",
+    )
+
+
+class CerrarLoteForm(forms.Form):
+    """Cierra el lote abierto — ya no se pueden agregar mas bins."""
+    requiere_desverdizado = forms.BooleanField(
+        required=False, label="Requiere desverdizado",
+    )
+    disponibilidad_camara_desverdizado = forms.ChoiceField(
+        choices=[("", "— no aplica —")] + list(DisponibilidadCamara.choices),
+        required=False, label="Disponibilidad camara desverdizado",
+        help_text="Solo si requiere desverdizado",
+    )
+    kilos_bruto_conformacion = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=False, label="Kilos bruto total lote",
+    )
+    kilos_neto_conformacion = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=False, label="Kilos neto total lote",
+    )
+    operator_code = forms.CharField(
+        max_length=50, required=False, label="Codigo operador",
+    )
+
+
 class BinForm(forms.Form):
     """Registro de bin en recepcion. El bin_code se genera automaticamente en backend."""
-    fecha_cosecha = forms.DateField(
-        required=False, label="Fecha de cosecha",
-        widget=forms.DateInput(attrs={"type": "date"}),
+    # --- Campos base del lote (se bloquean tras el primer bin) ---
+    codigo_productor = forms.CharField(
+        max_length=50, required=False, label="Codigo productor / agricultor",
+    )
+    tipo_cultivo = forms.CharField(
+        max_length=50, required=False, label="Tipo cultivo (especie)",
+        widget=forms.TextInput(attrs={"placeholder": "Uva de mesa"}),
     )
     variedad_fruta = forms.CharField(
         max_length=100, required=False, label="Variedad",
     )
-    codigo_productor = forms.CharField(
-        max_length=50, required=False, label="Codigo productor",
+    color = forms.CharField(
+        max_length=30, required=False, label="Color (numero)",
+        help_text="Numero de color segun tabla interna. Ej: 1, 2, 5",
+        widget=forms.TextInput(attrs={"placeholder": "1", "inputmode": "numeric"}),
+    )
+    fecha_cosecha = forms.DateField(
+        required=False, label="Fecha de cosecha",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    # --- Campos variables por bin ---
+    numero_cuartel = forms.CharField(
+        max_length=20, required=False, label="Cuartel",
+        widget=forms.TextInput(attrs={"placeholder": "C01"}),
     )
     hora_recepcion = forms.CharField(
         max_length=5, required=False, label="Hora recepcion (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     kilos_bruto_ingreso = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False,
@@ -91,7 +138,7 @@ class CamaraMantencionForm(forms.Form):
     )
     hora_ingreso = forms.CharField(
         max_length=5, required=False, label="Hora ingreso (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     temperatura_camara = forms.DecimalField(
         max_digits=5, decimal_places=2, required=False, label="Temperatura camara (°C)",
@@ -114,7 +161,17 @@ class DesverdizadoForm(forms.Form):
     )
     hora_ingreso = forms.CharField(
         max_length=5, required=False, label="Hora ingreso (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
+    )
+    color = forms.CharField(
+        max_length=30, required=False, label="Color objetivo (numero)",
+        help_text="Numero de color esperado al salir. Ej: 3, 4. El operador puede ajustar.",
+        widget=forms.TextInput(attrs={"placeholder": "3", "inputmode": "numeric"}),
+    )
+    horas_desverdizado = forms.IntegerField(
+        required=False, label="Horas de desverdizado",
+        help_text="El operador puede ajustar segun criterio",
+        widget=forms.NumberInput(attrs={"placeholder": "72", "min": "1", "max": "240"}),
     )
     kilos_enviados_terreno = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False,
@@ -123,10 +180,6 @@ class DesverdizadoForm(forms.Form):
     kilos_recepcionados = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False,
         label="Kilos recepcionados",
-    )
-    proceso = forms.CharField(
-        max_length=100, required=False, label="Proceso/metodo",
-        help_text="Texto libre por ahora",
     )
     operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
@@ -139,7 +192,7 @@ class IngresoPackingForm(forms.Form):
     )
     hora_ingreso = forms.CharField(
         max_length=5, required=False, label="Hora ingreso (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     kilos_bruto_ingreso_packing = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False,
@@ -168,7 +221,7 @@ class RegistroPackingForm(forms.Form):
     )
     hora_inicio = forms.CharField(
         max_length=5, required=False, label="Hora inicio (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     linea_proceso = forms.CharField(
         max_length=50, required=False, label="Linea de proceso",
@@ -198,7 +251,7 @@ class ControlProcesoPackingForm(forms.Form):
     )
     hora = forms.CharField(
         max_length=5, required=False, label="Hora (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     n_bins_procesados = forms.IntegerField(required=False, label="N bins procesados")
     temp_agua_tina = forms.DecimalField(
@@ -229,7 +282,7 @@ class CalidadPalletForm(forms.Form):
     )
     hora = forms.CharField(
         max_length=5, required=False, label="Hora (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     temperatura_fruta = forms.DecimalField(
         max_digits=5, decimal_places=2, required=False, label="Temperatura fruta (°C)",
@@ -266,7 +319,7 @@ class CamaraFrioForm(forms.Form):
     )
     hora_ingreso = forms.CharField(
         max_length=5, required=False, label="Hora ingreso (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     destino_despacho = forms.CharField(
         max_length=100, required=False, label="Destino despacho",
@@ -282,7 +335,7 @@ class MedicionTemperaturaForm(forms.Form):
     )
     hora = forms.CharField(
         max_length=5, required=False, label="Hora (HH:mm)",
-        widget=forms.TextInput(attrs={"placeholder": "08:30"}),
+        widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
     )
     temperatura_pallet = forms.DecimalField(
         max_digits=5, decimal_places=2, required=False,

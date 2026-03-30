@@ -41,4 +41,13 @@
     </div>
   </form>
 </div>
+<script>
+(function() {
+  const n = new Date();
+  const fecha = n.toISOString().slice(0,10);
+  const hora  = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+  document.querySelectorAll('input[type="date"]').forEach(e => { if (!e.value) e.value = fecha; });
+  document.querySelectorAll('.campo-hora').forEach(e => { if (!e.value) e.value = hora; });
+})();
+</script>
 {% endblock %}
