@@ -22,7 +22,10 @@
         <div class="user-role">{{ request.user.perfil.rol_display }}</div>
       </div>
     </div>
-    <a href="{% url 'usuarios:logout' %}" class="btn btn-ghost btn-sm">⎋</a>
+    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost btn-sm">⎋</button>
+    </form>
   </div>
 </nav>
 
