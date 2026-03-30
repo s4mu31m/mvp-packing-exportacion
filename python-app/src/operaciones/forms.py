@@ -327,6 +327,26 @@ class CamaraFrioForm(forms.Form):
     operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
 
+class CalidadPalletMuestraForm(forms.Form):
+    """Una muestra individual de calidad para un pallet."""
+    numero_muestra = forms.IntegerField(
+        required=False, label="N° muestra",
+        widget=forms.NumberInput(attrs={"min": "1", "max": "10"}),
+    )
+    temperatura_fruta = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Temp. fruta (°C)",
+    )
+    peso_caja_muestra = forms.DecimalField(
+        max_digits=8, decimal_places=3, required=False, label="Peso caja (kg)",
+    )
+    n_frutos = forms.IntegerField(required=False, label="N° frutos")
+    aprobado = forms.NullBooleanField(required=False, label="Aprobada")
+    observaciones = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 2}),
+        required=False, label="Observaciones",
+    )
+
+
 class MedicionTemperaturaForm(forms.Form):
     """Medicion de temperatura al salir de camara de frio."""
     fecha = forms.DateField(

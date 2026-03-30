@@ -43,6 +43,7 @@ from operaciones.application.use_cases import (
 from operaciones.models import (
     Lote,
     LotePlantaEstado,
+    Pallet,
 )
 
 
@@ -498,8 +499,7 @@ class DesverdizadoView(LoginRequiredMixin, TemplateView):
                         "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
                         "hora_ingreso": cd.get("hora_ingreso"),
                         "color_salida": cd.get("color") or "",
-                        # horas_desverdizado se guarda en el campo 'proceso' por ahora
-                        "proceso": str(cd["horas_desverdizado"]) + "h" if cd.get("horas_desverdizado") else "",
+                        "horas_desverdizado": cd.get("horas_desverdizado"),
                         "kilos_enviados_terreno": str(cd["kilos_enviados_terreno"]) if cd.get("kilos_enviados_terreno") else None,
                         "kilos_recepcionados": str(cd["kilos_recepcionados"]) if cd.get("kilos_recepcionados") else None,
                     },
@@ -597,6 +597,76 @@ def _lotes_data_json(temporada: str, lotes: list) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _campos_base_lote(lote: Lote) -> dict:
+    """
+    Deriva los campos base del lote (productor, tipo_cultivo, variedad, color,
+    fecha_cosecha) desde el primer bin asociado. No depende de sesion.
+    """
+    bin_lotes = list(lote.bin_lotes.select_related("bin").order_by("created_at")[:1])
+    primer_bin = bin_lotes[0].bin if bin_lotes else None
+    return {
+        "productor":     primer_bin.codigo_productor if primer_bin else "",
+        "tipo_cultivo":  primer_bin.tipo_cultivo     if primer_bin else "",
+        "variedad":      primer_bin.variedad_fruta   if primer_bin else "",
+        "color":         primer_bin.color            if primer_bin else "",
+        "fecha_cosecha": str(primer_bin.fecha_cosecha) if primer_bin and primer_bin.fecha_cosecha else "",
+    }
+
+
+def _pallets_pendientes_calidad(temporada: str) -> list:
+    """Pallets activos que aun no tienen registro de CalidadPallet."""
+    from operaciones.models import CalidadPallet
+    pallets_con_calidad = set(CalidadPallet.objects.values_list("pallet_id", flat=True))
+    return list(
+        Pallet.objects
+        .filter(temporada=temporada, is_active=True)
+        .exclude(id__in=pallets_con_calidad)
+        .order_by("-created_at")[:30]
+    )
+
+
+def _pallets_pendientes_camara_frio(temporada: str) -> list:
+    """Pallets activos que aun no tienen registro de CamaraFrio."""
+    from operaciones.models import CamaraFrio
+    pallets_con_camara = set(CamaraFrio.objects.values_list("pallet_id", flat=True))
+    return list(
+        Pallet.objects
+        .filter(temporada=temporada, is_active=True)
+        .exclude(id__in=pallets_con_camara)
+        .order_by("-created_at")[:30]
+    )
+
+
+def _pallet_info(temporada: str, pallet_code: str) -> dict:
+    """Datos base de un pallet para autocompletar formularios."""
+    try:
+        pallet = Pallet.objects.get(temporada=temporada, pallet_code=pallet_code)
+        lote_code = ""
+        campos = {}
+        pl = pallet.pallet_lotes.select_related("lote").first()
+        if pl:
+            lote_code = pl.lote.lote_code
+            campos = _campos_base_lote(pl.lote)
+        return {
+            "pallet_code": pallet.pallet_code,
+            "lote_code":   lote_code,
+            "tipo_caja":   pallet.tipo_caja,
+            "peso_total":  float(pallet.peso_total_kg) if pallet.peso_total_kg else None,
+            **campos,
+        }
+    except Pallet.DoesNotExist:
+        return {}
+
+
+def _pallets_data_json(temporada: str, pallets: list) -> str:
+    data = {}
+    for p in pallets:
+        info = _pallet_info(temporada, p.pallet_code)
+        if info:
+            data[p.pallet_code] = info
+    return json.dumps(data, ensure_ascii=False)
+
+
 class IngresoPackingView(LoginRequiredMixin, TemplateView):
     template_name = "operaciones/ingreso_packing.html"
     login_url = reverse_lazy("usuarios:login")
@@ -675,11 +745,13 @@ class ProcesoView(LoginRequiredMixin, TemplateView):
         lotes_con_ingreso = set(
             IngresoAPacking.objects.values_list("lote_id", flat=True)
         )
-        ctx["lotes_pendientes"] = list(
+        lotes = list(
             Lote.objects
             .filter(temporada=temporada, is_active=True, id__in=lotes_con_ingreso)
             .order_by("-created_at")[:30]
         )
+        ctx["lotes_pendientes"] = lotes
+        ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -731,11 +803,13 @@ class ControlView(LoginRequiredMixin, TemplateView):
         )
         from operaciones.models import IngresoAPacking
         lotes_con_ingreso = set(IngresoAPacking.objects.values_list("lote_id", flat=True))
-        ctx["lotes_pendientes"] = list(
+        lotes = list(
             Lote.objects
             .filter(temporada=temporada, is_active=True, id__in=lotes_con_ingreso)
             .order_by("-created_at")[:30]
         )
+        ctx["lotes_pendientes"] = lotes
+        ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -781,6 +855,13 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "Paletizado"
         ctx["form_calidad"] = CalidadPalletForm()
+        temporada = (
+            self.request.session.get("temporada_activa")
+            or str(datetime.date.today().year)
+        )
+        pallets = _pallets_pendientes_calidad(temporada)
+        ctx["pallets_pendientes"] = pallets
+        ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -842,6 +923,13 @@ class CamarasView(LoginRequiredMixin, TemplateView):
         ctx["page_title"] = "Camaras de Frio"
         ctx["form_camara"] = CamaraFrioForm()
         ctx["form_medicion"] = MedicionTemperaturaForm()
+        temporada = (
+            self.request.session.get("temporada_activa")
+            or str(datetime.date.today().year)
+        )
+        pallets = _pallets_pendientes_camara_frio(temporada)
+        ctx["pallets_pendientes"] = pallets
+        ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
 
     def post(self, request, *args, **kwargs):

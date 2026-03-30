@@ -429,9 +429,13 @@ class Desverdizado(AuditSourceModel):
         max_digits=10, decimal_places=2, null=True, blank=True)
     kilos_neto_salida = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True)
+    horas_desverdizado = models.IntegerField(
+        null=True, blank=True,
+        help_text="Horas planificadas de desverdizado. Reemplaza el campo proceso para este dato."
+    )
     color_salida = models.CharField(max_length=30, blank=True, default="")
     proceso = models.CharField(max_length=100, blank=True, default="",
-        help_text="Metodo de conservacion — texto libre por ahora")
+        help_text="Metodo de conservacion — texto libre. Valor legacy: horas en formato '72h'.")
     fecha_proceso = models.DateField(null=True, blank=True)
     sector = models.CharField(max_length=50, blank=True, default="")
     cuartel = models.CharField(max_length=50, blank=True, default="")
@@ -716,6 +720,45 @@ class CalidadPallet(AuditSourceModel):
 
     def __str__(self):
         return f"CalidadPallet - {self.pallet} ({self.fecha})"
+
+
+# ---------------------------------------------------------------------------
+# CalidadPalletMuestra
+# ---------------------------------------------------------------------------
+
+class CalidadPalletMuestra(AuditSourceModel):
+    """
+    Muestra individual de calidad para un pallet. Un pallet puede tener
+    multiples muestras (tipicamente 2-3) registradas en la misma sesion.
+    """
+    pallet = models.ForeignKey(
+        Pallet,
+        on_delete=models.PROTECT,
+        related_name="muestras_calidad",
+    )
+    numero_muestra = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Numero correlativo de muestra en la sesion (1, 2, 3...)"
+    )
+    temperatura_fruta = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="°C")
+    peso_caja_muestra = models.DecimalField(
+        max_digits=8, decimal_places=3, null=True, blank=True,
+        help_text="kg")
+    n_frutos = models.IntegerField(null=True, blank=True,
+        help_text="Numero de frutos en la caja muestra")
+    aprobado = models.BooleanField(null=True, blank=True,
+        help_text="Muestra aprobada")
+    observaciones = models.TextField(blank=True, default="")
+    rol = models.CharField(max_length=50, blank=True, default="")
+
+    class Meta:
+        db_table = "operaciones_calidad_pallet_muestra"
+        ordering = ["pallet", "numero_muestra"]
+
+    def __str__(self):
+        return f"Muestra {self.numero_muestra} - {self.pallet}"
 
 
 # ---------------------------------------------------------------------------

@@ -5,66 +5,129 @@
 {% block page_subtitle %}Control de calidad y cierre de pallet{% endblock %}
 
 {% block page_body %}
-<div style="max-width:600px">
-  {% if messages %}
-    {% for msg in messages %}
-      <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
-    {% endfor %}
-  {% endif %}
+{% if messages %}
+  {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
+  {% endfor %}
+{% endif %}
 
-  <div class="form-group">
-    <label class="form-label">Codigo de pallet</label>
-    <input type="text" class="form-control" id="pallet-code-input" placeholder="Ej: PAL-2026-001">
-  </div>
+<div class="op-layout">
 
-  <div class="flex-row" style="gap:.5rem;margin-bottom:1.5rem">
-    <button type="button" class="btn btn-primary btn-sm" onclick="showTab('calidad')">Calidad Pallet</button>
-    <button type="button" class="btn btn-ghost btn-sm" onclick="showTab('cerrar')">Cerrar Pallet</button>
-  </div>
+  <div class="flex-col" style="min-width:0">
 
-  <!-- Calidad pallet -->
-  <div id="tab-calidad" class="card">
-    <div class="card-title" style="margin-bottom:1rem">Control de Calidad</div>
-    <form method="post">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="calidad">
-      <input type="hidden" name="temporada" value="">
-      <input type="hidden" name="pallet_code" id="pallet-code-calidad" value="">
-      {% for field in form_calidad %}
+    <!-- Selector de pallet -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:.8rem">Seleccionar pallet</div>
+      {% if pallets_pendientes %}
         <div class="form-group">
-          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-          {{ field }}
-          {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-          {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+          <label class="form-label">Pallets pendientes de calidad</label>
+          <select id="pallet-selector" class="form-control">
+            <option value="">— Seleccione un pallet —</option>
+            {% for p in pallets_pendientes %}
+              <option value="{{ p.pallet_code }}">{{ p.pallet_code }}</option>
+            {% endfor %}
+          </select>
         </div>
-      {% endfor %}
-      <div class="flex-row mt-4">
-        <button type="submit" class="btn btn-primary ml-auto">Registrar Calidad</button>
+      {% else %}
+        <p style="color:var(--text-muted);font-size:.85rem">Sin pallets pendientes en temporada actual.</p>
+      {% endif %}
+      <div class="form-group" style="margin-top:.5rem">
+        <label class="form-label">Codigo de pallet</label>
+        <input type="text" class="form-control" id="pallet-code-input"
+               placeholder="Ej: PAL-2026-001" style="font-family:monospace">
       </div>
-    </form>
+    </div>
+
+    <!-- Panel contexto pallet -->
+    <div class="card" id="pallet-context-panel" style="margin-bottom:1rem;display:none;
+         background:var(--surface-0);border:1px solid var(--teal-400,#2dd4bf)">
+      <div class="card-title" style="font-size:.85rem;margin-bottom:.8rem;color:var(--teal-400,#2dd4bf)">
+        Contexto del pallet
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;font-size:.82rem">
+        <span style="color:var(--text-muted)">Lote</span>
+        <span id="ctx-lote" style="font-family:monospace">—</span>
+        <span style="color:var(--text-muted)">Productor</span>
+        <span id="ctx-productor">—</span>
+        <span style="color:var(--text-muted)">Variedad</span>
+        <span id="ctx-variedad">—</span>
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:.35rem .6rem;font-size:.82rem;margin-top:.5rem">
+        <span style="color:var(--text-muted)">Color</span><span id="ctx-color">—</span>
+        <span style="color:var(--text-muted)">Peso total</span>
+        <span id="ctx-peso" style="color:var(--teal-400,#2dd4bf);font-weight:600">—</span>
+      </div>
+    </div>
+
+    <div class="flex-row" style="gap:.5rem;margin-bottom:1rem">
+      <button type="button" class="btn btn-primary btn-sm" id="tab-btn-calidad"
+              onclick="showTab('calidad')">Calidad Pallet</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="tab-btn-cerrar"
+              onclick="showTab('cerrar')">Cerrar Pallet</button>
+    </div>
+
+    <!-- Calidad pallet -->
+    <div id="tab-calidad" class="card">
+      <div class="card-title" style="margin-bottom:1rem">Control de Calidad</div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="calidad">
+        <input type="hidden" name="temporada" value="">
+        <input type="hidden" name="pallet_code" id="pallet-code-calidad" value="">
+        {% for field in form_calidad %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+            {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <div class="flex-row mt-4">
+          <button type="submit" class="btn btn-primary ml-auto">Registrar Calidad</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Cerrar pallet -->
+    <div id="tab-cerrar" class="card" style="display:none">
+      <div class="card-title" style="margin-bottom:1rem">Cerrar Pallet</div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="cerrar">
+        <input type="hidden" name="temporada" value="">
+        <input type="hidden" name="pallet_code" id="pallet-code-cerrar" value="">
+        <input type="hidden" name="lote_code" id="lote-code-cerrar" value="">
+        <div class="form-group">
+          <label class="form-label">Lote asociado</label>
+          <input type="text" class="form-control" id="lote-code-display"
+                 placeholder="Se completa al seleccionar el pallet" readonly
+                 style="background:var(--surface-1);font-family:monospace">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Codigo operador</label>
+          <input type="text" class="form-control" name="operator_code" placeholder="Ej: OP-01">
+        </div>
+        <div class="flex-row mt-4">
+          <button type="submit" class="btn btn-danger ml-auto">Cerrar Pallet</button>
+        </div>
+      </form>
+    </div>
+
   </div>
 
-  <!-- Cerrar pallet -->
-  <div id="tab-cerrar" class="card" style="display:none">
-    <div class="card-title" style="margin-bottom:1rem">Cerrar Pallet</div>
-    <form method="post">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="cerrar">
-      <input type="hidden" name="temporada" value="">
-      <input type="hidden" name="pallet_code" id="pallet-code-cerrar" value="">
-      <div class="form-group">
-        <label class="form-label">Codigo de lote</label>
-        <input type="text" class="form-control" name="lote_code" placeholder="Ej: LP-2026-001" required>
+  <!-- Sidebar -->
+  <div class="op-sidebar-panel">
+    <div class="op-sidebar-title">Pallets pendientes</div>
+    {% for p in pallets_pendientes %}
+      <div style="padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.82rem;cursor:pointer"
+           onclick="seleccionarPallet('{{ p.pallet_code }}')">
+        <div style="font-weight:600;font-family:monospace">{{ p.pallet_code }}</div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Codigo operador</label>
-        <input type="text" class="form-control" name="operator_code" placeholder="Ej: OP-01">
-      </div>
-      <div class="flex-row mt-4">
-        <button type="submit" class="btn btn-danger ml-auto">Cerrar Pallet</button>
-      </div>
-    </form>
+    {% empty %}
+      <div class="empty-state"><div class="empty-state-desc">Sin pallets</div></div>
+    {% endfor %}
   </div>
+
 </div>
 
 <script>
@@ -75,13 +138,54 @@
   document.querySelectorAll('input[type="date"]').forEach(e => { if (!e.value) e.value = fecha; });
   document.querySelectorAll('.campo-hora').forEach(e => { if (!e.value) e.value = hora; });
 })();
+
+const PALLETS_DATA = {{ pallets_data_json|safe }};
+
+function fmt(val) { return (val === null || val === undefined || val === '') ? '—' : String(val); }
+
 function showTab(name) {
   document.getElementById('tab-calidad').style.display = name === 'calidad' ? '' : 'none';
-  document.getElementById('tab-cerrar').style.display = name === 'cerrar' ? '' : 'none';
+  document.getElementById('tab-cerrar').style.display  = name === 'cerrar'  ? '' : 'none';
+  document.getElementById('tab-btn-calidad').className =
+    name === 'calidad' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('tab-btn-cerrar').className =
+    name === 'cerrar' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
 }
+
+function setPalletCode(code) {
+  document.getElementById('pallet-code-calidad').value = code;
+  document.getElementById('pallet-code-cerrar').value  = code;
+  document.getElementById('pallet-code-input').value   = code;
+}
+
+function poblarContexto(code) {
+  const panel = document.getElementById('pallet-context-panel');
+  const d = PALLETS_DATA[code];
+  if (!d) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  document.getElementById('ctx-lote').textContent     = fmt(d.lote_code);
+  document.getElementById('ctx-productor').textContent = fmt(d.productor);
+  document.getElementById('ctx-variedad').textContent  = fmt(d.variedad);
+  document.getElementById('ctx-color').textContent     = fmt(d.color);
+  document.getElementById('ctx-peso').textContent      = d.peso_total != null ? d.peso_total.toFixed(0) + ' kg' : '—';
+  // Propagar lote_code al form cerrar
+  document.getElementById('lote-code-cerrar').value   = d.lote_code || '';
+  document.getElementById('lote-code-display').value  = d.lote_code || '';
+}
+
+function seleccionarPallet(code) {
+  setPalletCode(code);
+  document.getElementById('pallet-selector').value = code;
+  poblarContexto(code);
+}
+
+document.getElementById('pallet-selector').addEventListener('change', function() {
+  if (this.value) seleccionarPallet(this.value);
+});
 document.getElementById('pallet-code-input').addEventListener('input', function() {
-  document.getElementById('pallet-code-calidad').value = this.value;
-  document.getElementById('pallet-code-cerrar').value = this.value;
+  const code = this.value.trim();
+  setPalletCode(code);
+  if (code) poblarContexto(code);
 });
 </script>
 {% endblock %}
