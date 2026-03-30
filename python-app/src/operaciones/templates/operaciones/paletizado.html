@@ -1,0 +1,80 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Paletizado — CaliPro{% endblock %}
+{% block page_title %}Paletizado{% endblock %}
+{% block page_subtitle %}Control de calidad y cierre de pallet{% endblock %}
+
+{% block page_body %}
+<div style="max-width:600px">
+  {% if messages %}
+    {% for msg in messages %}
+      <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="form-group">
+    <label class="form-label">Codigo de pallet</label>
+    <input type="text" class="form-control" id="pallet-code-input" placeholder="Ej: PAL-2026-001">
+  </div>
+
+  <div class="flex-row" style="gap:.5rem;margin-bottom:1.5rem">
+    <button type="button" class="btn btn-primary btn-sm" onclick="showTab('calidad')">Calidad Pallet</button>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="showTab('cerrar')">Cerrar Pallet</button>
+  </div>
+
+  <!-- Calidad pallet -->
+  <div id="tab-calidad" class="card">
+    <div class="card-title" style="margin-bottom:1rem">Control de Calidad</div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="calidad">
+      <input type="hidden" name="temporada" value="">
+      <input type="hidden" name="pallet_code" id="pallet-code-calidad" value="">
+      {% for field in form_calidad %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+          {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+      <div class="flex-row mt-4">
+        <button type="submit" class="btn btn-primary ml-auto">Registrar Calidad</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Cerrar pallet -->
+  <div id="tab-cerrar" class="card" style="display:none">
+    <div class="card-title" style="margin-bottom:1rem">Cerrar Pallet</div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="cerrar">
+      <input type="hidden" name="temporada" value="">
+      <input type="hidden" name="pallet_code" id="pallet-code-cerrar" value="">
+      <div class="form-group">
+        <label class="form-label">Codigo de lote</label>
+        <input type="text" class="form-control" name="lote_code" placeholder="Ej: LP-2026-001" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Codigo operador</label>
+        <input type="text" class="form-control" name="operator_code" placeholder="Ej: OP-01">
+      </div>
+      <div class="flex-row mt-4">
+        <button type="submit" class="btn btn-danger ml-auto">Cerrar Pallet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showTab(name) {
+  document.getElementById('tab-calidad').style.display = name === 'calidad' ? '' : 'none';
+  document.getElementById('tab-cerrar').style.display = name === 'cerrar' ? '' : 'none';
+}
+document.getElementById('pallet-code-input').addEventListener('input', function() {
+  document.getElementById('pallet-code-calidad').value = this.value;
+  document.getElementById('pallet-code-cerrar').value = this.value;
+});
+</script>
+{% endblock %}

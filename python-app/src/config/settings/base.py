@@ -35,6 +35,11 @@ DATAVERSE_CLIENT_SECRET = os.getenv("DATAVERSE_CLIENT_SECRET", "")
 DATAVERSE_API_VERSION = os.getenv("DATAVERSE_API_VERSION", "v9.2")
 DATAVERSE_TIMEOUT = int(os.getenv("DATAVERSE_TIMEOUT", "30"))
 
+# Selector de backend de persistencia:
+#   "sqlite"    → base de datos local SQLite (por defecto, desarrollo)
+#   "dataverse" → Microsoft Dataverse vía Web API OData v4
+PERSISTENCE_BACKEND = os.getenv("PERSISTENCE_BACKEND", "sqlite")
+
 LANGUAGE_CODE = "es-cl"
 TIME_ZONE = os.getenv("TIME_ZONE", "America/Santiago")
 USE_I18N = True
@@ -96,7 +101,7 @@ TEMPLATES = [
 
                 # AGREGAR: inyecta planta, exportador, nav a todos los templates
 
-                "core.context_processors.cfn_context",
+                "core.context_processors.CaliPro_context",
 
             ],
 

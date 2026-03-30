@@ -23,4 +23,5 @@ class CerrarPalletTests(TestCase):
         self.assertEqual(result.code, "PALLET_CLOSED")
         self.assertEqual(Pallet.objects.count(), 1)
         self.assertEqual(PalletLote.objects.count(), 1)
-        self.assertEqual(RegistroEtapa.objects.count(), 1)
+        # PALLET_CREADO (pallet nuevo) + LOTE_ASIGNADO_PALLET (primera asignación)
+        self.assertEqual(RegistroEtapa.objects.count(), 2)

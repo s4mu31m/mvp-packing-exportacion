@@ -1,6 +1,6 @@
 /* ============================================================
    FORMS.JS — Utilidades globales de formularios y UI
-   CFN Packing Exportación · MVP v0.1
+   CaliPro Packing Exportación · MVP v0.1
 
    Cargado desde base.html — disponible en TODAS las páginas.
    ============================================================ */

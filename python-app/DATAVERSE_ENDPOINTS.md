@@ -27,6 +27,7 @@ cd src
 3. **Ejecuta el servidor de desarrollo**:
 
 ```bash
+cd mvp-packing-exportacion/python-app/src
 python manage.py runserver
 ```
 
@@ -123,5 +124,3 @@ Una vez que estos endpoints funcionen, podrás:
 2. **Crear tablas personalizadas** en Dataverse 
 3. **Implementar la lógica de bins y lotes** que necesitas
 4. **Agregar validaciones y reglas de negocio**
-
-¡Tu compañero tenía razón! Solo necesitabas demostrar que la conexión funciona. 🎯

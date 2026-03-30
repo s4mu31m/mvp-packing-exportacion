@@ -1,0 +1,43 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Proceso Packing — CaliPro{% endblock %}
+{% block page_title %}Proceso Packing{% endblock %}
+{% block page_subtitle %}Registro de produccion en linea{% endblock %}
+
+{% block page_actions %}
+  <button class="btn btn-primary btn-sm" form="form-proceso" type="submit">Registrar</button>
+{% endblock %}
+
+{% block page_body %}
+<div class="card" style="max-width:560px">
+  {% if messages %}
+    {% for msg in messages %}
+      <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" id="form-proceso">
+    {% csrf_token %}
+    <input type="hidden" name="temporada" value="">
+
+    <div class="form-group">
+      <label class="form-label">Codigo de lote</label>
+      <input type="text" class="form-control" name="lote_code" placeholder="Ej: LP-2026-001" required>
+    </div>
+
+    {% for field in form %}
+      <div class="form-group">
+        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+        {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+
+    <div class="flex-row mt-4">
+      <button type="reset" class="btn btn-ghost">Limpiar</button>
+      <button type="submit" class="btn btn-primary ml-auto">Guardar Registro</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

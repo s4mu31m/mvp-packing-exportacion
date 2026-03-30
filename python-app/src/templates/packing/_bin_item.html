@@ -1,0 +1,6 @@
+<div class="card" style="padding:12px; margin-bottom:8px;">
+  <div><strong>{{ bin.bin_code|default:bin.codigo|default:"BIN" }}</strong></div>
+  <div style="font-size:.9rem; color:#666;">
+    Neto: {{ bin.kilos_neto_ingreso|default:bin.peso_neto|default:"-" }} kg
+  </div>
+</div>

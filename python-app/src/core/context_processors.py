@@ -3,7 +3,7 @@
 from django.urls import reverse
 
 
-def cfn_context(request):
+def CaliPro_context(request):
     """
 
     Inyecta en todos los templates:
@@ -47,77 +47,43 @@ def cfn_context(request):
     }
 
 
+def _safe_reverse(url_name):
+    try:
+        return reverse(url_name)
+    except Exception:
+        return "#"
+
+
 def _nav_sections():
-
     return [
-
         {
-
             "label": "Flujo Operativo",
-
             "items": [
-
-                {"name": "Dashboard",      "icon": "📋", "url": reverse(
-                    "operaciones:dashboard"),    "url_name": "dashboard"},
-
-                {"name": "Recepción",      "icon": "📥", "url": reverse(
-                    "operaciones:recepcion"),    "url_name": "recepcion"},
-
-                {"name": "Pesaje",         "icon": "⚖️",  "url": reverse(
-                    "operaciones:pesaje"),       "url_name": "pesaje"},
-
-                {"name": "Desverdizado",   "icon": "🍋", "url": reverse(
-                    "operaciones:desverdizado"), "url_name": "desverdizado"},
-
-                {"name": "Proceso Packing", "icon": "⚙️",  "url": reverse(
-                    "operaciones:proceso"),      "url_name": "proceso"},
-
-                {"name": "Control Proceso", "icon": "🔍", "url": reverse(
-                    "operaciones:control"),      "url_name": "control"},
-
-                {"name": "Paletizado",     "icon": "📦", "url": reverse(
-                    "operaciones:paletizado"),   "url_name": "paletizado"},
-
-                {"name": "Cámaras Frío",   "icon": "❄️",  "url": reverse(
-                    "operaciones:camaras"),      "url_name": "camaras"},
-
+                {"name": "Dashboard",       "icon": "T", "url": _safe_reverse("operaciones:dashboard"),    "url_name": "dashboard"},
+                {"name": "Recepcion",       "icon": "R", "url": _safe_reverse("operaciones:recepcion"),    "url_name": "recepcion"},
+                {"name": "Conformar Lote",  "icon": "L", "url": _safe_reverse("operaciones:pesaje"),       "url_name": "pesaje"},
+                {"name": "Desverdizado",    "icon": "D", "url": _safe_reverse("operaciones:desverdizado"), "url_name": "desverdizado"},
+                {"name": "Ingreso Packing", "icon": "I", "url": _safe_reverse("operaciones:ingreso_packing"), "url_name": "ingreso_packing"},
+                {"name": "Proceso Packing", "icon": "P", "url": _safe_reverse("operaciones:proceso"),      "url_name": "proceso"},
+                {"name": "Control Proceso", "icon": "C", "url": _safe_reverse("operaciones:control"),      "url_name": "control"},
+                {"name": "Paletizado",      "icon": "X", "url": _safe_reverse("operaciones:paletizado"),   "url_name": "paletizado"},
+                {"name": "Camaras Frio",    "icon": "F", "url": _safe_reverse("operaciones:camaras"),      "url_name": "camaras"},
             ],
-
         },
-
         {
-
-            "label": "Gestión",
-
+            "label": "Gestion",
             "items": [
-
-                {"name": "Consulta Jefatura", "icon": "📊", "url": reverse(
-                    "operaciones:consulta"), "url_name": "consulta"},
-
+                {"name": "Consulta Jefatura", "icon": "J", "url": _safe_reverse("operaciones:consulta"), "url_name": "consulta"},
             ],
-
         },
-
     ]
 
 
 def _mobile_nav():
-
     return [
-
-        {"name": "Dashboard",  "icon": "📋", "url": reverse(
-            "operaciones:dashboard"),  "url_name": "dashboard"},
-
-        {"name": "Recepción",  "icon": "📥", "url": reverse(
-            "operaciones:recepcion"),  "url_name": "recepcion"},
-
-        {"name": "Pesaje",     "icon": "⚖️",  "url": reverse(
-            "operaciones:pesaje"),     "url_name": "pesaje"},
-
-        {"name": "Packing",    "icon": "⚙️",  "url": reverse(
-            "operaciones:proceso"),    "url_name": "proceso"},
-
-        {"name": "Consulta",   "icon": "📊", "url": reverse(
-            "operaciones:consulta"),   "url_name": "consulta"},
-
+        {"name": "Dashboard", "icon": "T", "url": _safe_reverse("operaciones:dashboard"),  "url_name": "dashboard"},
+        {"name": "Recepcion", "icon": "R", "url": _safe_reverse("operaciones:recepcion"),  "url_name": "recepcion"},
+        {"name": "Lote",      "icon": "L", "url": _safe_reverse("operaciones:pesaje"),     "url_name": "pesaje"},
+        {"name": "Packing",   "icon": "P", "url": _safe_reverse("operaciones:proceso"),    "url_name": "proceso"},
+        {"name": "Consulta",  "icon": "J", "url": _safe_reverse("operaciones:consulta"),   "url_name": "consulta"},
     ]
