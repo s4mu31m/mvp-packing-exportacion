@@ -230,6 +230,12 @@ class DataverseBinRepository(BinRepository):
         )
         return [_row_to_bin(r) for r in (result or {}).get("value", [])]
 
+    def list_by_lote(self, lote_id: Any) -> list[BinRecord]:
+        # Stub: listado de bins por lote no implementado en MVP Dataverse.
+        # Dataverse no expone join directo bin→lote en el esquema crf21_*.
+        logger.debug("dataverse:BinRepository.list_by_lote no implementado (lote_id=%s)", lote_id)
+        return []
+
 
 # ---------------------------------------------------------------------------
 # LoteRepository
@@ -312,6 +318,12 @@ class DataverseLoteRepository(LoteRepository):
         for r in records:
             r.temporada = temporada
         return records
+
+    def list_recent(self, temporada: str, limit: int = 20) -> list[LoteRecord]:
+        # Stub: list_recent no implementado en MVP Dataverse.
+        # temporada no existe en Dataverse; requeriria filtro por rango de fechas.
+        logger.debug("dataverse:LoteRepository.list_recent no implementado (temporada=%s)", temporada)
+        return []
 
     def update(self, lote_id: Any, fields: dict) -> LoteRecord:
         # Mapear campos del dominio a campos Dataverse (solo los que existen)
@@ -460,6 +472,11 @@ class DataverseBinLoteRepository(BinLoteRepository):
                 lote_code=str(row.get(BIN_LOTE_FIELDS["lote_id_value"], "")),
             ))
         return conflicts
+
+    def list_by_lote(self, lote_id: Any) -> list[BinLoteRecord]:
+        # Stub: listado de asociaciones por lote no implementado en MVP Dataverse.
+        logger.debug("dataverse:BinLoteRepository.list_by_lote no implementado (lote_id=%s)", lote_id)
+        return []
 
 
 # ---------------------------------------------------------------------------

@@ -33,6 +33,7 @@ class BinRecord:
     id_bin: str = ""
     fecha_cosecha: Optional[date] = None
     variedad_fruta: str = ""
+    color: str = ""
     kilos_bruto_ingreso: Optional[Decimal] = None
     kilos_neto_ingreso: Optional[Decimal] = None
 
@@ -315,6 +316,10 @@ class BinRepository(ABC):
     def filter_by_codes(self, temporada: str, bin_codes: list[str]) -> list[BinRecord]:
         """Retorna los bins que existen para la temporada y los codigos dados."""
 
+    @abstractmethod
+    def list_by_lote(self, lote_id: Any) -> list[BinRecord]:
+        """Lista los bins asociados al lote dado (via tabla BinLote)."""
+
 
 class LoteRepository(ABC):
 
@@ -342,6 +347,10 @@ class LoteRepository(ABC):
     @abstractmethod
     def update(self, lote_id: Any, fields: dict) -> LoteRecord:
         """Actualiza campos del lote. Retorna el record actualizado."""
+
+    @abstractmethod
+    def list_recent(self, temporada: str, limit: int = 20) -> list[LoteRecord]:
+        """Lista los lotes mas recientes de la temporada, ordenados de mas nuevo a mas antiguo."""
 
 
 class PalletRepository(ABC):
@@ -381,6 +390,10 @@ class BinLoteRepository(ABC):
     @abstractmethod
     def find_existing_assignments(self, bin_ids: list[Any]) -> list[BinAssignmentConflict]:
         """Retorna bins de la lista que ya estan asignados a algun lote."""
+
+    @abstractmethod
+    def list_by_lote(self, lote_id: Any) -> list[BinLoteRecord]:
+        """Retorna todas las asociaciones bin-lote para el lote dado."""
 
 
 class PalletLoteRepository(ABC):

@@ -7,17 +7,33 @@ from operaciones.models import DisponibilidadCamara, AOR
 
 
 class BinForm(forms.Form):
-    """Registro de bin en recepcion. El bin_code se genera automaticamente en backend."""
-    fecha_cosecha = forms.DateField(
-        required=False, label="Fecha de cosecha",
-        widget=forms.DateInput(attrs={"type": "date"}),
+    """
+    Registro de bin en recepcion.
+    El bin_code se genera automaticamente en backend a partir de:
+      codigo_productor + tipo_cultivo + variedad_fruta + numero_cuartel + fecha_cosecha
+    """
+    # --- Campos que conforman el bin_code (obligatorios para generacion correcta) ---
+    codigo_productor = forms.CharField(
+        max_length=50, required=True, label="Codigo empresa (cod. productor)",
+        widget=forms.TextInput(attrs={"placeholder": "Ej: AG001"}),
+    )
+    tipo_cultivo = forms.CharField(
+        max_length=50, required=True, label="Cultivo",
+        widget=forms.TextInput(attrs={"placeholder": "Ej: Uva"}),
     )
     variedad_fruta = forms.CharField(
-        max_length=100, required=False, label="Variedad",
+        max_length=100, required=True, label="Variedad",
+        widget=forms.TextInput(attrs={"placeholder": "Ej: Thompson Seedless"}),
     )
-    codigo_productor = forms.CharField(
-        max_length=50, required=False, label="Codigo productor",
+    numero_cuartel = forms.CharField(
+        max_length=50, required=True, label="Cuartel",
+        widget=forms.TextInput(attrs={"placeholder": "Ej: C05"}),
     )
+    fecha_cosecha = forms.DateField(
+        required=True, label="Fecha cosecha",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    # --- Campos operativos adicionales ---
     hora_recepcion = forms.CharField(
         max_length=5, required=False, label="Hora recepcion (HH:mm)",
         widget=forms.TextInput(attrs={"placeholder": "08:30"}),
@@ -41,6 +57,35 @@ class BinForm(forms.Form):
     operator_code = forms.CharField(
         max_length=50, required=False, label="Codigo operador",
     )
+
+
+class PesajeLoteForm(forms.Form):
+    """Pesaje de lote cerrado post-recepcion."""
+    kilos_bruto_conformacion = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True,
+        label="Kilos Recepcionados Bruto",
+        widget=forms.NumberInput(attrs={"placeholder": "0.00", "step": "0.01"}),
+    )
+    kilos_neto_conformacion = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True,
+        label="Kilos Recepcionados Neto",
+        widget=forms.NumberInput(attrs={"placeholder": "0.00", "step": "0.01"}),
+    )
+    requiere_desverdizado = forms.BooleanField(
+        required=False, label="Requiere Desverdizado",
+    )
+    operator_code = forms.CharField(
+        max_length=50, required=False, label="Codigo Operador",
+        widget=forms.TextInput(attrs={"placeholder": "OP-001"}),
+    )
+
+    def clean(self):
+        cd = super().clean()
+        bruto = cd.get("kilos_bruto_conformacion")
+        neto  = cd.get("kilos_neto_conformacion")
+        if bruto is not None and neto is not None and neto > bruto:
+            self.add_error("kilos_neto_conformacion", "Kilos neto no puede superar kilos bruto")
+        return cd
 
 
 class LoteForm(forms.Form):

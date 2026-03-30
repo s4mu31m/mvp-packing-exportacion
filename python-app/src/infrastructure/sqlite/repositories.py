@@ -64,6 +64,7 @@ def _bin_to_record(obj) -> BinRecord:
         id_bin=obj.id_bin or "",
         fecha_cosecha=obj.fecha_cosecha,
         variedad_fruta=obj.variedad_fruta or "",
+        color=obj.color or "",
         kilos_bruto_ingreso=obj.kilos_bruto_ingreso,
         kilos_neto_ingreso=obj.kilos_neto_ingreso,
     )
@@ -352,6 +353,14 @@ class SqliteBinRepository(BinRepository):
         objs = list(Bin.objects.filter(temporada=temporada, bin_code__in=bin_codes))
         return [_bin_to_record(obj) for obj in objs]
 
+    def list_by_lote(self, lote_id: Any) -> list[BinRecord]:
+        from operaciones.models import Bin, BinLote
+        bin_ids = list(BinLote.objects.filter(lote_id=lote_id).values_list("bin_id", flat=True))
+        if not bin_ids:
+            return []
+        objs = list(Bin.objects.filter(id__in=bin_ids).order_by("id"))
+        return [_bin_to_record(obj) for obj in objs]
+
 
 class SqliteLoteRepository(LoteRepository):
 
@@ -392,6 +401,11 @@ class SqliteLoteRepository(LoteRepository):
         Lote.objects.filter(pk=lote_id).update(**fields)
         obj = Lote.objects.get(pk=lote_id)
         return _lote_to_record(obj)
+
+    def list_recent(self, temporada: str, limit: int = 20) -> list[LoteRecord]:
+        from operaciones.models import Lote
+        objs = list(Lote.objects.filter(temporada=temporada).order_by("-id")[:limit])
+        return [_lote_to_record(obj) for obj in objs]
 
 
 class SqlitePalletRepository(PalletRepository):
@@ -455,6 +469,11 @@ class SqliteBinLoteRepository(BinLoteRepository):
             BinAssignmentConflict(bin_code=c.bin.bin_code, lote_code=c.lote.lote_code)
             for c in conflicts
         ]
+
+    def list_by_lote(self, lote_id: Any) -> list[BinLoteRecord]:
+        from operaciones.models import BinLote
+        objs = list(BinLote.objects.filter(lote_id=lote_id).order_by("id"))
+        return [_bin_lote_to_record(obj) for obj in objs]
 
 
 class SqlitePalletLoteRepository(PalletLoteRepository):

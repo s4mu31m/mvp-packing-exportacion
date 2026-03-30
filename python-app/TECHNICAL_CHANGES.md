@@ -326,8 +326,9 @@ Los stubs elevan `NotImplementedError` con mensaje descriptivo si son invocados.
 |---|---|---|
 | `test_sequences_and_codes` | 17 | ✅ Pasan |
 | `test_iniciar_lote_recepcion` | 16 | ✅ Pasan |
+| `operaciones.tests` (nuevos) | 28 | ✅ Pasan |
 | Suites existentes | 82 | ✅ Pasan |
-| **Total** | **115** | **✅ OK** |
+| **Total** | **143** | **✅ OK** |
 
 Para correr todos:
 
@@ -335,3 +336,81 @@ Para correr todos:
 cd python-app/src
 python manage.py test operaciones.test
 ```
+
+---
+
+## 11. Conexión frontend → backend: flujo de recepción con lote abierto (2026-03-30)
+
+### Problema resuelto
+
+La UI web seguía usando el flujo legacy (bins sueltos + conformación manual de lote). Los casos de uso `iniciar_lote_recepcion`, `agregar_bin_a_lote_abierto` y `cerrar_lote_recepcion` ya existían en backend pero no estaban conectados a ninguna vista web.
+
+### Flujo nuevo implementado en frontend
+
+```mermaid
+sequenceDiagram
+    actor Op as Operador
+    participant W as RecepcionView
+    participant S as Sesion Django
+    participant UC as Use Cases
+
+    Op->>W: GET /operaciones/recepcion/
+    W->>S: ¿lote activo?
+    S-->>W: no
+    W-->>Op: mostrar formulario "Iniciar Lote"
+
+    Op->>W: POST action=iniciar_lote
+    W->>UC: iniciar_lote_recepcion(temporada)
+    UC-->>W: lote_code autogenerado, estado=abierto
+    W->>S: session[recepcion_lote_code] = lote_code
+    W-->>Op: redirect → recepcion (lote activo visible)
+
+    loop por cada bin
+        Op->>W: POST action=agregar_bin (atributos del bin)
+        W->>UC: agregar_bin_a_lote_abierto(temporada, lote_code, ...)
+        UC-->>W: bin_code autogenerado, asociado al lote
+        W-->>Op: redirect → recepcion (lista de bins actualizada)
+    end
+
+    Op->>W: POST action=cerrar_lote
+    W->>UC: cerrar_lote_recepcion(temporada, lote_code)
+    UC-->>W: lote estado=cerrado
+    W->>S: del session[recepcion_lote_code]
+    W-->>Op: redirect → recepcion (sin lote activo)
+```
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `operaciones/views.py` | `RecepcionView` reescrita con tres acciones; `DashboardView` usa datos reales; `PesajeView` marcada como legacy |
+| `operaciones/templates/operaciones/recepcion.html` | Reescrito: estado sin lote / estado con lote abierto / lista de bins real |
+| `operaciones/templates/operaciones/pesaje.html` | Aviso de flujo legacy añadido |
+| `operaciones/templates/operaciones/dashboard.html` | KPIs y tabla de lotes recientes desde DB; navegación directa entre etapas |
+| `domain/repositories/base.py` | Nuevos métodos abstractos: `BinRepository.list_by_lote`, `LoteRepository.list_recent`, `BinLoteRepository.list_by_lote` |
+| `infrastructure/sqlite/repositories.py` | Implementaciones SQLite de los tres métodos nuevos |
+| `infrastructure/dataverse/repositories/__init__.py` | Stubs de los tres métodos (log + retorno vacío; documentado como pendiente) |
+| `operaciones/tests.py` | 28 tests nuevos: use cases + repository queries + integración de vistas |
+
+### Sesión Django
+
+La clave `recepcion_lote_code` en sesión almacena el `lote_code` activo. Ciclo de vida:
+- Se escribe al iniciar lote (`action=iniciar_lote`).
+- Se lee en cada GET y en `action=agregar_bin`.
+- Se elimina al cerrar lote (`action=cerrar_lote`) o si el lote ya no existe en DB.
+
+### Estado de soporte por backend
+
+| Funcionalidad | SQLite | Dataverse |
+|---|---|---|
+| Iniciar lote | ✅ Funcional | ✅ Funcional (estado no persiste en DV) |
+| Agregar bin al lote | ✅ Funcional | ✅ Funcional |
+| Cerrar lote | ✅ Funcional | ✅ (estado no persiste en DV) |
+| Listar bins del lote activo | ✅ Funcional | ⚠️ Stub — retorna lista vacía |
+| Dashboard con datos reales | ✅ Funcional | ⚠️ Stub — retorna lista vacía |
+
+### Pendiente
+
+- Dataverse: implementar `list_by_lote` para `BinRepository` y `BinLoteRepository` (requiere query OData sobre la tabla `crf21_bin_lote` filtrando por `lote_id`).
+- Dataverse: implementar `list_recent` para `LoteRepository` (requiere filtro por rango de fechas dado que `temporada` no existe en DV).
+- Template de desverdizado/ingreso-packing: todavía requieren que el operador ingrese manualmente el `lote_code`. Considerar persistir el lote cerrado más reciente en sesión para pre-rellenarlo automáticamente.

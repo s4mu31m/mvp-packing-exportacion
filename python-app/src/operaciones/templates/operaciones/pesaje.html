@@ -1,44 +1,109 @@
 {% extends "layout_app.html" %}
 
-{% block title %}Conformar Lote — CaliPro{% endblock %}
-{% block page_title %}Conformar Lote{% endblock %}
-{% block page_subtitle %}Pesaje y conformacion de lote planta{% endblock %}
+{% block title %}Pesaje de Lote — CaliPro{% endblock %}
+{% block page_title %}Pesaje de Lote{% endblock %}
+{% block page_subtitle %}
+  {% if lote %}
+    Lote: <strong>{{ lote.lote_code }}</strong> — {{ lote.cantidad_bins }} bin(s)
+  {% else %}
+    Sin lote pendiente de pesaje
+  {% endif %}
+{% endblock %}
 
 {% block page_actions %}
-  <button class="btn btn-primary btn-sm" form="form-pesaje" type="submit">Guardar Lote</button>
+  {% if lote %}
+    <button class="btn btn-primary btn-sm" form="form-pesaje" type="submit">Guardar Pesaje</button>
+  {% endif %}
 {% endblock %}
 
 {% block page_body %}
-<div class="card" style="max-width:560px">
+  {% include "packing/_step_indicator.html" with active_step="pesaje" %}
+
   {% if messages %}
-    {% for msg in messages %}
-      <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
-    {% endfor %}
+    <div style="margin-bottom:1rem">
+      {% for msg in messages %}
+        <div class="alert alert-{{ msg.tags }}">{{ msg }}</div>
+      {% endfor %}
+    </div>
   {% endif %}
 
-  <form method="post" id="form-pesaje">
-    {% csrf_token %}
-    <input type="hidden" name="temporada" value="{{ request.session.temporada_activa|default:'' }}">
-
-    <div class="form-group">
-      <label class="form-label">Temporada</label>
-      <input type="text" class="form-control" name="temporada"
-             placeholder="Ej: 2026" value="{{ request.session.temporada_activa|default:'' }}">
+  {% if not lote %}
+    <div class="card" style="max-width:520px">
+      <p style="color:var(--text-muted)">
+        No hay lote pendiente de pesaje. Cierre un lote desde
+        <a href="{% url 'operaciones:recepcion' %}">Recepcion</a> para iniciar el pesaje.
+      </p>
     </div>
+  {% else %}
 
-    {% for field in form %}
-      <div class="form-group">
-        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {{ field }}
-        {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-        {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+    <div class="op-layout">
+
+      {# ---- COLUMNA IZQUIERDA: formulario de pesaje ---- #}
+      <div class="flex-col">
+        <div class="card">
+          <h4 style="margin-bottom:1.25rem">Datos de Pesaje</h4>
+
+          <form method="post" id="form-pesaje">
+            {% csrf_token %}
+            <input type="hidden" name="temporada" value="{{ request.session.temporada_activa|default:'' }}">
+
+            {% for field in form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+                {% for err in field.errors %}
+                  <div class="form-error">{{ err }}</div>
+                {% endfor %}
+              </div>
+            {% endfor %}
+
+            <div class="flex-row mt-4">
+              <a href="{% url 'operaciones:recepcion' %}" class="btn btn-ghost">Volver</a>
+              <button type="submit" class="btn btn-primary ml-auto">Guardar Pesaje</button>
+            </div>
+          </form>
+        </div>
       </div>
-    {% endfor %}
 
-    <div class="flex-row mt-4">
-      <button type="reset" class="btn btn-ghost">Limpiar</button>
-      <button type="submit" class="btn btn-primary ml-auto">Crear Lote</button>
+      {# ---- PANEL LATERAL: info del lote ---- #}
+      <div class="op-sidebar-panel">
+        <div class="op-sidebar-title">Informacion del Lote</div>
+
+        <div style="padding:.5rem 0;border-bottom:1px solid var(--border-color,#333)">
+          <div class="flex-row" style="font-size:.82rem;margin-bottom:.4rem">
+            <span style="color:var(--text-muted)">Lote:</span>
+            <strong style="margin-left:auto;font-family:monospace">{{ lote.lote_code }}</strong>
+          </div>
+          <div class="flex-row" style="font-size:.82rem;margin-bottom:.4rem">
+            <span style="color:var(--text-muted)">Cantidad de Bins:</span>
+            <strong style="margin-left:auto">{{ lote.cantidad_bins }}</strong>
+          </div>
+          <div class="flex-row" style="font-size:.82rem;margin-bottom:.4rem">
+            <span style="color:var(--text-muted)">Color:</span>
+            <strong style="margin-left:auto">{{ color|default:"—" }}</strong>
+          </div>
+          <div class="flex-row" style="font-size:.82rem;margin-bottom:.4rem">
+            <span style="color:var(--text-muted)">Fecha Cosecha:</span>
+            <strong style="margin-left:auto">{{ fecha_cosecha|default:"—" }}</strong>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+        <div class="op-sidebar-title" style="margin-top:.5rem">Bins</div>
+        {% for bin in bins %}
+          <div style="padding:.4rem 0;border-bottom:1px solid var(--border-color,#333);font-size:.8rem">
+            <strong style="font-family:monospace">{{ bin.bin_code }}</strong>
+            {% if bin.kilos_neto_ingreso %}
+              <span style="float:right;color:var(--teal-400)">{{ bin.kilos_neto_ingreso|floatformat:1 }} kg</span>
+            {% endif %}
+          </div>
+        {% empty %}
+          <div class="empty-state"><div class="empty-state-desc">Sin bins</div></div>
+        {% endfor %}
+      </div>
+
     </div>
-  </form>
-</div>
+  {% endif %}
+
 {% endblock %}

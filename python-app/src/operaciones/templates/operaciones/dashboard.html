@@ -1,8 +1,119 @@
 {% extends "layout_app.html" %}
 
 {% block page_title %}Dashboard — Turno Actual{% endblock %}
-{% block page_subtitle %}Temporada 2025/2026{% endblock %}
+{% block page_subtitle %}Temporada {{ temporada }}{% endblock %}
 
 {% block page_body %}
-  <p style="color:var(--text-muted)">Dashboard en construcción.</p>
+
+  {% if backend_error %}
+    <div class="alert" style="background:#450a0a;border:1px solid #ef4444;color:#fca5a5;
+         border-radius:6px;padding:.75rem 1rem;margin-bottom:1.5rem;font-size:.85rem">
+      Error al conectar con el backend: {{ backend_error }}
+    </div>
+  {% endif %}
+
+  {# KPIs #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:2rem">
+    <div class="card" style="text-align:center">
+      <div style="font-size:2rem;font-weight:700;color:var(--teal-400)">{{ kpis.lotes_total }}</div>
+      <div style="color:var(--text-muted);font-size:.85rem">Lotes temporada</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:2rem;font-weight:700;color:#f59e0b">{{ kpis.lotes_abiertos }}</div>
+      <div style="color:var(--text-muted);font-size:.85rem">Lotes abiertos</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:2rem;font-weight:700;color:#6ee7b7">{{ kpis.lotes_cerrados }}</div>
+      <div style="color:var(--text-muted);font-size:.85rem">Lotes cerrados</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:2rem;font-weight:700;color:var(--teal-400)">{{ kpis.bins_total }}</div>
+      <div style="color:var(--text-muted);font-size:.85rem">Bins recibidos</div>
+    </div>
+  </div>
+
+  {# Tabla de lotes recientes #}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h3 style="margin:0">Lotes recientes — temporada {{ temporada }}</h3>
+      <a href="{% url 'operaciones:recepcion' %}" class="btn btn-primary btn-sm">+ Nueva Recepcion</a>
+    </div>
+
+    {% if lotes_recientes %}
+      <table style="width:100%;border-collapse:collapse;font-size:.88rem">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border-color,#333);color:var(--text-muted)">
+            <th style="text-align:left;padding:.4rem .6rem">Lote</th>
+            <th style="text-align:left;padding:.4rem .6rem">Estado</th>
+            <th style="text-align:right;padding:.4rem .6rem">Bins</th>
+            <th style="text-align:left;padding:.4rem .6rem">Temporada cod.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lote in lotes_recientes %}
+            <tr style="border-bottom:1px solid var(--border-color,#222)">
+              <td style="padding:.5rem .6rem;font-weight:600">{{ lote.lote_code }}</td>
+              <td style="padding:.5rem .6rem">
+                {% if lote.estado == "abierto" %}
+                  <span style="color:#f59e0b">abierto</span>
+                {% elif lote.estado == "cerrado" %}
+                  <span style="color:#6ee7b7">cerrado</span>
+                {% else %}
+                  <span style="color:var(--text-muted)">{{ lote.estado }}</span>
+                {% endif %}
+              </td>
+              <td style="padding:.5rem .6rem;text-align:right">{{ lote.cantidad_bins }}</td>
+              <td style="padding:.5rem .6rem;color:var(--text-muted)">
+                {{ lote.temporada_codigo|default:"—" }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p style="color:var(--text-muted)">
+        Sin lotes registrados para la temporada {{ temporada }}.
+        <a href="{% url 'operaciones:recepcion' %}">Inicie la primera recepcion.</a>
+      </p>
+    {% endif %}
+  </div>
+
+  {# Navegacion rapida #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-top:2rem">
+    {% url 'operaciones:recepcion' as url_recepcion %}
+    {% url 'operaciones:desverdizado' as url_desv %}
+    {% url 'operaciones:ingreso_packing' as url_ingreso %}
+    {% url 'operaciones:proceso' as url_proceso %}
+    {% url 'operaciones:paletizado' as url_palet %}
+    {% url 'operaciones:camaras' as url_cam %}
+    {% url 'operaciones:consulta' as url_consulta %}
+    {% for label, url in nav_items %}
+      <a href="{{ url }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">{{ label }}</div>
+      </a>
+    {% empty %}
+      <a href="{{ url_recepcion }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">Recepcion</div>
+      </a>
+      <a href="{{ url_desv }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">Desverdizado</div>
+      </a>
+      <a href="{{ url_ingreso }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">Ingreso Packing</div>
+      </a>
+      <a href="{{ url_proceso }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">Proceso</div>
+      </a>
+      <a href="{{ url_palet }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">Paletizado</div>
+      </a>
+      <a href="{{ url_cam }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">Camaras</div>
+      </a>
+      <a href="{{ url_consulta }}" class="card" style="text-align:center;text-decoration:none;padding:.75rem">
+        <div style="font-size:.9rem;font-weight:600">Consulta Jefatura</div>
+      </a>
+    {% endfor %}
+  </div>
+
 {% endblock %}

@@ -11,17 +11,17 @@
 
   <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px;">
     {% for modulo in modulos %}
-      <div style="border:1px solid #ddd; border-radius:12px; padding:20px; background:#fff;">
+      <div style="border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; background:var(--bg-card);">
         <div style="font-size:32px; margin-bottom:8px;">{{ modulo.icono }}</div>
-        <h2 style="margin:0 0 8px 0; font-size:20px;">{{ modulo.nombre }}</h2>
-        <p style="margin:0 0 16px 0;">{{ modulo.descripcion }}</p>
+        <h2 style="margin:0 0 8px 0; font-size:20px; color:var(--text-primary);">{{ modulo.nombre }}</h2>
+        <p style="margin:0 0 16px 0; color:var(--text-muted);">{{ modulo.descripcion }}</p>
 
         {% if modulo.disponible %}
-          <a href="{% url modulo.url_name %}" style="display:inline-block; padding:10px 14px; border-radius:8px; text-decoration:none; border:1px solid #111;">
+          <a href="{% url modulo.url_name %}" style="display:inline-block; padding:10px 14px; border-radius:var(--radius-sm); text-decoration:none; background:var(--teal-600); color:var(--text-primary); font-weight:500;">
             Entrar
           </a>
         {% else %}
-          <span style="display:inline-block; padding:10px 14px; border-radius:8px; background:#f3f3f3; color:#666;">
+          <span style="display:inline-block; padding:10px 14px; border-radius:var(--radius-sm); background:var(--bg-raised); color:var(--text-dim);">
             No disponible
           </span>
         {% endif %}
@@ -30,7 +30,12 @@
   </div>
 
   <div style="margin-top: 24px;">
-    <a href="{% url 'usuarios:logout' %}">Cerrar sesión</a>
+    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" style="background:none; border:none; padding:0; cursor:pointer; color:var(--text-muted); font-size:0.9rem; text-decoration:underline; font-family:var(--font-sans);">
+        Cerrar sesión
+      </button>
+    </form>
   </div>
 </div>
 {% endblock %}
