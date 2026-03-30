@@ -7,12 +7,7 @@ from operaciones.models import DisponibilidadCamara, AOR
 
 
 class BinForm(forms.Form):
-    """Registro de bin en recepcion."""
-    bin_code = forms.CharField(
-        max_length=50,
-        label="Codigo del bin",
-        widget=forms.TextInput(attrs={"placeholder": "Ej: 20250315-0001"}),
-    )
+    """Registro de bin en recepcion. El bin_code se genera automaticamente en backend."""
     fecha_cosecha = forms.DateField(
         required=False, label="Fecha de cosecha",
         widget=forms.DateInput(attrs={"type": "date"}),
@@ -49,11 +44,7 @@ class BinForm(forms.Form):
 
 
 class LoteForm(forms.Form):
-    """Conformacion de lote planta (pesaje)."""
-    lote_code = forms.CharField(
-        max_length=50, label="Codigo lote",
-        widget=forms.TextInput(attrs={"placeholder": "Ej: 20250315-L0001"}),
-    )
+    """Conformacion de lote planta (pesaje). El lote_code se genera automaticamente en backend."""
     fecha_conformacion = forms.DateField(
         required=False, label="Fecha conformacion",
         widget=forms.DateInput(attrs={"type": "date"}),

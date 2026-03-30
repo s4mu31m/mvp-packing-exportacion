@@ -9,6 +9,7 @@ from operaciones.services.normalizers import (
     normalize_temporada,
     normalize_operator_code,
 )
+from operaciones.services.code_generators import build_pallet_code
 from operaciones.services.event_builder import build_event_key
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
@@ -29,16 +30,18 @@ def cerrar_pallet(payload: dict, *, repos: Repositories | None = None) -> UseCas
         repos = get_repositories()
 
     try:
-        require_fields(payload, ["temporada", "pallet_code", "lote_codes"])
+        require_fields(payload, ["temporada", "lote_codes"])
     except PayloadValidationError as exc:
         return UseCaseResult.reject(
             code="INVALID_PAYLOAD",
-            message="Payload inválido para cierre de pallet",
+            message="Payload invalido para cierre de pallet",
             errors=exc.errors,
         )
 
     temporada       = normalize_temporada(payload["temporada"])
-    pallet_code     = normalize_code(payload["pallet_code"])
+    # Generar pallet_code automaticamente si no se provee
+    pallet_code_raw = (payload.get("pallet_code") or "").strip()
+    pallet_code     = normalize_code(pallet_code_raw) if pallet_code_raw else build_pallet_code()
     raw_lote_codes  = payload.get("lote_codes", [])
     operator_code   = normalize_operator_code(payload.get("operator_code", ""))
     source_system   = payload.get("source_system", "local").strip() or "local"

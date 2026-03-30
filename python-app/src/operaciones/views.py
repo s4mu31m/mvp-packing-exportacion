@@ -106,7 +106,7 @@ class RecepcionView(LoginRequiredMixin, TemplateView):
         cd = form.cleaned_data
         payload = {
             "temporada": _temporada(request),
-            "bin_code": cd["bin_code"],
+            # bin_code se genera automaticamente en backend
             "operator_code": cd.get("operator_code", ""),
             "source_system": "web",
             "fecha_cosecha": str(cd["fecha_cosecha"]) if cd.get("fecha_cosecha") else None,
@@ -152,7 +152,7 @@ class PesajeView(LoginRequiredMixin, TemplateView):
         cd = form.cleaned_data
         payload = {
             "temporada": _temporada(request),
-            "lote_code": cd["lote_code"],
+            # lote_code se genera automaticamente en backend
             "bin_codes": cd["bin_codes"],
             "operator_code": cd.get("operator_code", ""),
             "source_system": "web",

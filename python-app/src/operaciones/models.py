@@ -29,6 +29,14 @@ class TipoEvento(models.TextChoices):
     CALIDAD_PALLET           = "CALIDAD_PALLET",           "Control de calidad posterior a pallet"
 
 
+class LotePlantaEstado(models.TextChoices):
+    ABIERTO    = "abierto",    "Abierto"
+    EN_PROCESO = "en_proceso", "En proceso"
+    CERRADO    = "cerrado",    "Cerrado"
+    FINALIZADO = "finalizado", "Finalizado"
+    ANULADO    = "anulado",    "Anulado"
+
+
 class DisponibilidadCamara(models.TextChoices):
     """
     Semántica de tres estados para disponibilidad_camara_desverdizado.
@@ -188,6 +196,24 @@ class Lote(MaestroOperacionalModel):
     rol = models.CharField(max_length=50, blank=True, default="",
         help_text="Perfil del usuario que registra")
 
+    # Generacion dinamica de codigo y estado
+    estado = models.CharField(
+        max_length=20,
+        choices=LotePlantaEstado.choices,
+        default=LotePlantaEstado.ABIERTO,
+        db_index=True,
+        help_text="Estado del lote planta (abierto → en_proceso → cerrado → finalizado/anulado)",
+    )
+    temporada_codigo = models.CharField(
+        max_length=20, blank=True, default="",
+        db_index=True,
+        help_text="Codigo de temporada operativa. Ej: 2025-2026. Derivado automaticamente si no se provee.",
+    )
+    correlativo_temporada = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Correlativo ascendente dentro de la temporada. No se reutiliza si el lote es anulado.",
+    )
+
     class Meta:
         db_table = "operaciones_lote"
         ordering = ["-created_at"]
@@ -312,6 +338,10 @@ class PalletLote(AuditSourceModel):
             models.UniqueConstraint(
                 fields=["pallet", "lote"],
                 name="uq_pallet_lote_pair",
+            ),
+            models.UniqueConstraint(
+                fields=["lote"],
+                name="uq_pallet_lote_lote_unico",
             ),
         ]
         indexes = [
@@ -858,3 +888,38 @@ class RegistroEtapa(AuditSourceModel):
 
     def __str__(self):
         return f"{self.tipo_evento} - {self.event_key}"
+
+
+# ---------------------------------------------------------------------------
+# SequenceCounter  —  correlativos por entidad y dimension
+# ---------------------------------------------------------------------------
+
+class SequenceCounter(models.Model):
+    """
+    Tabla de correlativos para generacion dinamica de codigos en backend.
+
+    entity_name: nombre de la entidad ('lote', 'bin', 'pallet').
+    dimension:   clave de agrupacion del correlativo.
+                 Para lote: temporada_codigo (ej: '2025-2026').
+                 Para bin y pallet: fecha en formato YYYYMMDD (ej: '20260329').
+    last_value:  ultimo valor asignado. El siguiente es last_value + 1.
+    """
+    entity_name = models.CharField(max_length=50, db_index=True)
+    dimension   = models.CharField(max_length=50, db_index=True)
+    last_value  = models.PositiveIntegerField(default=0)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "operaciones_sequence_counter"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entity_name", "dimension"],
+                name="uq_seq_entity_dimension",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["entity_name", "dimension"], name="ix_seq_entity_dim"),
+        ]
+
+    def __str__(self):
+        return f"{self.entity_name}:{self.dimension} → {self.last_value}"

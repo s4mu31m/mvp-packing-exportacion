@@ -50,7 +50,7 @@ def _validate_pct(value, campo: str, errors: list) -> None:
 # ---------------------------------------------------------------------------
 
 def validate_bin_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "bin_code"])
+    require_fields(payload, ["temporada"])
 
     errors = []
     _validate_hora(payload.get("hora_recepcion", ""), "hora_recepcion", errors)
@@ -61,9 +61,11 @@ def validate_bin_payload(payload: dict) -> dict:
     if errors:
         raise PayloadValidationError(errors)
 
+    # bin_code es opcional: si no se provee, el use case lo genera automaticamente
+    bin_code_raw = payload.get("bin_code", "")
     return {
         "temporada": normalize_temporada(payload["temporada"]),
-        "bin_code": normalize_code(payload["bin_code"]),
+        "bin_code": normalize_code(bin_code_raw) if bin_code_raw else "",
         "operator_code": normalize_operator_code(payload.get("operator_code", "")),
         "source_system": payload.get("source_system", "local").strip() or "local",
         "source_event_id": payload.get("source_event_id", "").strip(),
@@ -85,7 +87,7 @@ def validate_bin_payload(payload: dict) -> dict:
 
 
 def validate_lote_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "lote_code"])
+    require_fields(payload, ["temporada"])
 
     errors = []
     _validate_neto_bruto(
@@ -95,9 +97,10 @@ def validate_lote_payload(payload: dict) -> dict:
     if errors:
         raise PayloadValidationError(errors)
 
+    lote_code_raw = payload.get("lote_code", "")
     return {
         "temporada": normalize_temporada(payload["temporada"]),
-        "lote_code": normalize_code(payload["lote_code"]),
+        "lote_code": normalize_code(lote_code_raw) if lote_code_raw else "",
         "operator_code": normalize_operator_code(payload.get("operator_code", "")),
         "source_system": payload.get("source_system", "local").strip() or "local",
         "source_event_id": payload.get("source_event_id", "").strip(),
@@ -115,10 +118,11 @@ def validate_lote_payload(payload: dict) -> dict:
 
 
 def validate_pallet_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "pallet_code"])
+    require_fields(payload, ["temporada"])
+    pallet_code_raw = payload.get("pallet_code", "")
     return {
         "temporada": normalize_temporada(payload["temporada"]),
-        "pallet_code": normalize_code(payload["pallet_code"]),
+        "pallet_code": normalize_code(pallet_code_raw) if pallet_code_raw else "",
         "operator_code": normalize_operator_code(payload.get("operator_code", "")),
         "source_system": payload.get("source_system", "local").strip() or "local",
         "source_event_id": payload.get("source_event_id", "").strip(),

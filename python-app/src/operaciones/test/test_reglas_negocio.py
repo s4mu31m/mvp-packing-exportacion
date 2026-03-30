@@ -143,10 +143,11 @@ class CamposRequeridosTests(TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "INVALID_PAYLOAD")
 
-    def test_bin_sin_bin_code_rechazado(self):
+    def test_bin_sin_bin_code_se_genera_automaticamente(self):
+        # bin_code es opcional: si no se provee, se genera en backend
         result = registrar_bin_recibido({"temporada": "2026"})
-        self.assertFalse(result.ok)
-        self.assertEqual(result.code, "INVALID_PAYLOAD")
+        self.assertTrue(result.ok)
+        self.assertIsNotNone(result.data.get("bin_code"))
 
     def test_camara_mantencion_sin_lote_code_rechazado(self):
         result = registrar_camara_mantencion({"temporada": "2026"})

@@ -42,6 +42,8 @@ from domain.repositories.base import (
     CamaraFrioRepository,
     MedicionTemperaturaSalidaRecord,
     MedicionTemperaturaSalidaRepository,
+    SequenceCounterRecord,
+    SequenceCounterRepository,
 )
 
 
@@ -84,6 +86,9 @@ def _lote_to_record(obj) -> LoteRecord:
         kilos_neto_conformacion=obj.kilos_neto_conformacion,
         requiere_desverdizado=obj.requiere_desverdizado,
         disponibilidad_camara_desverdizado=obj.disponibilidad_camara_desverdizado,
+        estado=obj.estado,
+        temporada_codigo=obj.temporada_codigo or "",
+        correlativo_temporada=obj.correlativo_temporada,
     )
 
 
@@ -762,6 +767,30 @@ class SqliteMedicionTemperaturaSalidaRepository(MedicionTemperaturaSalidaReposit
         return [_medicion_temp_to_record(obj) for obj in objs]
 
 
+class SqliteSequenceCounterRepository(SequenceCounterRepository):
+
+    def get_next(self, entity_name: str, dimension: str) -> int:
+        from django.db import transaction as db_transaction
+        from operaciones.models import SequenceCounter
+        with db_transaction.atomic():
+            obj, _ = SequenceCounter.objects.select_for_update().get_or_create(
+                entity_name=entity_name,
+                dimension=dimension,
+                defaults={"last_value": 0},
+            )
+            obj.last_value += 1
+            obj.save(update_fields=["last_value"])
+            return obj.last_value
+
+    def current_value(self, entity_name: str, dimension: str) -> int:
+        from operaciones.models import SequenceCounter
+        obj = SequenceCounter.objects.filter(
+            entity_name=entity_name,
+            dimension=dimension,
+        ).first()
+        return obj.last_value if obj else 0
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
@@ -783,4 +812,5 @@ def build_sqlite_repositories() -> Repositories:
         calidad_pallets=SqliteCalidadPalletRepository(),
         camara_frios=SqliteCamaraFrioRepository(),
         mediciones_temperatura=SqliteMedicionTemperaturaSalidaRepository(),
+        sequences=SqliteSequenceCounterRepository(),
     )

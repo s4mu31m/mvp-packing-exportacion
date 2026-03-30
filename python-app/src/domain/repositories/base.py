@@ -55,6 +55,10 @@ class LoteRecord:
     kilos_neto_conformacion: Optional[Decimal] = None
     requiere_desverdizado: bool = False
     disponibilidad_camara_desverdizado: Optional[str] = None
+    # Generacion dinamica de codigo y estado
+    estado: str = "abierto"
+    temporada_codigo: str = ""
+    correlativo_temporada: Optional[int] = None
 
 
 @dataclass
@@ -259,6 +263,14 @@ class CamaraFrioRecord:
     operator_code: str = ""
     source_system: str = "local"
     rol: str = ""
+
+
+@dataclass
+class SequenceCounterRecord:
+    id: Any
+    entity_name: str
+    dimension: str
+    last_value: int
 
 
 @dataclass
@@ -565,6 +577,20 @@ class MedicionTemperaturaSalidaRepository(ABC):
         """Lista las mediciones de temperatura de un pallet."""
 
 
+class SequenceCounterRepository(ABC):
+
+    @abstractmethod
+    def get_next(self, entity_name: str, dimension: str) -> int:
+        """
+        Obtiene el siguiente correlativo para la entidad y dimension dadas.
+        Operacion atomica: incrementa last_value y retorna el nuevo valor.
+        """
+
+    @abstractmethod
+    def current_value(self, entity_name: str, dimension: str) -> int:
+        """Retorna el ultimo valor asignado (0 si no existe)."""
+
+
 # ---------------------------------------------------------------------------
 # Container
 # ---------------------------------------------------------------------------
@@ -588,3 +614,5 @@ class Repositories:
     calidad_pallets: CalidadPalletRepository
     camara_frios: CamaraFrioRepository
     mediciones_temperatura: MedicionTemperaturaSalidaRepository
+    # Gestion de correlativos
+    sequences: SequenceCounterRepository
