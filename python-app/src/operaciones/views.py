@@ -2,14 +2,16 @@
 Vistas web del flujo operativo de packing.
 Cada vista corresponde a una etapa del flujo.
 """
+import csv
 import datetime
 import json
 
-from django.shortcuts import render, redirect
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import TemplateView
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.http import HttpResponse
+from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.views.generic import TemplateView, View
 
 from operaciones.forms import (
     IniciarLoteForm,
@@ -987,10 +989,70 @@ class CamarasView(LoginRequiredMixin, TemplateView):
 
 
 # ---------------------------------------------------------------------------
-# Consulta jefatura
+# Consulta jefatura — helpers internos
 # ---------------------------------------------------------------------------
 
-class ConsultaJefaturaView(LoginRequiredMixin, TemplateView):
+def _es_jefatura(user) -> bool:
+    """Jefatura o administrador: is_staff o is_superuser."""
+    return user.is_active and (user.is_staff or user.is_superuser)
+
+
+def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado: str) -> list:
+    """
+    Devuelve lista de dicts con datos enriquecidos de lotes filtrados.
+    Encapsulado para reutilizar en vista HTML y exportación CSV.
+
+    TODO (Dataverse): cuando PERSISTENCE_BACKEND == 'dataverse', esta función
+    debe resolverse contra el repositorio de LotePlanta en Dataverse vía OData.
+    Por ahora usa el ORM local (SQLite). Interfaz estable para ser reemplazada.
+    """
+    qs = Lote.objects.filter(temporada=temporada, is_active=True)
+    if filtro_estado:
+        qs = qs.filter(estado=filtro_estado)
+
+    lotes_raw = list(qs.order_by("-created_at")[:500])
+    resultado = []
+    for lote in lotes_raw:
+        bin_lotes = list(lote.bin_lotes.select_related("bin").order_by("created_at")[:1])
+        primer_bin = bin_lotes[0].bin if bin_lotes else None
+        productor = primer_bin.codigo_productor if primer_bin else ""
+        variedad = primer_bin.variedad_fruta if primer_bin else ""
+        tipo_cultivo = primer_bin.tipo_cultivo if primer_bin else ""
+
+        if filtro_productor and filtro_productor.lower() not in productor.lower():
+            continue
+
+        resultado.append({
+            "lote": lote,
+            "lote_code": lote.lote_code,
+            "estado": lote.estado,
+            "estado_display": lote.get_estado_display(),
+            "etapa": _etapa_lote(lote),
+            "cantidad_bins": lote.cantidad_bins,
+            "kilos_neto": lote.kilos_neto_conformacion,
+            "productor": productor,
+            "variedad": variedad,
+            "tipo_cultivo": tipo_cultivo,
+            "fecha": lote.fecha_conformacion or (lote.created_at.date() if lote.created_at else None),
+        })
+    return resultado
+
+
+class JefaturaRequiredMixin(UserPassesTestMixin):
+    """Restringe el acceso a jefatura y administradores (is_staff o is_superuser)."""
+    def test_func(self):
+        return _es_jefatura(self.request.user)
+
+    def handle_no_permission(self):
+        messages.error(self.request, "Acceso denegado: se requiere rol de jefatura o administrador.")
+        return redirect("usuarios:portal")
+
+
+# ---------------------------------------------------------------------------
+# Consulta jefatura — vista HTML
+# ---------------------------------------------------------------------------
+
+class ConsultaJefaturaView(LoginRequiredMixin, JefaturaRequiredMixin, TemplateView):
     template_name = "operaciones/consulta.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -1004,42 +1066,71 @@ class ConsultaJefaturaView(LoginRequiredMixin, TemplateView):
         filtro_productor = self.request.GET.get("productor", "").strip()
         filtro_estado = self.request.GET.get("estado", "").strip()
 
-        qs = Lote.objects.filter(temporada=temporada, is_active=True)
-        if filtro_estado:
-            qs = qs.filter(estado=filtro_estado)
-
-        lotes_raw = list(qs.order_by("-created_at")[:100])
-        lotes_enriquecidos = []
-        for lote in lotes_raw:
-            # Obtener datos base del primer bin
-            bin_lotes = list(lote.bin_lotes.select_related("bin").order_by("created_at")[:1])
-            primer_bin = bin_lotes[0].bin if bin_lotes else None
-            productor = primer_bin.codigo_productor if primer_bin else ""
-            variedad = primer_bin.variedad_fruta if primer_bin else ""
-
-            # Filtrar por productor si se solicita
-            if filtro_productor and filtro_productor.lower() not in productor.lower():
-                continue
-
-            lotes_enriquecidos.append({
-                "lote": lote,
-                "lote_code": lote.lote_code,
-                "estado": lote.estado,
-                "estado_display": lote.get_estado_display(),
-                "etapa": _etapa_lote(lote),
-                "cantidad_bins": lote.cantidad_bins,
-                "kilos_neto": lote.kilos_neto_conformacion,
-                "productor": productor,
-                "variedad": variedad,
-                "fecha": lote.fecha_conformacion or lote.created_at.date() if lote.created_at else None,
-            })
-
-        ctx["lotes"] = lotes_enriquecidos
+        ctx["lotes"] = _lotes_enriquecidos_qs(temporada, filtro_productor, filtro_estado)
         ctx["temporada"] = temporada
         ctx["filtro_productor"] = filtro_productor
         ctx["filtro_estado"] = filtro_estado
         ctx["estados_choices"] = LotePlantaEstado.choices
         return ctx
+
+
+# ---------------------------------------------------------------------------
+# Exportación CSV — mismos filtros que la vista
+# ---------------------------------------------------------------------------
+
+class ExportarConsultaCSVView(LoginRequiredMixin, JefaturaRequiredMixin, View):
+    """
+    Exporta los lotes filtrados en formato CSV (UTF-8 con BOM para compatibilidad Excel).
+    Respeta los mismos parámetros GET que ConsultaJefaturaView.
+    """
+    login_url = reverse_lazy("usuarios:login")
+
+    # Columnas del CSV: (encabezado, clave del dict)
+    COLUMNAS = [
+        ("Temporada",       "temporada"),
+        ("Lote (code)",     "lote_code"),
+        ("Estado",          "estado_display"),
+        ("Etapa actual",    "etapa"),
+        ("Productor",       "productor"),
+        ("Tipo cultivo",    "tipo_cultivo"),
+        ("Variedad",        "variedad"),
+        ("Bins",            "cantidad_bins"),
+        ("Kg neto",         "kilos_neto"),
+        ("Fecha",           "fecha"),
+    ]
+
+    def get(self, request):
+        temporada = (
+            request.session.get("temporada_activa")
+            or str(datetime.date.today().year)
+        )
+        filtro_productor = request.GET.get("productor", "").strip()
+        filtro_estado = request.GET.get("estado", "").strip()
+
+        lotes = _lotes_enriquecidos_qs(temporada, filtro_productor, filtro_estado)
+
+        fecha_hoy = datetime.date.today().strftime("%Y%m%d")
+        filename = f"lotes_{temporada}_{fecha_hoy}.csv"
+
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        # BOM UTF-8 para que Excel lo abra correctamente en Windows
+        response.write("\ufeff")
+
+        writer = csv.writer(response)
+        writer.writerow([col[0] for col in self.COLUMNAS])
+
+        for item in lotes:
+            item["temporada"] = temporada
+            row = []
+            for _, key in self.COLUMNAS:
+                val = item.get(key, "")
+                if val is None:
+                    val = ""
+                row.append(str(val))
+            writer.writerow(row)
+
+        return response
 
 
 # ---------------------------------------------------------------------------

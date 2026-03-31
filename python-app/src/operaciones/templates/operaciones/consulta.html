@@ -4,6 +4,14 @@
 {% block page_title %}Consulta Jefatura{% endblock %}
 {% block page_subtitle %}Trazabilidad y estado de lotes — Temporada {{ temporada }}{% endblock %}
 
+{% block page_actions %}
+  <a href="{% url 'operaciones:exportar_consulta' %}{% if filtro_productor or filtro_estado %}?{% if filtro_productor %}productor={{ filtro_productor }}{% endif %}{% if filtro_productor and filtro_estado %}&{% endif %}{% if filtro_estado %}estado={{ filtro_estado }}{% endif %}{% endif %}"
+     class="btn btn-ghost btn-sm"
+     title="Exportar vista actual a CSV">
+    Exportar CSV
+  </a>
+{% endblock %}
+
 {% block page_body %}
 
 <!-- Filtros -->

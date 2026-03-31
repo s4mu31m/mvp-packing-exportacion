@@ -19,7 +19,12 @@
       <div class="user-avatar">{{ request.user.username|slice:":2"|upper }}</div>
       <div>
         <div class="user-name">{{ request.user.get_full_name|default:request.user.username }}</div>
-        <div class="user-role">{{ request.user.perfil.rol_display }}</div>
+        <div class="user-role">
+          {% if request.user.is_superuser %}Administrador
+          {% elif request.user.is_staff %}Jefatura
+          {% else %}Operador
+          {% endif %}
+        </div>
       </div>
     </div>
     <a href="{% url 'usuarios:logout' %}" class="btn btn-ghost btn-sm">⎋</a>
