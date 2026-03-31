@@ -215,20 +215,9 @@
 
 </div>
 
+{% include "operaciones/includes/op_common_js.html" %}
 <script>
-(function() {
-  const n = new Date();
-  const fecha = n.toISOString().slice(0,10);
-  const hora  = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
-  document.querySelectorAll('input[type="date"]').forEach(e => { if (!e.value) e.value = fecha; });
-  document.querySelectorAll('.campo-hora').forEach(e => { if (!e.value) e.value = hora; });
-})();
-
 const LOTES_DATA = {{ lotes_data_json|safe }};
-
-function fmt(val) {
-  return (val === null || val === undefined || val === '') ? '—' : String(val);
-}
 
 function showTab(name) {
   document.getElementById('tab-mantencion').style.display = name === 'mantencion' ? '' : 'none';

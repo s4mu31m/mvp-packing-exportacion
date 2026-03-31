@@ -24,6 +24,7 @@ from operaciones.forms import (
     RegistroPackingForm,
     ControlProcesoPackingForm,
     CalidadPalletForm,
+    CalidadPalletMuestraForm,
     CamaraFrioForm,
     MedicionTemperaturaForm,
 )
@@ -43,6 +44,7 @@ from operaciones.application.use_cases import (
     registrar_medicion_temperatura,
 )
 from operaciones.models import (
+    CalidadPalletMuestra,
     Lote,
     LotePlantaEstado,
     Pallet,
@@ -857,6 +859,7 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "Paletizado"
         ctx["form_calidad"] = CalidadPalletForm()
+        ctx["form_muestra"] = CalidadPalletMuestraForm()
         temporada = (
             self.request.session.get("temporada_activa")
             or str(datetime.date.today().year)
@@ -865,6 +868,49 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
         ctx["pallets_pendientes"] = pallets
         ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
+
+    def _save_muestras(self, request, pallet, operator_code):
+        """
+        Guarda muestras individuales de calidad enviadas desde el template.
+        Cada muestra llega como muestra_N_<campo> en el POST.
+
+        Persistencia: solo SQLite (ORM directo). No pasa por el repository
+        layer porque CalidadPalletMuestra no tiene repositorio Dataverse aun.
+        TODO (Dataverse): cuando se implemente la tabla crf21_calidad_pallet_muestras
+        en Dataverse, migrar esta logica a un use case con repositorio.
+        """
+        saved = 0
+        for i in range(1, 4):  # maximo 3 muestras por sesion
+            prefix = f"muestra_{i}_"
+            temp = request.POST.get(f"{prefix}temperatura_fruta", "").strip()
+            peso = request.POST.get(f"{prefix}peso_caja_muestra", "").strip()
+            n_frutos = request.POST.get(f"{prefix}n_frutos", "").strip()
+            aprobado_raw = request.POST.get(f"{prefix}aprobado", "")
+            obs = request.POST.get(f"{prefix}observaciones", "").strip()
+
+            # Solo guardar si al menos un campo de medicion tiene dato
+            if not any([temp, peso, n_frutos]):
+                continue
+
+            aprobado = None
+            if aprobado_raw == "true":
+                aprobado = True
+            elif aprobado_raw == "false":
+                aprobado = False
+
+            CalidadPalletMuestra.objects.create(
+                pallet=pallet,
+                numero_muestra=i,
+                temperatura_fruta=temp or None,
+                peso_caja_muestra=peso or None,
+                n_frutos=int(n_frutos) if n_frutos else None,
+                aprobado=aprobado,
+                observaciones=obs,
+                operator_code=operator_code,
+                source_system="web",
+            )
+            saved += 1
+        return saved
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "calidad")
@@ -893,6 +939,22 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
                 }
                 result = registrar_calidad_pallet(payload)
                 _handle_result(request, result)
+
+                # Guardar muestras individuales (local SQLite)
+                if result.ok and pallet_code:
+                    try:
+                        pallet = Pallet.objects.get(
+                            temporada=temporada, pallet_code=pallet_code,
+                        )
+                        n = self._save_muestras(
+                            request, pallet, cd.get("operator_code", ""),
+                        )
+                        if n:
+                            messages.info(
+                                request, f"{n} muestra(s) de calidad registrada(s).",
+                            )
+                    except Pallet.DoesNotExist:
+                        pass
             else:
                 messages.error(request, "Formulario de calidad invalido.")
 

@@ -170,7 +170,7 @@ class DesverdizadoForm(forms.Form):
     )
     horas_desverdizado = forms.IntegerField(
         required=False, label="Horas de desverdizado",
-        help_text="El operador puede ajustar segun criterio",
+        help_text="Horas planificadas (1-240). Reemplaza el campo legacy 'proceso' para este dato.",
         widget=forms.NumberInput(attrs={"placeholder": "72", "min": "1", "max": "240"}),
     )
     kilos_enviados_terreno = forms.DecimalField(
@@ -182,6 +182,14 @@ class DesverdizadoForm(forms.Form):
         label="Kilos recepcionados",
     )
     operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
+
+    def clean_horas_desverdizado(self):
+        val = self.cleaned_data.get("horas_desverdizado")
+        if val is None:
+            return val
+        if val < 1 or val > 240:
+            raise forms.ValidationError("Debe estar entre 1 y 240 horas.")
+        return val
 
 
 class IngresoPackingForm(forms.Form):

@@ -730,6 +730,9 @@ class CalidadPalletMuestra(AuditSourceModel):
     """
     Muestra individual de calidad para un pallet. Un pallet puede tener
     multiples muestras (tipicamente 2-3) registradas en la misma sesion.
+
+    Persistencia: solo SQLite por ahora. No tiene repositorio Dataverse ni
+    use case dedicado — se guarda via ORM directo desde PaletizadoView.
     """
     pallet = models.ForeignKey(
         Pallet,

@@ -82,6 +82,20 @@
             {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
           </div>
         {% endfor %}
+
+        <!-- Muestras individuales (CalidadPalletMuestra) -->
+        <div style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
+            <span style="font-weight:600;font-size:.9rem">Muestras individuales</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-muestra"
+                    onclick="addMuestra()" style="font-size:.78rem">+ Agregar muestra</button>
+          </div>
+          <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:.8rem">
+            Opcional. Registre hasta 3 muestras de caja por pallet.
+          </p>
+          <div id="muestras-container"></div>
+        </div>
+
         <div class="flex-row mt-4">
           <button type="submit" class="btn btn-primary ml-auto">Registrar Calidad</button>
         </div>
@@ -130,18 +144,9 @@
 
 </div>
 
+{% include "operaciones/includes/op_common_js.html" %}
 <script>
-(function() {
-  const n = new Date();
-  const fecha = n.toISOString().slice(0,10);
-  const hora  = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
-  document.querySelectorAll('input[type="date"]').forEach(e => { if (!e.value) e.value = fecha; });
-  document.querySelectorAll('.campo-hora').forEach(e => { if (!e.value) e.value = hora; });
-})();
-
 const PALLETS_DATA = {{ pallets_data_json|safe }};
-
-function fmt(val) { return (val === null || val === undefined || val === '') ? '—' : String(val); }
 
 function showTab(name) {
   document.getElementById('tab-calidad').style.display = name === 'calidad' ? '' : 'none';
@@ -187,5 +192,42 @@ document.getElementById('pallet-code-input').addEventListener('input', function(
   setPalletCode(code);
   if (code) poblarContexto(code);
 });
+
+// --- Muestras individuales ---
+let muestraCount = 0;
+function addMuestra() {
+  if (muestraCount >= 3) return;
+  muestraCount++;
+  const i = muestraCount;
+  const container = document.getElementById('muestras-container');
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.id = 'muestra-row-' + i;
+  div.style.cssText = 'margin-bottom:.8rem;padding:12px;background:var(--surface-1);border:1px solid var(--border)';
+  div.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">'
+    + '<span style="font-weight:600;font-size:.82rem">Muestra ' + i + '</span>'
+    + '<button type="button" class="btn btn-ghost btn-sm" style="font-size:.72rem;padding:2px 6px" '
+    + 'onclick="removeMuestra(' + i + ')">Quitar</button></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">'
+    + '<div class="form-group"><label class="form-label">Temp. fruta (°C)</label>'
+    + '<input type="number" step="0.01" name="muestra_' + i + '_temperatura_fruta" class="form-control" placeholder="18.5"></div>'
+    + '<div class="form-group"><label class="form-label">Peso caja (kg)</label>'
+    + '<input type="number" step="0.001" name="muestra_' + i + '_peso_caja_muestra" class="form-control" placeholder="8.200"></div>'
+    + '<div class="form-group"><label class="form-label">N° frutos</label>'
+    + '<input type="number" name="muestra_' + i + '_n_frutos" class="form-control" placeholder="42"></div>'
+    + '<div class="form-group"><label class="form-label">Aprobada</label>'
+    + '<select name="muestra_' + i + '_aprobado" class="form-control">'
+    + '<option value="">—</option><option value="true">Si</option><option value="false">No</option></select></div>'
+    + '</div>'
+    + '<div class="form-group"><label class="form-label">Observaciones</label>'
+    + '<textarea name="muestra_' + i + '_observaciones" class="form-control" rows="1"></textarea></div>';
+  container.appendChild(div);
+  if (muestraCount >= 3) document.getElementById('btn-add-muestra').style.display = 'none';
+}
+function removeMuestra(idx) {
+  const el = document.getElementById('muestra-row-' + idx);
+  if (el) el.remove();
+  document.getElementById('btn-add-muestra').style.display = '';
+}
 </script>
 {% endblock %}
