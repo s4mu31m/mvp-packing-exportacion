@@ -315,6 +315,14 @@ class BinRepository(ABC):
     def filter_by_codes(self, temporada: str, bin_codes: list[str]) -> list[BinRecord]:
         """Retorna los bins que existen para la temporada y los codigos dados."""
 
+    def list_by_lote(self, lote_id: Any) -> list[BinRecord]:
+        """
+        Retorna los bins asociados a un lote.
+        Implementacion por defecto: lista vacia (compatibilidad con SQLite que
+        accede a esta relacion via ORM directo). Dataverse sobreescribe este metodo.
+        """
+        return []
+
 
 class LoteRepository(ABC):
 
@@ -342,6 +350,15 @@ class LoteRepository(ABC):
     @abstractmethod
     def update(self, lote_id: Any, fields: dict) -> LoteRecord:
         """Actualiza campos del lote. Retorna el record actualizado."""
+
+    def list_recent(self, limit: int = 50) -> list[LoteRecord]:
+        """
+        Retorna los lotes mas recientes (ordenados por fecha de creacion descendente).
+        Implementacion por defecto: lista vacia. Dataverse sobreescribe para
+        proveer datos reales al dashboard cuando PERSISTENCE_BACKEND=dataverse.
+        SQLite accede a lotes via ORM directo en las vistas.
+        """
+        return []
 
 
 class PalletRepository(ABC):
@@ -381,6 +398,14 @@ class BinLoteRepository(ABC):
     @abstractmethod
     def find_existing_assignments(self, bin_ids: list[Any]) -> list[BinAssignmentConflict]:
         """Retorna bins de la lista que ya estan asignados a algun lote."""
+
+    def list_by_lote(self, lote_id: Any) -> list[BinLoteRecord]:
+        """
+        Retorna todos los registros bin-lote de un lote dado.
+        Implementacion por defecto: lista vacia. Dataverse sobreescribe.
+        SQLite usa ORM directo via lote.bin_lotes.all().
+        """
+        return []
 
 
 class PalletLoteRepository(ABC):

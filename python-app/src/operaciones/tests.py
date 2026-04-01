@@ -145,17 +145,8 @@ class RecepcionFlowTest(TestCase):
         self.assertIn(resp.status_code, [200, 302])
         self.assertTrue(Lote.objects.filter(temporada=TEMPORADA).exists())
 
-    def test_agregar_bin(self):
-        # Iniciar primero
-        self.client.post(self.url, {
-            "action": "iniciar",
-            "temporada": TEMPORADA,
-            "operator_code": "OP-01",
-        })
-        lote = Lote.objects.filter(temporada=TEMPORADA).first()
-        self.assertIsNotNone(lote)
-        # Agregar bin válido
-        resp = self.client.post(self.url, {
+    def _datos_bin(self):
+        return {
             "action": "agregar_bin",
             "temporada": TEMPORADA,
             "codigo_productor": "PROD-01",
@@ -166,8 +157,46 @@ class RecepcionFlowTest(TestCase):
             "kilos_bruto_ingreso": "500",
             "kilos_neto_ingreso": "480",
             "operator_code": "OP-01",
+        }
+
+    def test_agregar_bin(self):
+        # Iniciar primero
+        self.client.post(self.url, {
+            "action": "iniciar",
+            "temporada": TEMPORADA,
+            "operator_code": "OP-01",
         })
+        lote = Lote.objects.filter(temporada=TEMPORADA).first()
+        self.assertIsNotNone(lote)
+        # Agregar bin valido
+        resp = self.client.post(self.url, self._datos_bin())
         self.assertIn(resp.status_code, [200, 302])
+
+    def test_agregar_multiples_bins_mismas_campos_base(self):
+        """
+        Agregar dos bins consecutivos con los mismos campos base no debe
+        lanzar IntegrityError en RegistroEtapa.event_key.
+        Regresion: agregar_bin_a_lote_abierto usaba create() en lugar de
+        get_or_create() para RegistroEtapa, causando UNIQUE constraint fail
+        ante reintento o bin_code repetido por datos de dev inconsistentes.
+        """
+        self.client.post(self.url, {
+            "action": "iniciar",
+            "temporada": TEMPORADA,
+            "operator_code": "OP-01",
+        })
+        lote = Lote.objects.filter(temporada=TEMPORADA).first()
+        self.assertIsNotNone(lote)
+        datos = self._datos_bin()
+        resp1 = self.client.post(self.url, datos)
+        self.assertIn(resp1.status_code, [200, 302])
+        resp2 = self.client.post(self.url, datos)
+        self.assertIn(resp2.status_code, [200, 302])
+        from operaciones.models import BinLote
+        self.assertEqual(
+            BinLote.objects.filter(lote=lote).count(), 2,
+            "Deben existir dos bins distintos en el lote",
+        )
 
     def test_cerrar_lote(self):
         # Crear lote abierto con un bin directo en BD

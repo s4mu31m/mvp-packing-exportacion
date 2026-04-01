@@ -119,46 +119,87 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
         ctx["temporada"] = temporada
 
+        from django.conf import settings
+        backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
+
+        if backend == "dataverse":
+            ctx["kpis"], ctx["lotes_activos"] = self._context_dataverse()
+        else:
+            ctx["kpis"], ctx["lotes_activos"] = self._context_sqlite(temporada)
+
+        return ctx
+
+    def _context_sqlite(self, temporada: str):
+        """KPIs y lista de lotes desde SQLite ORM."""
         try:
             lotes_qs = Lote.objects.filter(temporada=temporada, is_active=True)
             lotes_abiertos = lotes_qs.filter(estado=LotePlantaEstado.ABIERTO)
             lotes_cerrados = lotes_qs.filter(estado=LotePlantaEstado.CERRADO)
             lotes_finalizados = lotes_qs.filter(estado=LotePlantaEstado.FINALIZADO)
 
-            # Bins hoy
             from operaciones.models import BinLote
             hoy = datetime.date.today()
-            bins_hoy = BinLote.objects.filter(
-                created_at__date=hoy,
-            ).count()
+            bins_hoy = BinLote.objects.filter(created_at__date=hoy).count()
 
-            # Lotes activos con datos para tabla
             lotes_activos_qs = lotes_qs.exclude(
                 estado=LotePlantaEstado.FINALIZADO
             ).order_by("-created_at")[:20]
 
-            lotes_activos = []
-            for lote in lotes_activos_qs:
-                lotes_activos.append({
+            lotes_activos = [
+                {
                     "codigo": lote.lote_code,
                     "bins": lote.cantidad_bins,
                     "etapa": _etapa_lote(lote),
                     "estado": lote.estado,
-                })
-
-            ctx["kpis"] = {
-                "lotes_abiertos": lotes_abiertos.count(),
-                "lotes_cerrados": lotes_cerrados.count(),
+                }
+                for lote in lotes_activos_qs
+            ]
+            kpis = {
+                "lotes_abiertos":    lotes_abiertos.count(),
+                "lotes_cerrados":    lotes_cerrados.count(),
                 "lotes_finalizados": lotes_finalizados.count(),
-                "total_lotes": lotes_qs.count(),
-                "bins_hoy": bins_hoy,
+                "total_lotes":       lotes_qs.count(),
+                "bins_hoy":          bins_hoy,
             }
-            ctx["lotes_activos"] = lotes_activos
+            return kpis, lotes_activos
         except Exception:
-            ctx["kpis"] = {}
-            ctx["lotes_activos"] = []
+            return {}, []
 
-        return ctx
+    def _context_dataverse(self):
+        """
+        KPIs y lista de lotes desde Dataverse.
+
+        Limitaciones conocidas del modelo Dataverse:
+        - 'estado' no existe: todos los lotes se reportan como estado='abierto'.
+        - Los contadores de lotes_cerrados/lotes_finalizados son siempre 0.
+        - 'bins_hoy' no se puede filtrar por dia sin el campo 'temporada'; se
+          muestra el total de bins de lotes recientes como aproximacion.
+        """
+        try:
+            from infrastructure.repository_factory import get_repositories
+            repos = get_repositories()
+            lotes = repos.lotes.list_recent(limit=50)
+            lotes_activos = [
+                {
+                    "codigo": l.lote_code,
+                    "bins":   l.cantidad_bins,
+                    "etapa":  "Recepcion",       # estado no se trackea en Dataverse
+                    "estado": l.estado,
+                }
+                for l in lotes
+            ]
+            kpis = {
+                "lotes_abiertos":    len(lotes),   # estado siempre 'abierto' en Dataverse
+                "lotes_cerrados":    0,             # no trackeable en Dataverse
+                "lotes_finalizados": 0,             # no trackeable en Dataverse
+                "total_lotes":       len(lotes),
+                "bins_hoy":          sum(l.cantidad_bins for l in lotes),
+            }
+            return kpis, lotes_activos
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Dashboard Dataverse error: %s", exc)
+            return {}, []
 
 
 # ---------------------------------------------------------------------------
@@ -172,11 +213,23 @@ class RecepcionView(LoginRequiredMixin, TemplateView):
     CAMPOS_BASE = ["codigo_productor", "tipo_cultivo", "variedad_fruta", "color", "fecha_cosecha"]
 
     def _lote_activo(self, request):
-        """Retorna el objeto Lote activo desde sesion, o None si no hay."""
+        """
+        Retorna el lote activo desde sesion.
+
+        En SQLite retorna la instancia ORM (Lote).
+        En Dataverse retorna un LoteRecord (dataclass) obtenido via repositorio.
+        En ambos casos el objeto expone .lote_code, .cantidad_bins, .estado.
+        """
         lote_code = request.session.get("lote_activo_code")
         if not lote_code:
             return None
         temporada = _temporada(request)
+
+        from django.conf import settings
+        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+            return self._lote_activo_dataverse(request, temporada, lote_code)
+
+        # -- Backend SQLite: usa ORM Django --
         try:
             lote = Lote.objects.get(temporada=temporada, lote_code=lote_code)
             if lote.estado != LotePlantaEstado.ABIERTO:
@@ -189,7 +242,45 @@ class RecepcionView(LoginRequiredMixin, TemplateView):
             request.session.pop("lote_activo_campos_base", None)
             return None
 
+    def _lote_activo_dataverse(self, request, temporada, lote_code):
+        """
+        Resuelve el lote activo consultando Dataverse via repositorio.
+        En Dataverse, estado siempre retorna 'abierto'; el cierre real
+        se controla limpiando la sesion desde _handle_cerrar.
+        """
+        try:
+            from infrastructure.repository_factory import get_repositories
+            repos = get_repositories()
+            lote = repos.lotes.find_by_code(temporada, lote_code)
+            if not lote:
+                request.session.pop("lote_activo_code", None)
+                request.session.pop("lote_activo_campos_base", None)
+                return None
+            return lote
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "RecepcionView._lote_activo_dataverse error para %s: %s", lote_code, exc
+            )
+            return None
+
     def _bins_de_lote(self, lote):
+        """
+        Retorna los bins del lote.
+        En SQLite usa ORM. En Dataverse usa repos.bins.list_by_lote.
+        """
+        from django.conf import settings
+        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+            try:
+                from infrastructure.repository_factory import get_repositories
+                repos = get_repositories()
+                return repos.bins.list_by_lote(lote.id)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "RecepcionView._bins_de_lote dataverse error: %s", exc
+                )
+                return []
         return [bl.bin for bl in lote.bin_lotes.select_related("bin").order_by("created_at")]
 
     def get(self, request, *args, **kwargs):

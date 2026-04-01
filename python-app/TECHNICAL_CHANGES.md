@@ -1,3 +1,107 @@
+# Cambios Técnicos — Iteración 2026-03-31: Cierre funcional backend Dataverse
+
+**Branch:** `main`
+**Fecha:** 2026-03-31
+
+---
+
+## Resumen iteración 2026-03-31
+
+Cierre funcional del backend Dataverse para el flujo MVP completo. Todos los
+repositorios de etapas operacionales pasaron de stubs a implementaciones reales.
+Las vistas de recepción y dashboard ahora funcionan en modo `PERSISTENCE_BACKEND=dataverse`.
+
+### Archivos modificados
+- `python-app/src/domain/repositories/base.py`
+- `python-app/src/infrastructure/dataverse/repositories/__init__.py`
+- `python-app/src/operaciones/views.py`
+- `python-app/TECHNICAL_CHANGES.md`
+- `python-app/README.md`
+
+### Cambios funcionales
+
+#### 1. Nuevos métodos en `domain/repositories/base.py` (no-abstractos)
+
+| Clase | Método | Descripción |
+|---|---|---|
+| `BinRepository` | `list_by_lote(lote_id)` | Retorna bins de un lote. Default: `[]`. Dataverse lo implementa via tabla de unión. |
+| `LoteRepository` | `list_recent(limit=50)` | Retorna lotes recientes ordenados por fecha. Default: `[]`. Dataverse lo implementa via OData `$orderby=createdon desc`. |
+| `BinLoteRepository` | `list_by_lote(lote_id)` | Retorna registros bin-lote de un lote. Default: `[]`. |
+
+Estos métodos son **no-abstractos** para no romper las implementaciones SQLite que
+acceden a estos datos via ORM directo en las vistas.
+
+#### 2. Repositorios Dataverse completados (`infrastructure/dataverse/repositories/__init__.py`)
+
+Todos los siguientes repositorios pasaron de `NotImplementedError` a implementación real:
+
+| Repositorio | Métodos implementados |
+|---|---|
+| `DataverseBinRepository` | `list_by_lote` (2 pasos: bin_lote → bins) |
+| `DataverseBinLoteRepository` | `list_by_lote` (query directa por lote_id_value) |
+| `DataverseLoteRepository` | `list_recent` (OData `$orderby=createdon desc`) |
+| `DataverseCamaraMantencionRepository` | `find_by_lote`, `create`, `update` |
+| `DataverseDesverdizadoRepository` | `find_by_lote`, `create`, `update` |
+| `DataverseCalidadDesverdizadoRepository` | `create`, `list_by_lote` |
+| `DataverseIngresoAPackingRepository` | `find_by_lote`, `create` |
+| `DataverseRegistroPackingRepository` | `create`, `list_by_lote` |
+| `DataverseControlProcesoPackingRepository` | `create`, `list_by_lote` |
+| `DataverseCalidadPalletRepository` | `create`, `list_by_pallet` |
+| `DataverseCamaraFrioRepository` | `find_by_pallet`, `create`, `update` |
+| `DataverseMedicionTemperaturaSalidaRepository` | `create`, `list_by_pallet` |
+
+Se agregaron helpers `_parse_date`, `_parse_decimal`, `_str` para conversión
+de valores OData a tipos Python del dominio, y funciones `_row_to_*` para
+cada entidad.
+
+#### 3. Correcciones en `operaciones/views.py`
+
+**`DashboardView.get_context_data`** — split en dos ramas según backend:
+- `_context_sqlite(temporada)`: comportamiento original con ORM (sin cambios).
+- `_context_dataverse()`: usa `repos.lotes.list_recent(limit=50)`. Limitación documentada: `estado` no existe en Dataverse, los contadores de lotes cerrados/finalizados son siempre 0.
+
+**`RecepcionView._lote_activo`** — añadido fallback Dataverse:
+- En SQLite: usa `Lote.objects.get(...)` como antes.
+- En Dataverse: usa `repos.lotes.find_by_code(temporada, lote_code)`, retorna `LoteRecord`. La plantilla acepta ambos tipos ya que accede solo a atributos comunes (`.lote_code`, `.cantidad_bins`, `.estado`).
+
+**`RecepcionView._bins_de_lote`** — añadido fallback Dataverse:
+- En SQLite: usa `lote.bin_lotes.select_related("bin")` como antes.
+- En Dataverse: usa `repos.bins.list_by_lote(lote.id)`, retorna `list[BinRecord]`.
+
+### Decisiones técnicas
+
+1. **`estado` derivado en Dataverse**: El campo no existe en el schema Dataverse. En modo Dataverse, `LoteRecord.estado` siempre retorna `"abierto"`. El flujo de cierre de lote funciona porque la vista limpia la sesión (`session.pop`) al llamar `cerrar_lote_recepcion`, no por inspección del estado. Documentado como limitación conocida.
+
+2. **No se fuerzan tablas inexistentes**: `registro_etapas` sigue siendo no-op en Dataverse. `_bins_de_lote` en Dataverse hace dos llamadas HTTP (bin_lote → bins) que es la única forma correcta dado el schema real.
+
+3. **Compatibilidad de templates**: Los templates Django aceptan tanto instancias ORM como dataclasses para atributos simples (`{{ lote.lote_code }}`). Los métodos de relacione ORM (`lote.bin_lotes.select_related`) son evitados en el path Dataverse usando la rama condicional.
+
+### Validación técnica
+
+| Validación | Resultado |
+|---|---|
+| `python manage.py check` | 0 issues |
+| `python manage.py test operaciones.test` | 115/115 OK |
+| Ping Dataverse real | OK (UserId confirmado) |
+| 13/13 tablas Dataverse accesibles | OK |
+| `list_recent` con datos reales | 2 lotes retornados |
+| `find_by_lote` CamaraMantencion real | CamaraMantencionRecord con datos reales |
+| `find_by_lote` Desverdizado real | found |
+| `find_by_lote` IngresoAPacking real | found |
+| Filtro OData `_crf21_lote_planta_id_value eq {guid}` | verificado funcional |
+
+### Brechas remanentes (modelo Dataverse)
+
+| Brecha | Estrategia |
+|---|---|
+| `estado` lote no existe en Dataverse | Retorna `"abierto"` siempre; cierre controlado por sesión |
+| `registro_etapas` no existe en Dataverse | No-op con log local; no bloquea el flujo |
+| `SequenceCounter` sin tabla Dataverse | Cuenta registros existentes (no atómico; aceptable para MVP) |
+| Dashboard no muestra lotes cerrados/finalizados en Dataverse | Limitación conocida; documentada en template y aquí |
+| `CalidadPalletMuestra` solo en SQLite | `_save_muestras` en `PaletizadoView` usa ORM directo; pendiente Dataverse |
+
+---
+
 # Cambios Técnicos — Iteración 2026-03-30: Flujo Operativo con Contexto de Lote
 
 **Branch:** `main`
