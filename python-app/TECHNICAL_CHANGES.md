@@ -1,3 +1,138 @@
+# Cambios Técnicos — Iteración 2026-03-31 (b): Integración crf21_etapa_actual
+
+**Branch:** `main`
+**Fecha:** 2026-03-31
+
+---
+
+## Resumen iteración 2026-03-31 (b)
+
+Integración de `crf21_etapa_actual` en el backend Dataverse para eliminar la
+dependencia funcional del campo `estado` ficticio y disponer de etapa real persistida
+en el lote. Javiera habilitó el campo en Power Platform; este commit adapta mapping,
+repositorios, casos de uso, vistas, reportería y exportación para usarlo.
+
+### Archivos modificados
+- `python-app/src/infrastructure/dataverse/mapping.py`
+- `python-app/src/domain/repositories/base.py`
+- `python-app/src/infrastructure/dataverse/repositories/__init__.py`
+- `python-app/src/infrastructure/sqlite/repositories.py`
+- `python-app/src/operaciones/views.py`
+- `python-app/src/operaciones/application/use_cases/iniciar_lote_recepcion.py`
+- `python-app/src/operaciones/application/use_cases/cerrar_lote_recepcion.py`
+- `python-app/src/operaciones/application/use_cases/registrar_camara_mantencion.py`
+- `python-app/src/operaciones/application/use_cases/registrar_desverdizado.py`
+- `python-app/src/operaciones/application/use_cases/registrar_ingreso_packing.py`
+- `python-app/src/operaciones/application/use_cases/registrar_registro_packing.py`
+- `python-app/src/operaciones/application/use_cases/registrar_control_proceso_packing.py`
+- `python-app/src/operaciones/application/use_cases/cerrar_pallet.py`
+- `python-app/src/operaciones/application/use_cases/registrar_calidad_pallet.py`
+- `python-app/src/operaciones/application/use_cases/registrar_camara_frio.py`
+- `python-app/src/operaciones/application/use_cases/registrar_medicion_temperatura.py`
+- `python-app/TECHNICAL_CHANGES.md`
+- `python-app/README.md`
+
+### Cambios técnicos clave
+
+#### 1. `mapping.py` — nuevo campo `etapa_actual`
+
+```python
+# LOTE_PLANTA_FIELDS
+"etapa_actual": "crf21_etapa_actual"
+```
+
+Valores posibles: `"Recepcion"`, `"Pesaje"`, `"Mantencion"`, `"Desverdizado"`,
+`"Ingreso Packing"`, `"Packing / Proceso"`, `"Paletizado"`,
+`"Calidad Pallet"`, `"Camara Frio"`, `"Temperatura Salida"`.
+
+#### 2. `base.py` — `LoteRecord.etapa_actual` y `PalletLoteRepository.find_by_pallet`
+
+`LoteRecord` recibe campo `etapa_actual: Optional[str] = None`. En SQLite siempre
+es `None` (se usa `_etapa_lote()` de la vista). En Dataverse se lee desde
+`crf21_etapa_actual`.
+
+`PalletLoteRepository.find_by_pallet(pallet_id)` agregado como método no-abstracto
+(default: `None`). Dataverse lo implementa para que use cases pallet-nivel
+(`calidad_pallet`, `camara_frio`, `medicion_temperatura`) puedan actualizar
+la etapa del lote asociado.
+
+#### 3. `repositories/__init__.py` — leer, escribir y resolver etapa
+
+- `_LOTE_SELECT` incluye `crf21_etapa_actual`.
+- `_row_to_lote` popula `LoteRecord.etapa_actual` desde el campo OData.
+- `DataverseLoteRepository.update` acepta `etapa_actual` en el dict de campos.
+- `DataverseLoteRepository.create` acepta `etapa_actual` en el dict `extra`.
+- `DataversePalletLoteRepository.find_by_pallet` implementado (OData filter por `_crf21_pallet_id_value`).
+- **`resolve_etapa_lote(lote, repos=None) -> str`** — función pública del módulo:
+  1. Si `lote.etapa_actual` está persistida, la retorna directamente (**camino feliz**).
+  2. Si es `None` y `repos` está disponible, deriva la etapa consultando tablas en orden inverso: `pallet_lotes → camara_frio → ingresos_packing → desverdizados → camara_mantencions → bins`.
+  3. Si `repos=None` (bulk listing), retorna `"Recepcion"` como fallback conservador.
+
+#### 4. `sqlite/repositories.py` — fix `SqliteLoteRepository.update`
+
+```python
+model_fields = {f.name for f in Lote._meta.get_fields() if hasattr(f, "name")}
+safe_fields = {k: v for k, v in fields.items() if k in model_fields}
+if safe_fields:
+    Lote.objects.filter(pk=lote_id).update(**safe_fields)
+```
+
+Evita `FieldError` cuando los use cases (compartidos entre backends) pasan
+`etapa_actual` al `update`. En SQLite el campo no existe y se ignora silenciosamente.
+
+#### 5. Use cases — escritura de `etapa_actual` en cada transición
+
+| Use case | Etapa escrita |
+|---|---|
+| `iniciar_lote_recepcion` | `"Recepcion"` (en `extra` al crear) |
+| `cerrar_lote_recepcion` | `"Pesaje"` (en `campos_update`) |
+| `registrar_camara_mantencion` | `"Mantencion"` |
+| `registrar_desverdizado` | `"Desverdizado"` |
+| `registrar_ingreso_packing` | `"Ingreso Packing"` |
+| `registrar_registro_packing` | `"Packing / Proceso"` |
+| `registrar_control_proceso_packing` | `"Packing / Proceso"` |
+| `cerrar_pallet` | `"Paletizado"` (para cada lote nuevo en la relación) |
+| `registrar_calidad_pallet` | `"Calidad Pallet"` (via `find_by_pallet`) |
+| `registrar_camara_frio` | `"Camara Frio"` (via `find_by_pallet`) |
+| `registrar_medicion_temperatura` | `"Temperatura Salida"` (via `find_by_pallet`) |
+
+Las escrituras de etapa son **no-op en SQLite** (campo filtrado por `safe_fields`).
+Para use cases pallet-nivel, `find_by_pallet` retorna `None` en SQLite (método
+por defecto) → no falla ni bloquea el flujo.
+
+#### 6. `views.py` — uso de `etapa_actual` en vistas
+
+- **`DashboardView._context_dataverse`**: usa `resolve_etapa_lote(l)` para mostrar
+  etapa real. KPIs ahora distinguen `lotes_abiertos` (etapa=Recepcion) de
+  `lotes_cerrados` (etapa≠Recepcion).
+- **`RecepcionView._lote_activo_dataverse`**: si `resolve_etapa_lote(lote) != "Recepcion"`,
+  limpia la sesión y bloquea el ingreso de bins (restricción funcional por etapa).
+- **`_lotes_enriquecidos_qs`**: detecta backend Dataverse y delega a
+  `_lotes_enriquecidos_dataverse()`, usando `etapa_actual` como fuente de etapa
+  y estado para filtros y exportación CSV.
+- **`_lotes_enriquecidos_dataverse`**: nueva función. `filtro_productor` se ignora
+  (requeriría N+1 API calls). `filtro_estado` se mapea a etapa.
+
+### Validación ejecutada
+
+```
+manage.py check     → 0 issues
+manage.py test operaciones.test → 115/115 OK
+Dataverse ping      → OK (UserId confirmado)
+list_recent         → 2 lotes, etapa_actual_raw=None, resolve='Recepcion' (fallback correcto)
+```
+
+### Limitaciones remanentes
+
+| Brecha | Estado |
+|---|---|
+| `filtro_productor` en consulta jefatura Dataverse | No aplicable sin bin lookup |
+| `lotes_finalizados` en KPI Dataverse | Siempre 0 — no hay equivalente en DV |
+| `etapa_actual` registros anteriores | `None` → fallback conservador "Recepcion" |
+| Transacciones ACID | Dataverse no soporta; brecha conocida |
+
+---
+
 # Cambios Técnicos — Iteración 2026-03-31: Cierre funcional backend Dataverse
 
 **Branch:** `main`

@@ -180,10 +180,12 @@ def _row_to_lote(row: dict) -> LoteRecord:
         kilos_neto_conformacion=_parse_decimal(row.get(LOTE_FIELDS["kilos_neto_conformacion"])),
         requiere_desverdizado=bool(row.get(LOTE_FIELDS["requiere_desverdizado"])),
         disponibilidad_camara_desverdizado=_str(row.get(LOTE_FIELDS["disponibilidad_camara_desverdizado"])) or None,
-        # estado, temporada_codigo, correlativo_temporada no existen en Dataverse
+        # estado, temporada_codigo, correlativo_temporada no existen en Dataverse.
+        # etapa_actual se lee desde crf21_etapa_actual; None si no ha sido escrito aún.
         estado="abierto",
         temporada_codigo="",
         correlativo_temporada=None,
+        etapa_actual=_str(row.get(LOTE_FIELDS["etapa_actual"])) or None,
     )
 
 
@@ -374,7 +376,7 @@ _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "id", "id_lote_planta", "lote_code", "operator_code", "source_system",
     "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
     "kilos_neto_conformacion", "requiere_desverdizado",
-    "disponibilidad_camara_desverdizado",
+    "disponibilidad_camara_desverdizado", "etapa_actual",
 )]
 _BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
 
@@ -552,6 +554,8 @@ class DataverseLoteRepository(LoteRepository):
         extra = extra or {}
         if extra.get("fecha_conformacion"):
             body[LOTE_FIELDS["fecha_conformacion"]] = str(extra["fecha_conformacion"])
+        if extra.get("etapa_actual"):
+            body[LOTE_FIELDS["etapa_actual"]] = str(extra["etapa_actual"])
 
         row = self._client.create_row(ENTITY_SET_LOTE, body) or {}
         return LoteRecord(
@@ -564,6 +568,7 @@ class DataverseLoteRepository(LoteRepository):
             estado="abierto",
             temporada_codigo="",
             correlativo_temporada=None,
+            etapa_actual=extra.get("etapa_actual"),
         )
 
     def filter_by_codes(self, temporada: str, lote_codes: list[str]) -> list[LoteRecord]:
@@ -592,6 +597,8 @@ class DataverseLoteRepository(LoteRepository):
             "requiere_desverdizado":                LOTE_FIELDS["requiere_desverdizado"],
             "disponibilidad_camara_desverdizado":   LOTE_FIELDS["disponibilidad_camara_desverdizado"],
             "operator_code":                        LOTE_FIELDS["operator_code"],
+            # etapa_actual: campo disponible desde 2026-03-31
+            "etapa_actual":                         LOTE_FIELDS["etapa_actual"],
         }
         body = {
             dv_field: fields[domain_key]
@@ -787,6 +794,31 @@ class DataversePalletLoteRepository(PalletLoteRepository):
             id=row.get(PALLET_LOTE_FIELDS["id"]),
             pallet_id=row.get(PALLET_LOTE_FIELDS["pallet_id_value"]),
             lote_id=lote_id,
+        )
+
+    def find_by_pallet(self, pallet_id: Any) -> Optional[PalletLoteRecord]:
+        """
+        Retorna la asociacion lote-pallet dado un pallet_id.
+        Usado para actualizar etapa_actual del lote en operaciones pallet-nivel
+        (calidad_pallet, camara_frio, medicion_temperatura).
+        """
+        f = f"{PALLET_LOTE_FIELDS['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_PALLET_LOTE,
+            select=[PALLET_LOTE_FIELDS["id"],
+                    PALLET_LOTE_FIELDS["pallet_id_value"],
+                    PALLET_LOTE_FIELDS["lote_id_value"]],
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        if not rows:
+            return None
+        row = rows[0]
+        return PalletLoteRecord(
+            id=row.get(PALLET_LOTE_FIELDS["id"]),
+            pallet_id=pallet_id,
+            lote_id=row.get(PALLET_LOTE_FIELDS["lote_id_value"]),
         )
 
     def get_or_create(
@@ -1576,6 +1608,83 @@ class DataverseMedicionTemperaturaSalidaRepository(MedicionTemperaturaSalidaRepo
             top=100,
         )
         return [_row_to_medicion_temperatura(r, pallet_id) for r in (result or {}).get("value", [])]
+
+
+# ---------------------------------------------------------------------------
+# Resolver de etapa actual — fuente principal: campo persistido en Dataverse
+# ---------------------------------------------------------------------------
+
+def resolve_etapa_lote(lote, repos=None) -> str:
+    """
+    Retorna la etapa actual del lote como string display-friendly.
+
+    Estrategia:
+      1. Si el lote tiene etapa_actual persistida (no null), la retorna directamente.
+         Este es el camino feliz para todos los lotes creados desde 2026-03-31.
+      2. Si etapa_actual es null (registros anteriores a la integracion) y repos
+         esta disponible, deriva la etapa consultando tablas de etapas en orden
+         inverso (mas avanzada primero). Esto es costoso en Dataverse (multiples
+         API calls) y NO debe usarse para listados bulk.
+      3. Si repos es None o falla la derivacion, retorna 'Recepcion' como fallback
+         conservador (los lotes sin etapa eran mayormente de recepcion).
+
+    IMPORTANTE: para listados bulk (dashboard, consulta), llamar sin repos o con
+    repos=None para evitar N*K llamadas a Dataverse.
+    Para vista de detalle de un solo lote, pasar repos para derivacion completa.
+
+    Args:
+        lote: LoteRecord (Dataverse) o instancia ORM Lote (SQLite).
+        repos: Repositories opcional para derivacion completa de fallback.
+
+    Returns:
+        str con la etapa (ej. "Recepcion", "Pesaje", "Desverdizado", etc.)
+    """
+    # Lote Dataverse con etapa_actual persistida
+    etapa_persistida = getattr(lote, "etapa_actual", None)
+    if etapa_persistida:
+        return etapa_persistida
+
+    # Fallback conservador sin repos (uso en bulk listings)
+    if repos is None:
+        return "Recepcion"
+
+    # Derivacion completa para registros antiguos (uso en detalle individual)
+    try:
+        lote_id = lote.id
+        # Orden inverso: etapa mas avanzada primero
+        pl = repos.pallet_lotes.find_by_lote(lote_id)
+        if pl:
+            # Si hay pallet, verificar si tiene camara_frio
+            try:
+                cf = repos.camara_frios.find_by_pallet(pl.pallet_id)
+                if cf:
+                    return "Camara Frio"
+            except Exception:
+                pass
+            return "Paletizado"
+
+        ip = repos.ingresos_packing.find_by_lote(lote_id)
+        if ip:
+            # puede tener registros packing tambien
+            return "Ingreso Packing"
+
+        desv = repos.desverdizados.find_by_lote(lote_id)
+        if desv:
+            return "Desverdizado"
+
+        cm = repos.camara_mantencions.find_by_lote(lote_id)
+        if cm:
+            return "Mantencion"
+
+        # Sin registros de etapas avanzadas: Pesaje o Recepcion
+        cantidad_bins = getattr(lote, "cantidad_bins", 0)
+        if cantidad_bins and int(cantidad_bins) > 0:
+            return "Pesaje"
+
+        return "Recepcion"
+    except Exception as exc:
+        logger.debug("resolve_etapa_lote fallback error para lote %s: %s", getattr(lote, "id", "?"), exc)
+        return "Recepcion"
 
 
 # ---------------------------------------------------------------------------

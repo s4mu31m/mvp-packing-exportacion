@@ -58,6 +58,15 @@ def registrar_camara_frio(
         extra=data.get("extra", {}),
     )
 
+    # Actualizar etapa del lote asociado al pallet (si la relacion es accesible)
+    # find_by_pallet: no-op en SQLite (retorna None), implementado en Dataverse.
+    try:
+        pl = repos.pallet_lotes.find_by_pallet(pallet.id)
+        if pl and pl.lote_id:
+            repos.lotes.update(pl.lote_id, {"etapa_actual": "Camara Frio"})
+    except Exception:
+        pass  # no bloquear el flujo si falla la actualizacion de etapa
+
     event_key = build_event_key(temporada, "PALLET", pallet_code, TipoEvento.CAMARA_FRIO_INGRESO)
     repos.registros.get_or_create(
         event_key=event_key,

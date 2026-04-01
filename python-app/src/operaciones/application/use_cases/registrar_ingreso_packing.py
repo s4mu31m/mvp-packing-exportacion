@@ -66,6 +66,9 @@ def registrar_ingreso_packing(
         extra=extra,
     )
 
+    # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
+    repos.lotes.update(lote.id, {"etapa_actual": "Ingreso Packing"})
+
     event_key = build_event_key(temporada, "LOTE", lote_code, TipoEvento.INGRESO_PACKING)
     repos.registros.get_or_create(
         event_key=event_key,

@@ -59,6 +59,11 @@ class LoteRecord:
     estado: str = "abierto"
     temporada_codigo: str = ""
     correlativo_temporada: Optional[int] = None
+    # etapa_actual: persiste la etapa de proceso en Dataverse.
+    # En SQLite este campo no existe en el modelo; se deriva en vista via _etapa_lote().
+    # En Dataverse se lee desde crf21_etapa_actual; puede ser None para
+    # registros anteriores al 2026-03-31 (usar derive_etapa_lote() como fallback).
+    etapa_actual: Optional[str] = None
 
 
 @dataclass
@@ -425,6 +430,15 @@ class PalletLoteRepository(ABC):
     @abstractmethod
     def find_by_lote(self, lote_id: Any) -> Optional[PalletLoteRecord]:
         """Retorna la asignacion de pallet para un lote, o None si no tiene."""
+
+    def find_by_pallet(self, pallet_id: Any) -> Optional[PalletLoteRecord]:
+        """
+        Retorna la asociacion lote-pallet dado un pallet_id, o None.
+        Implementacion por defecto: None (SQLite accede via ORM directo).
+        Dataverse sobreescribe para actualizar etapa_actual del lote cuando
+        operaciones pallet-nivel (calidad_pallet, camara_frio) necesitan el lote_id.
+        """
+        return None
 
 
 class RegistroEtapaRepository(ABC):

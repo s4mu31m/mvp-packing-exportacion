@@ -76,6 +76,9 @@ def registrar_camara_mantencion(
         extra=data.get("extra", {}),
     )
 
+    # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
+    repos.lotes.update(lote.id, {"etapa_actual": "Mantencion"})
+
     event_key = build_event_key(temporada, "LOTE", lote_code, TipoEvento.CAMARA_MANTENCION)
     repos.registros.get_or_create(
         event_key=event_key,

@@ -169,29 +169,42 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         """
         KPIs y lista de lotes desde Dataverse.
 
-        Limitaciones conocidas del modelo Dataverse:
-        - 'estado' no existe: todos los lotes se reportan como estado='abierto'.
-        - Los contadores de lotes_cerrados/lotes_finalizados son siempre 0.
-        - 'bins_hoy' no se puede filtrar por dia sin el campo 'temporada'; se
-          muestra el total de bins de lotes recientes como aproximacion.
+        Usa crf21_etapa_actual como fuente principal de etapa (disponible desde 2026-03-31).
+        Para lotes antiguos con etapa_actual=null, retorna 'Recepcion' como fallback
+        conservador (sin queries adicionales para no afectar rendimiento del dashboard).
+
+        Limitaciones residuales del modelo Dataverse:
+        - 'estado' (ABIERTO/CERRADO/FINALIZADO) no existe en Dataverse.
+          lotes_cerrados y lotes_finalizados se derivan por etapa: si etapa != 'Recepcion'
+          se considera cerrado (recepcion completada).
+        - 'bins_hoy' usa suma de bins de lotes recientes como aproximacion.
         """
         try:
             from infrastructure.repository_factory import get_repositories
+            from infrastructure.dataverse.repositories import resolve_etapa_lote
             repos = get_repositories()
             lotes = repos.lotes.list_recent(limit=50)
-            lotes_activos = [
-                {
+
+            lotes_activos = []
+            lotes_en_recepcion = 0
+            lotes_post_recepcion = 0
+            for l in lotes:
+                etapa = resolve_etapa_lote(l)   # usa etapa_actual persistida; fallback "Recepcion"
+                if etapa == "Recepcion":
+                    lotes_en_recepcion += 1
+                else:
+                    lotes_post_recepcion += 1
+                lotes_activos.append({
                     "codigo": l.lote_code,
                     "bins":   l.cantidad_bins,
-                    "etapa":  "Recepcion",       # estado no se trackea en Dataverse
-                    "estado": l.estado,
-                }
-                for l in lotes
-            ]
+                    "etapa":  etapa,
+                    "estado": l.estado,    # siempre "abierto" (campo no existe en DV)
+                })
+
             kpis = {
-                "lotes_abiertos":    len(lotes),   # estado siempre 'abierto' en Dataverse
-                "lotes_cerrados":    0,             # no trackeable en Dataverse
-                "lotes_finalizados": 0,             # no trackeable en Dataverse
+                "lotes_abiertos":    lotes_en_recepcion,
+                "lotes_cerrados":    lotes_post_recepcion,
+                "lotes_finalizados": 0,             # sin equivalente directo en Dataverse
                 "total_lotes":       len(lotes),
                 "bins_hoy":          sum(l.cantidad_bins for l in lotes),
             }
@@ -245,14 +258,22 @@ class RecepcionView(LoginRequiredMixin, TemplateView):
     def _lote_activo_dataverse(self, request, temporada, lote_code):
         """
         Resuelve el lote activo consultando Dataverse via repositorio.
-        En Dataverse, estado siempre retorna 'abierto'; el cierre real
-        se controla limpiando la sesion desde _handle_cerrar.
+        Usa etapa_actual para validar que el lote siga en 'Recepcion'.
+        Si etapa_actual != 'Recepcion' (o distinto de null), el lote ya
+        fue cerrado y no se permite agregar bins — se limpia la sesion.
         """
         try:
             from infrastructure.repository_factory import get_repositories
+            from infrastructure.dataverse.repositories import resolve_etapa_lote
             repos = get_repositories()
             lote = repos.lotes.find_by_code(temporada, lote_code)
             if not lote:
+                request.session.pop("lote_activo_code", None)
+                request.session.pop("lote_activo_campos_base", None)
+                return None
+            # Validar que el lote siga en etapa Recepcion
+            etapa = resolve_etapa_lote(lote)
+            if etapa and etapa != "Recepcion":
                 request.session.pop("lote_activo_code", None)
                 request.session.pop("lote_activo_campos_base", None)
                 return None
@@ -1155,10 +1176,22 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
     Devuelve lista de dicts con datos enriquecidos de lotes filtrados.
     Encapsulado para reutilizar en vista HTML y exportación CSV.
 
-    TODO (Dataverse): cuando PERSISTENCE_BACKEND == 'dataverse', esta función
-    debe resolverse contra el repositorio de LotePlanta en Dataverse vía OData.
-    Por ahora usa el ORM local (SQLite). Interfaz estable para ser reemplazada.
+    En SQLite usa ORM. En Dataverse usa repos.lotes.list_recent() con
+    etapa_actual desde crf21_etapa_actual (disponible desde 2026-03-31).
+
+    Limitaciones Dataverse:
+    - filtro_productor no se puede aplicar sin cargar los bins de cada lote (N+1 API calls).
+      Se ignora para evitar degradacion de rendimiento.
+    - filtro_estado se mapea a etapa: si filtro_estado == 'cerrado', se filtran
+      lotes con etapa != 'Recepcion'; si filtro_estado == 'abierto', etapa == 'Recepcion'.
     """
+    from django.conf import settings
+    backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
+
+    if backend == "dataverse":
+        return _lotes_enriquecidos_dataverse(filtro_productor, filtro_estado)
+
+    # --- Backend SQLite ---
     qs = Lote.objects.filter(temporada=temporada, is_active=True)
     if filtro_estado:
         qs = qs.filter(estado=filtro_estado)
@@ -1189,6 +1222,46 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
             "fecha": lote.fecha_conformacion or (lote.created_at.date() if lote.created_at else None),
         })
     return resultado
+
+
+def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> list:
+    """
+    Versión Dataverse de _lotes_enriquecidos_qs.
+    Usa etapa_actual persistida en crf21_etapa_actual como fuente principal.
+    filtro_productor se ignora (requeriría carga de bins — N+1 inaceptable).
+    filtro_estado se mapea a etapa: 'abierto' → Recepcion, 'cerrado' → otras etapas.
+    """
+    try:
+        from infrastructure.repository_factory import get_repositories
+        from infrastructure.dataverse.repositories import resolve_etapa_lote
+        repos = get_repositories()
+        lotes = repos.lotes.list_recent(limit=500)
+        resultado = []
+        for lote in lotes:
+            etapa = resolve_etapa_lote(lote)
+            # Aplicar filtro por estado si se indica
+            if filtro_estado == "abierto" and etapa != "Recepcion":
+                continue
+            if filtro_estado == "cerrado" and etapa == "Recepcion":
+                continue
+            resultado.append({
+                "lote": lote,
+                "lote_code": lote.lote_code,
+                "estado": etapa,               # en DV: etapa como proxy de estado
+                "estado_display": etapa,
+                "etapa": etapa,
+                "cantidad_bins": lote.cantidad_bins,
+                "kilos_neto": lote.kilos_neto_conformacion,
+                "productor": "",               # no disponible sin bin lookup
+                "variedad": "",
+                "tipo_cultivo": "",
+                "fecha": lote.fecha_conformacion,
+            })
+        return resultado
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("_lotes_enriquecidos_dataverse error: %s", exc)
+        return []
 
 
 class JefaturaRequiredMixin(UserPassesTestMixin):

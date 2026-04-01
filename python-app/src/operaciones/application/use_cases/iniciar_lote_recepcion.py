@@ -68,6 +68,7 @@ def iniciar_lote_recepcion(payload: dict, *, repos: Repositories | None = None) 
         "temporada_codigo":      temporada_codigo,
         "correlativo_temporada": correlativo,
         "estado":                LotePlantaEstado.ABIERTO,
+        "etapa_actual":          "Recepcion",   # persiste en Dataverse desde 2026-03-31
     }
     # Propagar campos opcionales de conformacion
     for campo in ["fecha_conformacion", "requiere_desverdizado",
