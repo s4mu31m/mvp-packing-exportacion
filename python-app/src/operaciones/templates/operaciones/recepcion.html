@@ -102,7 +102,7 @@
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
             {% for field in form_bin %}
               {% if field.name not in "codigo_productor,tipo_cultivo,variedad_fruta,color,fecha_cosecha" %}
-                {% if field.name != "observaciones" and field.name != "operator_code" %}
+                {% if field.name != "observaciones" %}
                   <div class="form-group" style="margin-bottom:.5rem">
                     <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                     {{ field }}
@@ -116,13 +116,17 @@
 
           <!-- Observaciones + Operador -->
           {% for field in form_bin %}
-            {% if field.name == "observaciones" or field.name == "operator_code" %}
+            {% if field.name == "observaciones" %}
               <div class="form-group" style="margin-top:.5rem">
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
               </div>
             {% endif %}
           {% endfor %}
+          <div class="form-group" style="margin-top:.5rem">
+            <label class="form-label">Codigo operador</label>
+            <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+          </div>
 
           <div class="flex-row mt-4">
             <button type="reset" class="btn btn-ghost">Limpiar</button>
@@ -146,24 +150,18 @@
           <input type="hidden" name="action" value="cerrar">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
             {% for field in form_cerrar %}
-              {% if field.name != "operator_code" %}
-                <div class="form-group" style="margin-bottom:.5rem">
-                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                  {{ field }}
-                  {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-                  {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
-                </div>
-              {% endif %}
-            {% endfor %}
-          </div>
-          {% for field in form_cerrar %}
-            {% if field.name == "operator_code" %}
-              <div class="form-group">
+              <div class="form-group" style="margin-bottom:.5rem">
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
+                {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+                {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
               </div>
-            {% endif %}
-          {% endfor %}
+            {% endfor %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Codigo operador</label>
+            <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+          </div>
           <div class="flex-row mt-4">
             <button type="submit" class="btn btn-primary ml-auto"
                     {% if lote.cantidad_bins == 0 %}disabled{% endif %}>

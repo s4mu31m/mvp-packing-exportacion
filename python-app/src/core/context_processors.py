@@ -25,6 +25,7 @@ def CaliPro_context(request):
         }),
         "nav_sections": _nav_sections(request),
         "mobile_nav_items": _mobile_nav(),
+        "codigo_operador": request.session.get("crf21_codigooperador", ""),
     }
 
 

@@ -98,7 +98,7 @@
         <input type="hidden" name="lote_code" id="lote-code-mantencion" value="">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
           {% for field in form_mantencion %}
-            {% if field.name != "observaciones" and field.name != "operator_code" %}
+            {% if field.name != "observaciones" %}
               <div class="form-group">
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
@@ -115,13 +115,11 @@
               {{ field }}
             </div>
           {% endif %}
-          {% if field.name == "operator_code" %}
-            <div class="form-group">
-              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-              {{ field }}
-            </div>
-          {% endif %}
         {% endfor %}
+        <div class="form-group">
+          <label class="form-label">Codigo operador</label>
+          <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+        </div>
         <div class="flex-row mt-4">
           <button type="submit" class="btn btn-primary ml-auto">Registrar Camara</button>
         </div>
@@ -142,7 +140,7 @@
         <input type="hidden" name="lote_code" id="lote-code-desverdizado" value="">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
           {% for field in form_desverdizado %}
-            {% if field.name != "kilos_enviados_terreno" and field.name != "kilos_recepcionados" and field.name != "operator_code" %}
+            {% if field.name != "kilos_enviados_terreno" and field.name != "kilos_recepcionados" %}
               <div class="form-group">
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
@@ -169,14 +167,10 @@
             {% endif %}
           {% endfor %}
         </div>
-        {% for field in form_desverdizado %}
-          {% if field.name == "operator_code" %}
-            <div class="form-group" style="margin-top:.5rem">
-              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-              {{ field }}
-            </div>
-          {% endif %}
-        {% endfor %}
+        <div class="form-group" style="margin-top:.5rem">
+          <label class="form-label">Codigo operador</label>
+          <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+        </div>
         <div class="flex-row mt-4">
           <button type="submit" class="btn btn-primary ml-auto">Registrar Desverdizado</button>
         </div>

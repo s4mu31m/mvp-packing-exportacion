@@ -361,7 +361,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         cd = form.cleaned_data
         payload = {
             "temporada": _temporada(request),
-            "operator_code": cd.get("operator_code", ""),
+            "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
         }
         result = iniciar_lote_recepcion(payload)
@@ -416,7 +416,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         payload = {
             "temporada": _temporada(request),
             "lote_code": lote_code,
-            "operator_code": cd.get("operator_code", ""),
+            "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "fecha_cosecha": str(cd["fecha_cosecha"]) if cd.get("fecha_cosecha") else None,
             "variedad_fruta": cd.get("variedad_fruta") or "",
@@ -466,7 +466,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         payload = {
             "temporada": _temporada(request),
             "lote_code": lote_code,
-            "operator_code": cd.get("operator_code", ""),
+            "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "requiere_desverdizado": cd.get("requiere_desverdizado") or False,
             "disponibilidad_camara_desverdizado": cd.get("disponibilidad_camara_desverdizado") or None,
@@ -511,7 +511,7 @@ class PesajeView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         payload = {
             "temporada": _temporada(request),
             "bin_codes": cd["bin_codes"],
-            "operator_code": cd.get("operator_code", ""),
+            "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
         }
         result = crear_lote_recepcion(payload)
@@ -601,7 +601,7 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 payload = {
                     "temporada": temporada,
                     "lote_code": lote_code,
-                    "operator_code": cd.get("operator_code", ""),
+                    "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
                         "camara_numero": cd.get("camara_numero"),
@@ -624,7 +624,7 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 payload = {
                     "temporada": temporada,
                     "lote_code": lote_code,
-                    "operator_code": cd.get("operator_code", ""),
+                    "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
                         "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
@@ -833,7 +833,7 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         payload = {
             "temporada": temporada,
             "lote_code": lote_code,
-            "operator_code": cd.get("operator_code", ""),
+            "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "via_desverdizado": cd.get("via_desverdizado") or info.get("via_desverdizado", False),
             "extra": {
@@ -900,7 +900,7 @@ class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         payload = {
             "temporada": _temporada(request),
             "lote_code": lote_code,
-            "operator_code": cd.get("operator_code", ""),
+            "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "extra": {
                 "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
@@ -959,7 +959,7 @@ class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         payload = {
             "temporada": _temporada(request),
             "lote_code": lote_code,
-            "operator_code": cd.get("operator_code", ""),
+            "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "extra": {
                 "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
@@ -1055,7 +1055,7 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 payload = {
                     "temporada": temporada,
                     "pallet_code": pallet_code,
-                    "operator_code": cd.get("operator_code", ""),
+                    "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
                         "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
@@ -1078,7 +1078,7 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                             temporada=temporada, pallet_code=pallet_code,
                         )
                         n = self._save_muestras(
-                            request, pallet, cd.get("operator_code", ""),
+                            request, pallet, request.session.get("crf21_codigooperador", ""),
                         )
                         if n:
                             messages.info(
@@ -1091,12 +1091,11 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
 
         elif action == "cerrar":
             lote_code = request.POST.get("lote_code", "").strip()
-            operator_code = request.POST.get("operator_code", "").strip()
             payload = {
                 "temporada": temporada,
                 "lote_code": lote_code,
                 "pallet_code": pallet_code,
-                "operator_code": operator_code,
+                "operator_code": request.session.get("crf21_codigooperador", ""),
                 "source_system": "web",
             }
             result = cerrar_pallet(payload)
@@ -1140,7 +1139,7 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 payload = {
                     "temporada": temporada,
                     "pallet_code": pallet_code,
-                    "operator_code": cd.get("operator_code", ""),
+                    "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
                         "camara_numero": cd.get("camara_numero"),
@@ -1163,7 +1162,7 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 payload = {
                     "temporada": temporada,
                     "pallet_code": pallet_code,
-                    "operator_code": cd.get("operator_code", ""),
+                    "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
                         "fecha": str(cd["fecha"]) if cd.get("fecha") else None,

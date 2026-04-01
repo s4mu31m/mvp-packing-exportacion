@@ -12,9 +12,7 @@ from operaciones.models import DisponibilidadCamara, AOR
 
 class IniciarLoteForm(forms.Form):
     """Inicia una sesion de recepcion (crea lote en estado abierto)."""
-    operator_code = forms.CharField(
-        max_length=50, required=False, label="Codigo operador",
-    )
+    pass
 
 
 class CerrarLoteForm(forms.Form):
@@ -32,9 +30,6 @@ class CerrarLoteForm(forms.Form):
     )
     kilos_neto_conformacion = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False, label="Kilos neto total lote",
-    )
-    operator_code = forms.CharField(
-        max_length=50, required=False, label="Codigo operador",
     )
 
 
@@ -85,9 +80,6 @@ class BinForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
-    operator_code = forms.CharField(
-        max_length=50, required=False, label="Codigo operador",
-    )
 
 
 class LoteForm(forms.Form):
@@ -116,9 +108,6 @@ class LoteForm(forms.Form):
         choices=[("", "---------")] + list(DisponibilidadCamara.choices),
         required=False, label="Disponibilidad camara desverdizado",
         help_text="Solo aplica si requiere desverdizado",
-    )
-    operator_code = forms.CharField(
-        max_length=50, required=False, label="Codigo operador",
     )
 
     def clean_bin_codes(self):
@@ -150,7 +139,6 @@ class CamaraMantencionForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
 
 class DesverdizadoForm(forms.Form):
@@ -181,7 +169,6 @@ class DesverdizadoForm(forms.Form):
         max_digits=10, decimal_places=2, required=False,
         label="Kilos recepcionados",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
     def clean_horas_desverdizado(self):
         val = self.cleaned_data.get("horas_desverdizado")
@@ -218,7 +205,6 @@ class IngresoPackingForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
 
 class RegistroPackingForm(forms.Form):
@@ -248,7 +234,6 @@ class RegistroPackingForm(forms.Form):
         label="Merma seleccion (%)",
         help_text="Rango 0-100",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
 
 class ControlProcesoPackingForm(forms.Form):
@@ -279,7 +264,6 @@ class ControlProcesoPackingForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones generales",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
 
 class CalidadPalletForm(forms.Form):
@@ -309,7 +293,6 @@ class CalidadPalletForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
 
 class CamaraFrioForm(forms.Form):
@@ -332,7 +315,6 @@ class CamaraFrioForm(forms.Form):
     destino_despacho = forms.CharField(
         max_length=100, required=False, label="Destino despacho",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")
 
 
 class CalidadPalletMuestraForm(forms.Form):
@@ -379,4 +361,3 @@ class MedicionTemperaturaForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
-    operator_code = forms.CharField(max_length=50, required=False, label="Codigo operador")

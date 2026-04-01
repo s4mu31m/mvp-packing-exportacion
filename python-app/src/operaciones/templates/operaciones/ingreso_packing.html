@@ -94,7 +94,7 @@
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
           {% for field in form %}
-            {% if field.name != "observaciones" and field.name != "operator_code" and field.name != "via_desverdizado" %}
+            {% if field.name != "observaciones" and field.name != "via_desverdizado" %}
               <div class="form-group">
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
@@ -112,13 +112,11 @@
               {{ field }}
             </div>
           {% endif %}
-          {% if field.name == "operator_code" %}
-            <div class="form-group">
-              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-              {{ field }}
-            </div>
-          {% endif %}
         {% endfor %}
+        <div class="form-group">
+          <label class="form-label">Codigo operador</label>
+          <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+        </div>
 
         <div class="flex-row mt-4">
           <button type="reset" class="btn btn-ghost">Limpiar</button>
