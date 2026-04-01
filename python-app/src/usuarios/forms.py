@@ -1,63 +1,98 @@
 """
-Formularios de gestión de usuarios para la app usuarios.
+Formularios de gestión de usuarios alineados al esquema Dataverse.
+
+Los campos siguen el contrato de crf21_usuariooperativos.
+Reemplaza el formulario anterior basado en Django UserCreationForm.
 """
 from django import forms
-from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.hashers import make_password
 
-User = get_user_model()
-
-ROL_CHOICES = [
-    ("operador", "Operador"),
-    ("jefatura", "Jefatura"),
-    ("administrador", "Administrador"),
+# Roles operativos del sistema — orden de presentación en el formulario
+ROLES_CHOICES = [
+    ("Recepcion",       "Recepcion"),
+    ("Pesaje",          "Pesaje"),
+    ("Desverdizado",    "Desverdizado"),
+    ("Ingreso Packing", "Ingreso Packing"),
+    ("Proceso",         "Proceso"),
+    ("Control",         "Control"),
+    ("Paletizado",      "Paletizado"),
+    ("Camaras",         "Camaras"),
+    ("Jefatura",        "Jefatura"),
+    ("Administrador",   "Administrador"),
 ]
 
 
-class CaliProUserCreationForm(UserCreationForm):
+class UsuarioCreacionForm(forms.Form):
     """
-    Formulario de creación de usuario con rol operativo.
-    Roles se mapean a is_staff / is_superuser de Django Auth.
+    Formulario de creación de usuario operativo.
+
+    Campos mapeados a crf21_usuariooperativos:
+        usernamelogin  → crf21_usernamelogin
+        nombrecompleto → crf21_nombrecompleto
+        correo         → crf21_correo
+        password       → crf21_passwordhash (hasheado antes de persistir)
+        roles          → crf21_rol (normalizado a string separado por coma)
+        activo         → crf21_activo
+        bloqueado      → crf21_bloqueado
+
+    codigooperador: generado en el repositorio, no es campo del formulario.
     """
-    first_name = forms.CharField(max_length=150, required=False, label="Nombre")
-    last_name = forms.CharField(max_length=150, required=False, label="Apellido")
-    email = forms.EmailField(required=False, label="Correo electrónico")
-    rol = forms.ChoiceField(choices=ROL_CHOICES, label="Rol operativo")
+    usernamelogin = forms.CharField(
+        max_length=150,
+        label="Usuario (login) *",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    nombrecompleto = forms.CharField(max_length=255, required=False, label="Nombre completo")
+    correo         = forms.EmailField(required=False, label="Correo electrónico")
+    password       = forms.CharField(
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+        label="Contraseña *",
+    )
+    password_confirm = forms.CharField(
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+        label="Confirmar contraseña *",
+    )
+    roles = forms.MultipleChoiceField(
+        choices=ROLES_CHOICES,
+        label="Roles *",
+        required=True,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    activo    = forms.BooleanField(required=False, initial=True,  label="Activo")
+    bloqueado = forms.BooleanField(required=False, initial=False, label="Bloqueado")
 
-    class Meta:
-        model = User
-        fields = ["username", "first_name", "last_name", "email", "password1", "password2", "rol"]
+    def clean(self):
+        cleaned = super().clean()
+        p1 = cleaned.get("password")
+        p2 = cleaned.get("password_confirm")
+        if p1 and p2 and p1 != p2:
+            raise forms.ValidationError("Las contraseñas no coinciden.")
+        return cleaned
 
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.first_name = self.cleaned_data.get("first_name", "")
-        user.last_name = self.cleaned_data.get("last_name", "")
-        user.email = self.cleaned_data.get("email", "")
+    def get_passwordhash(self) -> str:
+        """Retorna el hash listo para persistir en crf21_passwordhash."""
+        return make_password(self.cleaned_data["password"])
 
-        rol = self.cleaned_data.get("rol", "operador")
-        user.is_staff = rol in ("jefatura", "administrador")
-        user.is_superuser = rol == "administrador"
-        user.is_active = True
-
-        if commit:
-            user.save()
-        return user
+    def get_rol_string(self) -> str:
+        """Retorna los roles seleccionados como string canónico separado por coma."""
+        return ", ".join(self.cleaned_data["roles"])
 
 
-class CaliProUserEditForm(forms.ModelForm):
-    """Edición básica de usuario (sin contraseña)."""
-    rol = forms.ChoiceField(choices=ROL_CHOICES, label="Rol operativo", required=False)
+class UsuarioEdicionForm(forms.Form):
+    """
+    Edición de datos de un usuario existente (sin contraseña).
+    No permite editar codigooperador ni usernamelogin (inmutables).
+    """
+    nombrecompleto = forms.CharField(max_length=255, required=False, label="Nombre completo")
+    correo         = forms.EmailField(required=False, label="Correo electrónico")
+    roles = forms.MultipleChoiceField(
+        choices=ROLES_CHOICES,
+        label="Roles *",
+        required=True,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    activo    = forms.BooleanField(required=False, label="Activo")
+    bloqueado = forms.BooleanField(required=False, label="Bloqueado")
 
-    class Meta:
-        model = User
-        fields = ["first_name", "last_name", "email"]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance:
-            if self.instance.is_superuser:
-                self.fields["rol"].initial = "administrador"
-            elif self.instance.is_staff:
-                self.fields["rol"].initial = "jefatura"
-            else:
-                self.fields["rol"].initial = "operador"
+    def get_rol_string(self) -> str:
+        return ", ".join(self.cleaned_data["roles"])

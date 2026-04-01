@@ -10,5 +10,6 @@ urlpatterns = [
     path("portal/",  views.PortalView.as_view(),                 name="portal"),
     path("gestion/",                    views.GestionUsuariosView.as_view(),     name="gestion_usuarios"),
     path("gestion/nuevo/",             views.CrearUsuarioView.as_view(),        name="crear_usuario"),
-    path("gestion/<int:pk>/toggle/",   views.ToggleUsuarioActivoView.as_view(), name="toggle_usuario"),
+    # <str:pk> para soportar tanto int SQLite como UUID Dataverse
+    path("gestion/<str:pk>/toggle/",   views.ToggleUsuarioActivoView.as_view(), name="toggle_usuario"),
 ]

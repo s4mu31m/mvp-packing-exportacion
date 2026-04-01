@@ -33,7 +33,8 @@ def check_tables_available(request):
             "crf21_lote_planta_pallets",
             "crf21_medicion_temperatura_salidas",
             "crf21_pallets",
-            "crf21_registro_packings"
+            "crf21_registro_packings",
+            "crf21_usuariooperativos"
         ]
         results = {}
         for table in tables_to_check:
@@ -58,7 +59,8 @@ def check_tables_available(request):
                                 "crf21_lote_planta_pallets" , 
                                 "crf21_calidad_pallets" , 
                                 "crf21_camara_frios" , 
-                                "crf21_medicion_temperatura_salidas" ]:
+                                "crf21_medicion_temperatura_salidas",
+                                "crf21_usuariooperativos"]:
                         sample_record = data["value"][0]
                 result = {
                     "accessible": True,
@@ -78,7 +80,8 @@ def check_tables_available(request):
                             "crf21_lote_planta_pallets" , 
                             "crf21_calidad_pallets" , 
                             "crf21_camara_frios" , 
-                            "crf21_medicion_temperatura_salidas" ]:
+                            "crf21_medicion_temperatura_salidas",
+                            "crf21_usuariooperativos"]:
                     result["sample_record"] = sample_record
                 results[table] = result
             except Exception as e:

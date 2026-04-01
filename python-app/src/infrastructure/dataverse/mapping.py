@@ -40,6 +40,7 @@ ENTITY_SET_CONTROL_PROCESO_PACKING = "crf21_control_proceso_packings"
 ENTITY_SET_CALIDAD_PALLET          = "crf21_calidad_pallets"
 ENTITY_SET_CAMARA_FRIO             = "crf21_camara_frios"
 ENTITY_SET_MEDICION_TEMPERATURA    = "crf21_medicion_temperatura_salidas"
+ENTITY_SET_USUARIO_OPERATIVO       = "crf21_usuariooperativos"
 
 # Aliases para compatibilidad con codigo que usa nombres genéricos
 ENTITY_SET_LOTE        = ENTITY_SET_LOTE_PLANTA
@@ -68,6 +69,7 @@ LOGICAL_NAME_CONTROL_PROCESO_PACKING = "crf21_control_proceso_packing"
 LOGICAL_NAME_CALIDAD_PALLET          = "crf21_calidad_pallet"
 LOGICAL_NAME_CAMARA_FRIO             = "crf21_camara_frio"
 LOGICAL_NAME_MEDICION_TEMPERATURA    = "crf21_medicion_temperatura_salida"
+LOGICAL_NAME_USUARIO_OPERATIVO       = "crf21_usuariooperativo"
 
 LOGICAL_NAME_LOTE        = LOGICAL_NAME_LOTE_PLANTA
 LOGICAL_NAME_BIN_LOTE    = LOGICAL_NAME_BIN_LOTE_PLANTA
@@ -368,6 +370,25 @@ MEDICION_TEMPERATURA_FIELDS = {
 # ---------------------------------------------------------------------------
 # Helpers de construccion OData
 # ---------------------------------------------------------------------------
+
+USUARIO_OPERATIVO_FIELDS = {
+    # PK
+    "id":             "crf21_usuariooperativoid",
+    "dataverse_id":   "crf21_usuariooperativoid",
+    # Campos operativos
+    "usernamelogin":  "crf21_usernamelogin",
+    "nombrecompleto": "crf21_nombrecompleto",
+    "correo":         "crf21_correo",
+    "passwordhash":   "crf21_passwordhash",
+    "rol":            "crf21_rol",
+    "activo":         "crf21_activo",
+    "bloqueado":      "crf21_bloqueado",
+    "codigooperador": "crf21_codigooperador",
+    # Campos de sistema (solo lectura)
+    "created_at":     "createdon",
+    "updated_at":     "modifiedon",
+}
+
 
 def odata_bind(entity_set: str, guid: str) -> str:
     """Construye el valor @odata.bind para un lookup field."""

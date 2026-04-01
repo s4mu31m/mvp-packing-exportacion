@@ -8,7 +8,7 @@ def CaliPro_context(request):
     Inyecta en todos los templates:
     - planta_seleccionada
     - exportador_activo
-    - nav_sections  (sidebar, diferenciado por rol)
+    - nav_sections  (sidebar, filtrado por roles de negocio)
     - mobile_nav_items
     """
     if not request.user.is_authenticated:
@@ -23,7 +23,7 @@ def CaliPro_context(request):
             "id": 39,
             "nombre": "Exportadora CaliPro S.A.",
         }),
-        "nav_sections": _nav_sections(request.user),
+        "nav_sections": _nav_sections(request),
         "mobile_nav_items": _mobile_nav(),
     }
 
@@ -35,31 +35,36 @@ def _safe_reverse(url_name):
         return "#"
 
 
-def _nav_sections(user):
-    sections = [
-        {
-            "label": "Flujo Operativo",
-            "items": [
-                {"name": "Dashboard",       "icon": "T", "url": _safe_reverse("operaciones:dashboard"),       "url_name": "dashboard"},
-                {"name": "Recepcion",       "icon": "R", "url": _safe_reverse("operaciones:recepcion"),       "url_name": "recepcion"},
-                {"name": "Conformar Lote",  "icon": "L", "url": _safe_reverse("operaciones:pesaje"),          "url_name": "pesaje"},
-                {"name": "Desverdizado",    "icon": "D", "url": _safe_reverse("operaciones:desverdizado"),    "url_name": "desverdizado"},
-                {"name": "Ingreso Packing", "icon": "I", "url": _safe_reverse("operaciones:ingreso_packing"), "url_name": "ingreso_packing"},
-                {"name": "Proceso Packing", "icon": "P", "url": _safe_reverse("operaciones:proceso"),         "url_name": "proceso"},
-                {"name": "Control Proceso", "icon": "C", "url": _safe_reverse("operaciones:control"),         "url_name": "control"},
-                {"name": "Paletizado",      "icon": "X", "url": _safe_reverse("operaciones:paletizado"),      "url_name": "paletizado"},
-                {"name": "Camaras Frio",    "icon": "F", "url": _safe_reverse("operaciones:camaras"),         "url_name": "camaras"},
-            ],
-        },
+def _nav_sections(request):
+    from usuarios.permissions import is_admin, is_jefatura, puede_acceder_modulo
+
+    _all_op_items = [
+        {"name": "Dashboard",       "icon": "T", "url": _safe_reverse("operaciones:dashboard"),       "url_name": "dashboard",       "modulo": "dashboard"},
+        {"name": "Recepcion",       "icon": "R", "url": _safe_reverse("operaciones:recepcion"),       "url_name": "recepcion",       "modulo": "recepcion"},
+        {"name": "Conformar Lote",  "icon": "L", "url": _safe_reverse("operaciones:pesaje"),          "url_name": "pesaje",          "modulo": "pesaje"},
+        {"name": "Desverdizado",    "icon": "D", "url": _safe_reverse("operaciones:desverdizado"),    "url_name": "desverdizado",    "modulo": "desverdizado"},
+        {"name": "Ingreso Packing", "icon": "I", "url": _safe_reverse("operaciones:ingreso_packing"), "url_name": "ingreso_packing", "modulo": "ingreso_packing"},
+        {"name": "Proceso Packing", "icon": "P", "url": _safe_reverse("operaciones:proceso"),         "url_name": "proceso",         "modulo": "proceso"},
+        {"name": "Control Proceso", "icon": "C", "url": _safe_reverse("operaciones:control"),         "url_name": "control",         "modulo": "control"},
+        {"name": "Paletizado",      "icon": "X", "url": _safe_reverse("operaciones:paletizado"),      "url_name": "paletizado",      "modulo": "paletizado"},
+        {"name": "Camaras Frio",    "icon": "F", "url": _safe_reverse("operaciones:camaras"),         "url_name": "camaras",         "modulo": "camaras"},
+    ]
+    op_items = [
+        {k: v for k, v in item.items() if k != "modulo"}
+        for item in _all_op_items
+        if puede_acceder_modulo(request, item["modulo"])
     ]
 
-    # Sección Gestión — jefatura y administradores
-    if user.is_staff or user.is_superuser:
+    sections = [
+        {"label": "Flujo Operativo", "items": op_items},
+    ]
+
+    # Sección Gestión — jefatura y administradores (verificado por roles de negocio)
+    if is_jefatura(request):
         gestion_items = [
             {"name": "Consulta Jefatura", "icon": "J", "url": _safe_reverse("operaciones:consulta"), "url_name": "consulta"},
         ]
-        # Gestión de usuarios — solo administradores
-        if user.is_superuser:
+        if is_admin(request):
             gestion_items.append(
                 {"name": "Usuarios", "icon": "U", "url": _safe_reverse("usuarios:gestion_usuarios"), "url_name": "gestion_usuarios"},
             )

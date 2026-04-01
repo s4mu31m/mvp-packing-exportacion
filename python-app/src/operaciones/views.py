@@ -8,6 +8,18 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+
+from usuarios.permissions import get_roles, is_admin
+
+
+class RolRequiredMixin(UserPassesTestMixin):
+    """Protege vistas por rol de negocio. Declarar roles_requeridos en subclase."""
+    roles_requeridos: list[str] = []
+
+    def test_func(self):
+        if is_admin(self.request):
+            return True
+        return any(r in get_roles(self.request) for r in self.roles_requeridos)
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
@@ -219,7 +231,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 # Recepcion de bins — flujo de lote abierto
 # ---------------------------------------------------------------------------
 
-class RecepcionView(LoginRequiredMixin, TemplateView):
+class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Recepcion"]
     template_name = "operaciones/recepcion.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -475,7 +488,8 @@ class RecepcionView(LoginRequiredMixin, TemplateView):
 # Conformar lote (pesaje) — flujo legacy via lista de bin_codes
 # ---------------------------------------------------------------------------
 
-class PesajeView(LoginRequiredMixin, TemplateView):
+class PesajeView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Pesaje"]
     template_name = "operaciones/pesaje.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -533,7 +547,8 @@ def _lotes_pendientes_desverdizado(temporada: str):
     return list(qs)
 
 
-class DesverdizadoView(LoginRequiredMixin, TemplateView):
+class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Desverdizado"]
     template_name = "operaciones/desverdizado.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -783,7 +798,8 @@ def _pallets_data_json(temporada: str, pallets: list) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
-class IngresoPackingView(LoginRequiredMixin, TemplateView):
+class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Ingreso Packing"]
     template_name = "operaciones/ingreso_packing.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -844,7 +860,8 @@ class IngresoPackingView(LoginRequiredMixin, TemplateView):
 # Proceso packing (registro de produccion)
 # ---------------------------------------------------------------------------
 
-class ProcesoView(LoginRequiredMixin, TemplateView):
+class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Proceso"]
     template_name = "operaciones/proceso.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -905,7 +922,8 @@ class ProcesoView(LoginRequiredMixin, TemplateView):
 # Control proceso packing
 # ---------------------------------------------------------------------------
 
-class ControlView(LoginRequiredMixin, TemplateView):
+class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Control"]
     template_name = "operaciones/control.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -963,7 +981,8 @@ class ControlView(LoginRequiredMixin, TemplateView):
 # Paletizado (calidad + cerrar pallet)
 # ---------------------------------------------------------------------------
 
-class PaletizadoView(LoginRequiredMixin, TemplateView):
+class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Paletizado"]
     template_name = "operaciones/paletizado.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -1090,7 +1109,8 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
 # Camaras (frio + medicion temperatura)
 # ---------------------------------------------------------------------------
 
-class CamarasView(LoginRequiredMixin, TemplateView):
+class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Camaras"]
     template_name = "operaciones/camaras.html"
     login_url = reverse_lazy("usuarios:login")
 
@@ -1167,7 +1187,10 @@ class CamarasView(LoginRequiredMixin, TemplateView):
 # ---------------------------------------------------------------------------
 
 def _es_jefatura(user) -> bool:
-    """Jefatura o administrador: is_staff o is_superuser."""
+    """
+    Compatibilidad: usa is_staff/is_superuser como fallback.
+    Preferir is_jefatura(request) desde usuarios.permissions cuando se dispone del request.
+    """
     return user.is_active and (user.is_staff or user.is_superuser)
 
 
@@ -1265,12 +1288,13 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
 
 
 class JefaturaRequiredMixin(UserPassesTestMixin):
-    """Restringe el acceso a jefatura y administradores (is_staff o is_superuser)."""
+    """Restringe el acceso a usuarios con rol Jefatura o Administrador."""
     def test_func(self):
-        return _es_jefatura(self.request.user)
+        from usuarios.permissions import is_jefatura
+        return is_jefatura(self.request)
 
     def handle_no_permission(self):
-        messages.error(self.request, "Acceso denegado: se requiere rol de jefatura o administrador.")
+        messages.error(self.request, "Acceso denegado: se requiere rol Jefatura o Administrador.")
         return redirect("usuarios:portal")
 
 

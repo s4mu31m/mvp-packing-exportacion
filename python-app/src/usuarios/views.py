@@ -1,33 +1,18 @@
+"""
+Vistas de usuarios — autenticación, portal y gestión.
+
+Fuente de verdad de permisos: usuarios/permissions.py (roles desde sesión).
+La persistencia de usuarios usa UsuarioRepository (SQLite o Dataverse).
+"""
 from django.contrib import messages
-from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
-from .forms import CaliProUserCreationForm, CaliProUserEditForm
-
-User = get_user_model()
-
-
-# ---------------------------------------------------------------------------
-# Helpers de permisos — fuente única de verdad para roles
-# ---------------------------------------------------------------------------
-
-def es_administrador(user):
-    """Superusuario: acceso completo, gestión de usuarios."""
-    return user.is_active and user.is_superuser
-
-
-def es_jefatura(user):
-    """Staff o superusuario: acceso a consulta y exportación."""
-    return user.is_active and (user.is_staff or user.is_superuser)
-
-
-def es_operador(user):
-    """Cualquier usuario autenticado y activo."""
-    return user.is_active
+from .forms import UsuarioCreacionForm, ROLES_CHOICES
+from .permissions import is_admin, is_jefatura, get_roles
 
 
 # ---------------------------------------------------------------------------
@@ -35,12 +20,35 @@ def es_operador(user):
 # ---------------------------------------------------------------------------
 
 class CaliProLoginView(LoginView):
-    """Login usando AuthenticationForm de Django + template personalizado."""
+    """
+    Login usando AuthenticationForm de Django.
+    CaliProAuthBackend (registrado en AUTHENTICATION_BACKENDS) verifica
+    la contraseña contra crf21_passwordhash y rechaza inactivos/bloqueados.
+    Tras el login, almacena datos del perfil operativo en sesión.
+    """
     template_name = "usuarios/login.html"
     redirect_authenticated_user = True
 
     def get_success_url(self):
         return reverse_lazy("usuarios:portal")
+
+    def form_valid(self, form):
+        """Llama login() estándar; luego almacena el perfil operativo en sesión."""
+        response = super().form_valid(form)
+        try:
+            from usuarios.repositories import get_usuario_repository
+            from usuarios.auth_backend import store_user_session
+            repo = get_usuario_repository()
+            perfil = repo.get_by_username(self.request.user.username)
+            if perfil:
+                store_user_session(self.request, perfil)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "No se pudo cargar perfil post-login para '%s': %s",
+                self.request.user.username, exc,
+            )
+        return response
 
 
 class CaliProLogoutView(LogoutView):
@@ -52,103 +60,144 @@ class CaliProLogoutView(LogoutView):
 # ---------------------------------------------------------------------------
 
 class PortalView(LoginRequiredMixin, TemplateView):
-    """Selector de módulo post-login. Navegación diferenciada por rol."""
+    """Selector de módulo post-login. Módulos filtrados por rol real."""
     template_name = "usuarios/portal.html"
     login_url = reverse_lazy("usuarios:login")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        user = self.request.user
-        ctx["modulos"] = self._get_modulos(user)
-        ctx["es_admin"] = es_administrador(user)
-        ctx["es_jefatura"] = es_jefatura(user)
+        request = self.request
+        ctx["modulos"]    = self._get_modulos(request)
+        ctx["es_admin"]   = is_admin(request)
+        ctx["es_jefatura"] = is_jefatura(request)
         return ctx
 
-    def _get_modulos(self, user):
-        modulos = []
-
-        # Todos los usuarios autenticados ven el flujo operativo
-        modulos.append({
-            "nombre": "Producción Packing",
-            "descripcion": "Flujo operativo de bins, lotes y pallets",
-            "icono": "🍋",
-            "url_name": "operaciones:dashboard",
-            "disponible": True,
-            "rol_requerido": None,
-        })
-
-        # Jefatura y administradores ven consulta
-        if es_jefatura(user):
+    def _get_modulos(self, request):
+        modulos = [
+            {
+                "nombre":      "Producción Packing",
+                "descripcion": "Flujo operativo de bins, lotes y pallets",
+                "icono":       "🍋",
+                "url_name":    "operaciones:dashboard",
+                "disponible":  True,
+                "rol_requerido": None,
+            },
+        ]
+        if is_jefatura(request):
             modulos.append({
-                "nombre": "Consulta Jefatura",
+                "nombre":      "Consulta Jefatura",
                 "descripcion": "Seguimiento, trazabilidad y exportación de lotes",
-                "icono": "📊",
-                "url_name": "operaciones:consulta",
-                "disponible": True,
-                "rol_requerido": "Jefatura / Admin",
+                "icono":       "📊",
+                "url_name":    "operaciones:consulta",
+                "disponible":  True,
+                "rol_requerido": "Jefatura / Administrador",
             })
-
-        # Solo administradores ven gestión de usuarios
-        if es_administrador(user):
+        if is_admin(request):
             modulos.append({
-                "nombre": "Gestión de Usuarios",
+                "nombre":      "Gestión de Usuarios",
                 "descripcion": "Crear y administrar usuarios del sistema",
-                "icono": "👥",
-                "url_name": "usuarios:gestion_usuarios",
-                "disponible": True,
+                "icono":       "👥",
+                "url_name":    "usuarios:gestion_usuarios",
+                "disponible":  True,
                 "rol_requerido": "Administrador",
             })
-
-        # Módulo futuro — visible para todos como referencia
         modulos.append({
-            "nombre": "Frigorífico",
+            "nombre":      "Frigorífico",
             "descripcion": "Cámaras de frío y control de temperaturas",
-            "icono": "❄️",
-            "disponible": False,
+            "icono":       "❄️",
+            "disponible":  False,
             "rol_requerido": None,
         })
-
         return modulos
+
+
+# ---------------------------------------------------------------------------
+# Mixins de acceso
+# ---------------------------------------------------------------------------
+
+class AdminRequiredMixin(UserPassesTestMixin):
+    """Restringe el acceso a usuarios con rol Administrador."""
+    def test_func(self):
+        return is_admin(self.request)
+
+    def handle_no_permission(self):
+        messages.error(self.request, "Acceso denegado: se requiere rol Administrador.")
+        return redirect("usuarios:portal")
+
+
+class RolRequiredMixin(UserPassesTestMixin):
+    """
+    Mixin reutilizable para proteger vistas por rol de negocio.
+    Subclases deben declarar `roles_requeridos = ["Pesaje", "Proceso"]`.
+    """
+    roles_requeridos: list[str] = []
+
+    def test_func(self):
+        if is_admin(self.request):
+            return True
+        user_roles = get_roles(self.request)
+        return any(r in user_roles for r in self.roles_requeridos)
+
+    def handle_no_permission(self):
+        requeridos = ", ".join(self.roles_requeridos) or "desconocido"
+        messages.error(
+            self.request,
+            f"Acceso denegado: se requiere rol [{requeridos}].",
+        )
+        return redirect("usuarios:portal")
 
 
 # ---------------------------------------------------------------------------
 # Gestión de usuarios — solo administradores
 # ---------------------------------------------------------------------------
 
-class AdminRequiredMixin(UserPassesTestMixin):
-    """Restringe el acceso a superusuarios (administradores)."""
-    def test_func(self):
-        return es_administrador(self.request.user)
-
-    def handle_no_permission(self):
-        messages.error(self.request, "Acceso denegado: se requiere rol de administrador.")
-        return redirect("usuarios:portal")
-
-
 class GestionUsuariosView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
-    """Lista de usuarios con opción de crear nuevos."""
+    """Lista de usuarios con formulario de creación."""
     template_name = "usuarios/gestion_usuarios.html"
     login_url = reverse_lazy("usuarios:login")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["page_title"] = "Gestión de Usuarios"
-        ctx["usuarios"] = User.objects.all().order_by("username")
-        ctx["form"] = CaliProUserCreationForm()
+        from usuarios.repositories import get_usuario_repository
+        repo = get_usuario_repository()
+        ctx["page_title"]    = "Gestión de Usuarios"
+        ctx["usuarios"]      = repo.list_all()
+        ctx["form"]          = UsuarioCreacionForm()
+        ctx["roles_choices"] = ROLES_CHOICES
         return ctx
 
 
 class CrearUsuarioView(LoginRequiredMixin, AdminRequiredMixin, View):
-    """Procesa la creación de un nuevo usuario."""
+    """Procesa la creación de un nuevo usuario operativo."""
     login_url = reverse_lazy("usuarios:login")
 
     def post(self, request):
-        form = CaliProUserCreationForm(request.POST)
+        form = UsuarioCreacionForm(request.POST)
         if form.is_valid():
-            user = form.save()
+            from usuarios.repositories import get_usuario_repository
+            from usuarios.auth_backend import CaliProAuthBackend
+            repo = get_usuario_repository()
+
+            username = form.cleaned_data["usernamelogin"]
+            if repo.get_by_username(username):
+                messages.error(request, f"Ya existe un usuario con login '{username}'.")
+                return redirect("usuarios:gestion_usuarios")
+
+            perfil = repo.create(
+                usernamelogin=username,
+                nombrecompleto=form.cleaned_data.get("nombrecompleto", ""),
+                correo=form.cleaned_data.get("correo", ""),
+                passwordhash=form.get_passwordhash(),
+                rol=form.get_rol_string(),
+                activo=bool(form.cleaned_data.get("activo", True)),
+                bloqueado=bool(form.cleaned_data.get("bloqueado", False)),
+            )
+            # Sincronizar Django User para compatibilidad de sesión
+            CaliProAuthBackend()._get_or_create_django_user(perfil)
+
             messages.success(
                 request,
-                f"Usuario '{user.username}' creado correctamente.",
+                f"Usuario '{perfil.usernamelogin}' creado. Código: {perfil.codigooperador}",
             )
         else:
             for field, errs in form.errors.items():
@@ -158,19 +207,36 @@ class CrearUsuarioView(LoginRequiredMixin, AdminRequiredMixin, View):
 
 
 class ToggleUsuarioActivoView(LoginRequiredMixin, AdminRequiredMixin, View):
-    """Activa o desactiva un usuario."""
+    """Alterna crf21_activo de un usuario (activo ↔ inactivo)."""
     login_url = reverse_lazy("usuarios:login")
 
     def post(self, request, pk):
+        from usuarios.repositories import get_usuario_repository
+        from django.contrib.auth import get_user_model
+        repo = get_usuario_repository()
         try:
-            usuario = User.objects.get(pk=pk)
-            if usuario == request.user:
+            perfil = repo.get_by_id(pk)
+            if perfil is None:
+                messages.error(request, "Usuario no encontrado.")
+                return redirect("usuarios:gestion_usuarios")
+            if perfil.usernamelogin == request.user.username:
                 messages.error(request, "No puedes desactivar tu propio usuario.")
-            else:
-                usuario.is_active = not usuario.is_active
-                usuario.save(update_fields=["is_active"])
-                estado = "activado" if usuario.is_active else "desactivado"
-                messages.success(request, f"Usuario '{usuario.username}' {estado}.")
-        except User.DoesNotExist:
-            messages.error(request, "Usuario no encontrado.")
+                return redirect("usuarios:gestion_usuarios")
+
+            perfil = repo.toggle_activo(pk)
+
+            # Sincronizar flag is_active en Django User
+            User = get_user_model()
+            try:
+                django_user = User.objects.get(username=perfil.usernamelogin)
+                if django_user.is_active != perfil.activo:
+                    django_user.is_active = perfil.activo
+                    django_user.save(update_fields=["is_active"])
+            except User.DoesNotExist:
+                pass
+
+            estado = "activado" if perfil.activo else "desactivado"
+            messages.success(request, f"Usuario '{perfil.usernamelogin}' {estado}.")
+        except Exception as exc:
+            messages.error(request, f"Error al actualizar usuario: {exc}")
         return redirect("usuarios:gestion_usuarios")

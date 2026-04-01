@@ -27,7 +27,10 @@
         </div>
       </div>
     </div>
-    <a href="{% url 'usuarios:logout' %}" class="btn btn-ghost btn-sm">⎋</a>
+    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost btn-sm" title="Cerrar sesión">⎋</button>
+    </form>
   </div>
 </nav>
 

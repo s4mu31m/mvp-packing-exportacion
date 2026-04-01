@@ -19,7 +19,10 @@
         {% endif %}
       </p>
     </div>
-    <a href="{% url 'usuarios:logout' %}" style="padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); text-decoration: none; color: var(--text-primary); font-size: .88rem;">Cerrar sesión</a>
+    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" style="padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-primary); font-size: .88rem; cursor: pointer;">Cerrar sesión</button>
+    </form>
   </div>
 
   <!-- Mensajes -->

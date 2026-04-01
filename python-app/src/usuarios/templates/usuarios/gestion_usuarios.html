@@ -3,13 +3,13 @@
 {% block title %}Gestión de Usuarios — CaliPro{% endblock %}
 
 {% block content %}
-<div class="container" style="padding: 32px; max-width: 900px; margin: 0 auto;">
+<div class="container" style="padding: 32px; max-width: 960px; margin: 0 auto;">
 
   <!-- Encabezado -->
   <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 28px;">
     <div>
       <h1 style="margin: 0 0 4px 0; font-size: 1.5rem;">Gestión de Usuarios</h1>
-      <p style="margin: 0; color: var(--text-muted); font-size: .88rem;">Usuarios registrados en el sistema — solo administradores.</p>
+      <p style="margin: 0; color: var(--text-muted); font-size: .88rem;">Usuarios operativos — solo administradores. Roles leídos desde crf21_usuariooperativos.</p>
     </div>
     <a href="{% url 'usuarios:portal' %}" style="padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); text-decoration: none; color: var(--text-primary); font-size: .85rem;">← Portal</a>
   </div>
@@ -30,54 +30,61 @@
     <h2 style="margin: 0 0 20px 0; font-size: 1rem; font-weight: 600;">Nuevo usuario</h2>
     <form method="post" action="{% url 'usuarios:crear_usuario' %}">
       {% csrf_token %}
+
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
 
         <div>
-          <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Usuario *</label>
-          <input type="text" name="username" required maxlength="150"
+          <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Usuario (login) *</label>
+          <input type="text" name="usernamelogin" required maxlength="150" autocomplete="off"
                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;box-sizing:border-box;background:var(--bg-raised);color:var(--text-primary);">
         </div>
 
         <div>
-          <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Nombre</label>
-          <input type="text" name="first_name" maxlength="150"
-                 style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;box-sizing:border-box;background:var(--bg-raised);color:var(--text-primary);">
-        </div>
-
-        <div>
-          <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Apellido</label>
-          <input type="text" name="last_name" maxlength="150"
+          <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Nombre completo</label>
+          <input type="text" name="nombrecompleto" maxlength="255"
                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;box-sizing:border-box;background:var(--bg-raised);color:var(--text-primary);">
         </div>
 
         <div>
           <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Correo electrónico</label>
-          <input type="email" name="email" maxlength="254"
+          <input type="email" name="correo" maxlength="254"
                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;box-sizing:border-box;background:var(--bg-raised);color:var(--text-primary);">
         </div>
 
         <div>
           <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Contraseña *</label>
-          <input type="password" name="password1" required
+          <input type="password" name="password" required autocomplete="new-password"
                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;box-sizing:border-box;background:var(--bg-raised);color:var(--text-primary);">
         </div>
 
         <div>
           <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Confirmar contraseña *</label>
-          <input type="password" name="password2" required
+          <input type="password" name="password_confirm" required autocomplete="new-password"
                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;box-sizing:border-box;background:var(--bg-raised);color:var(--text-primary);">
         </div>
 
-        <div>
-          <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:4px;">Rol *</label>
-          <select name="rol" required
-                  style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;box-sizing:border-box;background:var(--bg-raised);color:var(--text-primary);">
-            <option value="operador">Operador</option>
-            <option value="jefatura">Jefatura</option>
-            <option value="administrador">Administrador</option>
-          </select>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding-top:8px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+            <input type="checkbox" name="activo" value="true" checked> Activo
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+            <input type="checkbox" name="bloqueado" value="true"> Bloqueado
+          </label>
         </div>
 
+      </div>
+
+      <!-- Multiselect de roles -->
+      <div style="margin-bottom: 16px;">
+        <label style="display:block;font-size:.82rem;font-weight:600;margin-bottom:8px;">Roles * <span style="font-weight:400;color:var(--text-muted);">(selecciona uno o más)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          {% for value, label in roles_choices %}
+            <label style="display:flex;align-items:center;gap:5px;font-size:.83rem;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);cursor:pointer;">
+              <input type="checkbox" name="roles" value="{{ value }}">
+              {{ label }}
+            </label>
+          {% endfor %}
+        </div>
       </div>
 
       <button type="submit"
@@ -94,47 +101,61 @@
     </div>
     {% if usuarios %}
       <div style="overflow-x: auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+        <table style="width:100%;border-collapse:collapse;font-size:.83rem;">
           <thead>
             <tr style="background:var(--bg-raised);border-bottom:1px solid var(--border);">
-              <th style="padding:10px 16px;text-align:left;font-weight:600;">Usuario</th>
-              <th style="padding:10px 16px;text-align:left;font-weight:600;">Nombre</th>
-              <th style="padding:10px 16px;text-align:left;font-weight:600;">Correo</th>
-              <th style="padding:10px 16px;text-align:left;font-weight:600;">Rol</th>
-              <th style="padding:10px 16px;text-align:center;font-weight:600;">Estado</th>
-              <th style="padding:10px 16px;text-align:center;font-weight:600;">Acciones</th>
+              <th style="padding:10px 14px;text-align:left;font-weight:600;">Login</th>
+              <th style="padding:10px 14px;text-align:left;font-weight:600;">Nombre completo</th>
+              <th style="padding:10px 14px;text-align:left;font-weight:600;">Correo</th>
+              <th style="padding:10px 14px;text-align:left;font-weight:600;">Roles</th>
+              <th style="padding:10px 14px;text-align:left;font-weight:600;">Cód. Operador</th>
+              <th style="padding:10px 14px;text-align:center;font-weight:600;">Activo</th>
+              <th style="padding:10px 14px;text-align:center;font-weight:600;">Bloqueado</th>
+              <th style="padding:10px 14px;text-align:center;font-weight:600;">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {% for u in usuarios %}
-              <tr style="border-bottom:1px solid var(--border);{% if not u.is_active %}opacity:.55;{% endif %}">
-                <td style="padding:10px 16px;font-family:monospace;font-weight:600;">{{ u.username }}</td>
-                <td style="padding:10px 16px;">{{ u.get_full_name|default:"—" }}</td>
-                <td style="padding:10px 16px;color:var(--text-muted);">{{ u.email|default:"—" }}</td>
-                <td style="padding:10px 16px;">
-                  {% if u.is_superuser %}
-                    <span style="padding:2px 8px;border-radius:4px;background:rgba(251,191,36,.15);color:#fbbf24;font-size:.76rem;font-weight:600;">Administrador</span>
-                  {% elif u.is_staff %}
-                    <span style="padding:2px 8px;border-radius:4px;background:rgba(20,184,166,.15);color:var(--teal-400);font-size:.76rem;font-weight:600;">Jefatura</span>
+              <tr style="border-bottom:1px solid var(--border);{% if not u.activo %}opacity:.5;{% endif %}">
+                <td style="padding:10px 14px;font-family:monospace;font-weight:600;">{{ u.usernamelogin }}</td>
+                <td style="padding:10px 14px;">{{ u.nombrecompleto|default:"—" }}</td>
+                <td style="padding:10px 14px;color:var(--text-muted);">{{ u.correo|default:"—" }}</td>
+                <td style="padding:10px 14px;">
+                  {% if u.rol %}
+                    {# Mostrar roles como texto. Colores según rol primario detectado en string. #}
+                    <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:.74rem;font-weight:600;
+                      {% if 'Administrador' in u.rol %}background:rgba(251,191,36,.15);color:#fbbf24;
+                      {% elif 'Jefatura' in u.rol %}background:rgba(20,184,166,.15);color:var(--teal-400);
+                      {% else %}background:rgba(52,211,153,.12);color:var(--success);{% endif %}">
+                      {{ u.rol }}
+                    </span>
                   {% else %}
-                    <span style="padding:2px 8px;border-radius:4px;background:rgba(52,211,153,.15);color:var(--success);font-size:.76rem;font-weight:600;">Operador</span>
+                    <span style="color:var(--text-dim);font-size:.8rem;">Sin rol</span>
                   {% endif %}
                 </td>
-                <td style="padding:10px 16px;text-align:center;">
-                  {% if u.is_active %}
-                    <span style="color:var(--success);font-weight:600;">Activo</span>
+                <td style="padding:10px 14px;font-family:monospace;font-size:.8rem;color:var(--text-muted);">{{ u.codigooperador }}</td>
+                <td style="padding:10px 14px;text-align:center;">
+                  {% if u.activo %}
+                    <span style="color:var(--success);font-weight:600;">Sí</span>
                   {% else %}
-                    <span style="color:var(--text-dim);">Inactivo</span>
+                    <span style="color:var(--text-dim);">No</span>
                   {% endif %}
                 </td>
-                <td style="padding:10px 16px;text-align:center;">
-                  {% if u != request.user %}
-                    <form method="post" action="{% url 'usuarios:toggle_usuario' u.pk %}" style="display:inline;">
+                <td style="padding:10px 14px;text-align:center;">
+                  {% if u.bloqueado %}
+                    <span style="color:var(--danger);font-weight:600;">Sí</span>
+                  {% else %}
+                    <span style="color:var(--text-dim);">No</span>
+                  {% endif %}
+                </td>
+                <td style="padding:10px 14px;text-align:center;">
+                  {% if u.usernamelogin != request.user.username %}
+                    <form method="post" action="{% url 'usuarios:toggle_usuario' u.id %}" style="display:inline;">
                       {% csrf_token %}
                       <button type="submit"
                               style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary);font-size:.78rem;cursor:pointer;"
-                              title="{% if u.is_active %}Desactivar{% else %}Activar{% endif %} usuario">
-                        {% if u.is_active %}Desactivar{% else %}Activar{% endif %}
+                              title="{% if u.activo %}Desactivar{% else %}Activar{% endif %} usuario">
+                        {% if u.activo %}Desactivar{% else %}Activar{% endif %}
                       </button>
                     </form>
                   {% else %}
@@ -152,9 +173,8 @@
   </div>
 
   <div style="margin-top: 16px; font-size: .75rem; color: var(--text-dim);">
-    Los roles se mapean a permisos nativos de Django: Operador = usuario estándar,
-    Jefatura = is_staff, Administrador = is_superuser.
-    Usuarios del portal web; no sincronizado con Dataverse.
+    Roles leídos desde <code>crf21_rol</code> (texto separado por coma). Código de operador generado automáticamente al crear (inmutable).
+    Backend activo: <code>{{ request.session.crf21_rol|default:"sin sesión" }}</code>.
   </div>
 
 </div>
