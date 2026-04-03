@@ -18,7 +18,7 @@ El proyecto se encuentra en un estado de **avance funcional sólido pero con bre
 | Escenario de entrega | Readiness | Viabilidad para el 10 abril |
 |---|---|---|
 | Piloto funcional con SQLite en Render | **72%** | Alcanzable con trabajo enfocado |
-| Producción real con Dataverse como backend | **40%** | **No alcanzable** — Issue #39 tiene target 17 abril |
+| Producción real con Dataverse como backend | **40%** | **No alcanzable** — Issue #39 venció hoy sin completarse |
 
 ---
 
@@ -178,7 +178,7 @@ El módulo documenta explícitamente sus propias limitaciones:
 **Impacto:** Con `PERSISTENCE_BACKEND=dataverse`, el sistema **no puede registrar eventos de trazabilidad** (RegistroEtapa es no-op) y los correlativos no son seguros bajo concurrencia.
 
 **Issue relacionado:** #39 — `[INT-003] Configurar mapeo local-Dataverse y validar claves de negocio`  
-**Target declarado:** 17 de abril de 2026 — **7 días después del deadline de entrega**
+**Target declarado:** 03 de abril de 2026 — **VENCIDO HOY, aún abierto** (última actualización: 03-04-2026 22:46 UTC)
 
 ---
 
@@ -263,12 +263,12 @@ PERSISTENCE_BACKEND=dataverse  # o "sqlite" para piloto
 
 ## 5. Issues Abiertos y su Impacto en la Entrega
 
-| Issue | Título | Target | Impacto |
+| Issue | Título | Target original | Estado |
 |---|---|---|---|
-| #39 | `[INT-003]` Configurar mapeo local-Dataverse | 17 abril 2026 | 🔴 CRÍTICO — Bloquea sincronización real con Dataverse |
-| #37 | `[DOC-001]` Corregir documentación histórica y mapeo a nomenclatura 03.x | Sin fecha | 🟡 BAJO — Afecta consistencia documental, no funcionalidad |
+| #39 | `[INT-003]` Configurar mapeo local-Dataverse | **03 abril 2026** | 🔴 **VENCIDO HOY** — aún abierto, bloquea Dataverse |
+| #37 | `[DOC-001]` Corregir documentación histórica y mapeo a nomenclatura 03.x | Sin fecha | 🟡 Abierto — afecta consistencia documental |
 
-**Ambos issues están ABIERTOS a 7 días del deadline.** El issue #39 tiene target oficial 17 de abril — una semana después de la entrega solicitada.
+**El issue #39 tenía como target hoy mismo (03-04-2026) y está sin completar.** Esto significa que el mapeo local ↔ Dataverse —prerequisito para que el backend opere en modo Dataverse— está atrasado con respecto al plan interno del proyecto. Para llegar al 10 de abril con Dataverse operativo, ese trabajo pendiente se acumula ahora sobre los 7 días disponibles.
 
 ---
 
@@ -299,10 +299,10 @@ El sistema es funcional sobre SQLite. Para desplegar en Render en modo piloto:
 
 **Readiness estimado: 40%**
 
-Requiere completar el issue #39 (target oficial: 17 abril), implementar los repositorios Dataverse actualmente como stubs, resolver la atomicidad de secuencias, y validar las 15 tablas `crf21_*` con datos reales.
+Requiere completar el issue #39 (cuyo target era hoy y está vencido sin completarse), implementar los repositorios Dataverse actualmente como stubs, resolver la atomicidad de secuencias, y validar las 15 tablas `crf21_*` con datos reales.
 
-**Trabajo estimado:** 2–3 semanas adicionales  
-**Viabilidad para el 10 abril:** ❌ No alcanzable — el propio proyecto tiene el target el 17 de abril
+**Trabajo estimado:** 1–2 semanas desde el punto actual  
+**Viabilidad para el 10 abril:** ❌ No alcanzable — el mapeo base (prerequisito) ya lleva retraso desde hoy
 
 ---
 
@@ -338,9 +338,10 @@ Viernes 10            │ Entrega — piloto funcional en Render con SQLite
 
 Si se elige el Escenario B (Dataverse real):
 ```
-Semana 1 (6–10 abril)  │ Completar repositorios Dataverse + mapeo (Issue #39)
-Semana 2 (13–17 abril) │ Validación integración + pruebas + deploy
-17 abril               │ Target declarado en Issue #39
+Hoy  3 abril (VENCIDO) │ Issue #39 tenía como target hoy — mapeo sin completar
+Lunes  6 → Jueves  9   │ Completar mapeo + repositorios Dataverse (deuda de hoy)
+Viernes 10             │ Validación mínima — integración Dataverse muy ajustada/inviable
+Semana 14-17 abril     │ Escenario más realista para tener Dataverse estable
 ```
 
 ---
@@ -378,7 +379,7 @@ El proyecto tiene una **base técnica sólida y bien estructurada**. La arquitec
 
 **Veredicto para el viernes 10 de abril:**
 - Entrega como **piloto funcional en Render con SQLite**: viable, requiere ~8 horas de configuración de despliegue
-- Entrega como **sistema productivo integrado a Dataverse**: no alcanzable, el propio proyecto tiene target el 17 de abril para el mapeo base
+- Entrega como **sistema productivo integrado a Dataverse**: no alcanzable — el issue de mapeo base (#39) venció hoy sin completarse, acumulando deuda sobre los 7 días restantes
 
 La recomendación es **entregar el piloto claramente documentado**, especificando las capacidades actuales y el plan para la integración Dataverse completa en la semana siguiente.
 
