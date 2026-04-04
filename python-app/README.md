@@ -8,7 +8,7 @@ Backend Django con lógica de negocio, modelos de dominio, casos de uso y capa d
 
 ---
 
-## Estado actual (2026-03-31)
+## Estado actual (2026-04-04)
 
 El flujo MVP completo está implementado y funcional en ambos backends.
 
@@ -27,7 +27,7 @@ El flujo MVP completo está implementado y funcional en ambos backends.
 | Cámara de frío | Funcional | Funcional |
 | Medición temperatura salida | Funcional | Funcional |
 | Trazabilidad (registro_etapas) | Funcional | No-op con log local (tabla no existe en Dataverse) |
-| CalidadPalletMuestra | Funcional | Solo SQLite (tabla no existe en Dataverse aún) |
+| CalidadPalletMuestra | Funcional | Funcional (tabla `crf21_calidad_pallet_muestras` creada 2026-04-04) |
 
 ---
 
@@ -92,7 +92,7 @@ y leen desde Dataverse. Los tests de Django siguen corriendo contra SQLite
 | Trazabilidad de etapas | `RegistroEtapa` en SQLite | Log local (no persiste en Dataverse) |
 | Correlativos de código | SequenceCounter atómico | Conteo de registros existentes (no atómico) |
 | Transacciones | ACID via Django ORM | No soportado por Dataverse Web API |
-| `CalidadPalletMuestra` | ORM directo | No implementado en Dataverse |
+| `CalidadPalletMuestra` | ORM directo | `DataverseCalidadPalletMuestraRepository` via OData |
 
 ---
 
@@ -112,7 +112,7 @@ PERSISTENCE_BACKEND = "dataverse"   # producción / pruebas reales
 cd src
 python manage.py check
 python manage.py test operaciones.test
-# 115 tests, todos pasan en SQLite
+# 196 tests, todos pasan en SQLite
 ```
 
 Los tests corren siempre en SQLite. Para smoke tests contra Dataverse real,
@@ -148,7 +148,7 @@ python-app/
         ├── forms.py
         ├── application/use_cases/  # 13 casos de uso
         ├── services/
-        └── test/                   # 115 tests
+        └── test/                   # 196 tests
 ```
 
 ---

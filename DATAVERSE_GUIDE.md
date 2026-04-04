@@ -26,7 +26,7 @@ Esta guía **no** cubre todavía:
 - sincronización completa entre modelo Django y Dataverse,
 - capa funcional final del dominio apoyada totalmente en Dataverse.
  
-> Importante: en el estado revisado, la integración Dataverse está orientada a **conectividad, validación de tablas y pruebas iniciales**, no a una API funcional completa del dominio.
+> Importante: la integración Dataverse está **operativa para el flujo MVP completo**. Las 16 tablas del modelo tienen repositorios implementados (SQLite + Dataverse). Los límites conocidos y el único gap bloqueante pendiente están documentados en la sección 17 y en [`docs/cierre-mvp/limites-aceptados-mvp.md`](docs/cierre-mvp/limites-aceptados-mvp.md).
  
 ---
  

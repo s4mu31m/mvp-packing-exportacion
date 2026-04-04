@@ -12,7 +12,7 @@ Digitalizar el flujo operativo de recepción, trazabilidad y packing de fruta en
 
 ---
 
-## Estado actual — 2026-03-30
+## Estado actual — 2026-04-04
 
 | Paso | Estado | Descripción |
 |------|--------|-------------|
@@ -21,17 +21,19 @@ Digitalizar el flujo operativo de recepción, trazabilidad y packing de fruta en
 | Paso 3 — Lógica de negocio (casos de uso) | ✅ Completado | Capa de aplicación con casos de uso, validados con tests |
 | Paso 4 — Interfaz operativa web | ✅ Completado | Vistas HTML operativas para cada etapa del flujo |
 | Paso 4b — API REST | ✅ Completado | Endpoints DRF expuestos para bins, lotes, pallets, eventos y trazabilidad |
-| Paso 5 — Integración con Dataverse | 🔄 En progreso | Cliente OData y endpoints de diagnóstico implementados; sincronización completa pendiente |
+| Paso 5 — Integración con Dataverse | ✅ Completado | Backend Dataverse funcional para el flujo MVP completo; límites conocidos documentados en `docs/cierre-mvp/` |
 
 ---
 
 ## Flujo operativo cubierto
 
 ```
-Recepción → Pesaje → Desverdizado → Ingreso Packing → Proceso → Control → Paletizado → Cámaras
+Recepción → Desverdizado → Ingreso Packing → Proceso → Control → Paletizado → Cámaras
 ```
 
-Cada etapa tiene su propia vista web y registra eventos auditables (`RegistroEtapa`). La recepción implementa el flujo completo: apertura de lote, registro de bins con código generado automáticamente y pesaje.
+Cada etapa tiene su propia vista web. La recepción implementa el flujo completo: apertura de lote, registro de bins con código generado automáticamente y cierre de lote con pesaje (kg bruto/neto).
+
+> **Nota backend:** En SQLite el avance del lote se representa con el campo `estado` (abierto/cerrado/finalizado). En Dataverse se usa el campo `crf21_etapa_actual` (Recepcion, Pesaje, Desverdizado, …) como fuente de verdad operativa.
 
 ---
 
@@ -104,8 +106,7 @@ mvp-packing-exportacion/
 | Ruta | Vista |
 |------|-------|
 | `/operaciones/` | Dashboard |
-| `/operaciones/recepcion/` | Recepción de bins y apertura de lote |
-| `/operaciones/pesaje/` | Pesaje y asignación de lote |
+| `/operaciones/recepcion/` | Recepción de bins, apertura y cierre de lote (incluye pesaje) |
 | `/operaciones/desverdizado/` | Ingreso/salida de desverdizado |
 | `/operaciones/ingreso-packing/` | Ingreso a proceso de packing |
 | `/operaciones/proceso/` | Proceso de packing |
@@ -113,6 +114,9 @@ mvp-packing-exportacion/
 | `/operaciones/paletizado/` | Paletizado |
 | `/operaciones/camaras/` | Cámaras de frío y mantención |
 | `/operaciones/consulta/` | Consulta de jefatura |
+| `/operaciones/consulta/exportar/` | Exportación CSV de lotes |
+
+> El pesaje del lote (kg bruto/neto de conformación) se captura en el formulario de cierre del lote dentro de Recepción. No existe una vista operativa separada `/operaciones/pesaje/`.
 
 ## Diagnóstico Dataverse (`/api/dataverse/`)
 
@@ -129,7 +133,7 @@ mvp-packing-exportacion/
 
 - **Python + Django** — backend, lógica de negocio, casos de uso
 - **Django REST Framework** — API REST
-- **Microsoft Dataverse / Power Platform** — destino de sincronización (integración en progreso)
+- **Microsoft Dataverse / Power Platform** — backend de producción; flujo MVP completo operativo
 - **SQLite** — base de datos local de desarrollo
 - **GitHub** — gestión del proyecto
 

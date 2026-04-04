@@ -1,3 +1,14 @@
+# Estado vigente consolidado
+
+**Fuente de verdad actual:** [`docs/cierre-mvp/estado-actual-mvp.md`](../docs/cierre-mvp/estado-actual-mvp.md)
+
+Para conocer qué está operativo, qué rutas existen, cuántos tests pasan y qué gaps quedan pendientes, consultar ese documento.
+Para los límites aceptados del MVP (incluyendo gaps bloqueantes), ver [`docs/cierre-mvp/limites-aceptados-mvp.md`](../docs/cierre-mvp/limites-aceptados-mvp.md).
+
+Las iteraciones documentadas a continuación se conservan solo como historial técnico. Los estados descritos en cada sección reflejan el momento de esa iteración, no el estado actual.
+
+---
+
 # Cambios Técnicos — Iteración 2026-03-31 (b): Integración crf21_etapa_actual
 
 **Branch:** `main`
