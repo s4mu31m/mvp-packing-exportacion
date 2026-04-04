@@ -2,7 +2,6 @@
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
 import json
 from operaciones.application.use_cases import (
     registrar_bin_recibido,
@@ -13,7 +12,6 @@ from operaciones.application.use_cases import (
 from operaciones.models import Bin, Lote, Pallet, RegistroEtapa
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def api_registrar_bin(request):
     payload = json.loads(request.body)
@@ -25,7 +23,6 @@ def api_registrar_bin(request):
     )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def api_crear_lote(request):
     payload = json.loads(request.body)
@@ -37,7 +34,6 @@ def api_crear_lote(request):
     )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def api_cerrar_pallet(request):
     payload = json.loads(request.body)
@@ -49,7 +45,6 @@ def api_cerrar_pallet(request):
     )
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def api_registrar_evento(request):
     payload = json.loads(request.body)

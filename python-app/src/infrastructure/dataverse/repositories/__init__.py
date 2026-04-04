@@ -71,6 +71,8 @@ from domain.repositories.base import (
     ControlProcesoPackingRepository,
     CalidadPalletRecord,
     CalidadPalletRepository,
+    CalidadPalletMuestraRecord,
+    CalidadPalletMuestraRepository,
     CamaraFrioRecord,
     CamaraFrioRepository,
     MedicionTemperaturaSalidaRecord,
@@ -89,6 +91,7 @@ from infrastructure.dataverse.mapping import (
     ENTITY_SET_REGISTRO_PACKING,
     ENTITY_SET_CONTROL_PROCESO_PACKING,
     ENTITY_SET_CALIDAD_PALLET,
+    ENTITY_SET_CALIDAD_PALLET_MUESTRA,
     ENTITY_SET_CAMARA_FRIO,
     ENTITY_SET_MEDICION_TEMPERATURA,
     BIN_FIELDS,
@@ -104,6 +107,7 @@ from infrastructure.dataverse.mapping import (
     REGISTRO_PACKING_FIELDS,
     CONTROL_PROCESO_PACKING_FIELDS,
     CALIDAD_PALLET_FIELDS,
+    CALIDAD_PALLET_MUESTRA_FIELDS,
     CAMARA_FRIO_FIELDS,
     MEDICION_TEMPERATURA_FIELDS,
     odata_bind,
@@ -327,6 +331,23 @@ def _row_to_calidad_pallet(row: dict, pallet_id: Any = None) -> CalidadPalletRec
         operator_code=_str(row.get(CALIDAD_PALLET_FIELDS["operator_code"])),
         source_system="dataverse",
         rol=_str(row.get(CALIDAD_PALLET_FIELDS["rol"])),
+    )
+
+
+def _row_to_calidad_pallet_muestra(row: dict, pallet_id: Any = None) -> CalidadPalletMuestraRecord:
+    raw_n = row.get(CALIDAD_PALLET_MUESTRA_FIELDS["n_frutos"])
+    return CalidadPalletMuestraRecord(
+        id=row.get(CALIDAD_PALLET_MUESTRA_FIELDS["id"]),
+        pallet_id=pallet_id or row.get(CALIDAD_PALLET_MUESTRA_FIELDS["pallet_id_value"]),
+        numero_muestra=int(raw_n) if raw_n is not None else None,
+        temperatura_fruta=_parse_decimal(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["temperatura_fruta"])),
+        peso_caja_muestra=_parse_decimal(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["peso_caja_muestra"])),
+        n_frutos=int(raw_n) if raw_n is not None else None,
+        aprobado=row.get(CALIDAD_PALLET_MUESTRA_FIELDS["aprobado"]),
+        observaciones=_str(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["observaciones"])),
+        operator_code=_str(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["rol"])),
     )
 
 
@@ -1480,6 +1501,68 @@ class DataverseCalidadPalletRepository(CalidadPalletRepository):
 
 
 # ---------------------------------------------------------------------------
+# CalidadPalletMuestraRepository
+# ---------------------------------------------------------------------------
+
+class DataverseCalidadPalletMuestraRepository(CalidadPalletMuestraRepository):
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(
+        self,
+        pallet_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> CalidadPalletMuestraRecord:
+        body: dict = {
+            f"{CALIDAD_PALLET_MUESTRA_FIELDS['pallet_id']}@odata.bind": odata_bind(ENTITY_SET_PALLET, str(pallet_id)),
+            CALIDAD_PALLET_MUESTRA_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "numero_muestra":    CALIDAD_PALLET_MUESTRA_FIELDS["numero_muestra"],
+            "temperatura_fruta": CALIDAD_PALLET_MUESTRA_FIELDS["temperatura_fruta"],
+            "peso_caja_muestra": CALIDAD_PALLET_MUESTRA_FIELDS["peso_caja_muestra"],
+            "n_frutos":          CALIDAD_PALLET_MUESTRA_FIELDS["n_frutos"],
+            "aprobado":          CALIDAD_PALLET_MUESTRA_FIELDS["aprobado"],
+            "observaciones":     CALIDAD_PALLET_MUESTRA_FIELDS["observaciones"],
+            "rol":               CALIDAD_PALLET_MUESTRA_FIELDS["rol"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_CALIDAD_PALLET_MUESTRA, body) or {}
+        extra = extra or {}
+        return CalidadPalletMuestraRecord(
+            id=row.get(CALIDAD_PALLET_MUESTRA_FIELDS["id"]),
+            pallet_id=pallet_id,
+            numero_muestra=extra.get("numero_muestra"),
+            aprobado=extra.get("aprobado"),
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_pallet(self, pallet_id: Any) -> list[CalidadPalletMuestraRecord]:
+        f = f"{CALIDAD_PALLET_MUESTRA_FIELDS['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_CALIDAD_PALLET_MUESTRA,
+            select=[CALIDAD_PALLET_MUESTRA_FIELDS[k] for k in (
+                "id", "pallet_id_value", "numero_muestra",
+                "temperatura_fruta", "peso_caja_muestra", "n_frutos",
+                "aprobado", "observaciones", "operator_code",
+            )],
+            filter_expr=f,
+            orderby="crf21_numero_muestra asc",
+            top=100,
+        )
+        return [_row_to_calidad_pallet_muestra(r, pallet_id) for r in (result or {}).get("value", [])]
+
+
+# ---------------------------------------------------------------------------
 # CamaraFrioRepository
 # ---------------------------------------------------------------------------
 
@@ -1709,6 +1792,7 @@ def build_dataverse_repositories() -> Repositories:
         registros_packing=DataverseRegistroPackingRepository(client),
         control_proceso_packings=DataverseControlProcesoPackingRepository(client),
         calidad_pallets=DataverseCalidadPalletRepository(client),
+        calidad_pallet_muestras=DataverseCalidadPalletMuestraRepository(client),
         camara_frios=DataverseCamaraFrioRepository(client),
         mediciones_temperatura=DataverseMedicionTemperaturaSalidaRepository(client),
     )

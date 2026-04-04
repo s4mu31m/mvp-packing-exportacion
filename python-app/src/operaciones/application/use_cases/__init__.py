@@ -1,4 +1,5 @@
 from .registrar_bin_recibido import registrar_bin_recibido
+from .registrar_pesaje_lote import registrar_pesaje_lote
 from .crear_lote_recepcion import crear_lote_recepcion
 from .iniciar_lote_recepcion import iniciar_lote_recepcion
 from .agregar_bin_a_lote_abierto import agregar_bin_a_lote_abierto

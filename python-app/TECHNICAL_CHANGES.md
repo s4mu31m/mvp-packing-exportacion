@@ -233,7 +233,173 @@ cada entidad.
 | `registro_etapas` no existe en Dataverse | No-op con log local; no bloquea el flujo |
 | `SequenceCounter` sin tabla Dataverse | Cuenta registros existentes (no atómico; aceptable para MVP) |
 | Dashboard no muestra lotes cerrados/finalizados en Dataverse | Limitación conocida; documentada en template y aquí |
-| `CalidadPalletMuestra` solo en SQLite | `_save_muestras` en `PaletizadoView` usa ORM directo; pendiente Dataverse |
+| `CalidadPalletMuestra` solo en SQLite | Resuelto en iteracion 2026-04-04 — ver seccion siguiente |
+
+---
+
+# Cambios Tecnicos — Iteracion 2026-04-04: CalidadPalletMuestra + Cierre Issues
+
+**Branch:** `main`
+**Fecha:** 2026-04-04
+
+---
+
+## Resumen iteracion 2026-04-04
+
+Cierre del Issue #39 y maratón de avance: creación de la tabla
+`crf21_calidad_pallet_muestras` en Dataverse via Metadata API, implementación
+del repositorio completo (SQLite + Dataverse), migración de `_save_muestras`
+al repo layer, corrección de CSRF en 5 endpoints, mejora del manejo de
+excepciones en el auth backend, y creación de scripts standalone de diagnóstico.
+
+### Archivos creados
+
+- `scripts/dataverse/_setup.py`
+- `scripts/dataverse/00_check_env.py`
+- `scripts/dataverse/01_whoami.py`
+- `scripts/dataverse/02_check_tables.py`
+- `scripts/dataverse/03_query_bins.py`
+- `scripts/dataverse/04_query_lotes.py`
+- `scripts/dataverse/05_query_pallets.py`
+- `scripts/dataverse/06_query_usuarios.py`
+- `scripts/dataverse/07_validate_mapping.py`
+- `scripts/dataverse/09_create_calidad_pallet_muestras.py`
+- `scripts/dataverse/run_all.py`
+
+### Archivos modificados
+
+- `python-app/src/infrastructure/dataverse/mapping.py`
+- `python-app/src/domain/repositories/base.py`
+- `python-app/src/infrastructure/dataverse/repositories/__init__.py`
+- `python-app/src/infrastructure/sqlite/repositories.py`
+- `python-app/src/operaciones/views.py`
+- `python-app/src/operaciones/api/views.py`
+- `python-app/src/core/dataverse_views.py`
+- `python-app/src/usuarios/auth_backend.py`
+- `DATAVERSE_GUIDE.md`
+- `python-app/TECHNICAL_CHANGES.md`
+
+### Cambios tecnicos clave
+
+#### 1. Tabla `crf21_calidad_pallet_muestras` creada en Dataverse
+
+Script `09_create_calidad_pallet_muestras.py` crea la tabla via Metadata API:
+
+- Entidad con `SchemaName = "crf21_calidad_pallet_muestra"`
+- Atributo primario `crf21_nombre` (String, IsPrimaryName=True)
+- Campos: `crf21_numero_muestra` (Integer), `crf21_temperatura_fruta` (Decimal),
+  `crf21_peso_caja_muestra` (Decimal), `crf21_n_frutos` (Integer),
+  `crf21_aprobado` (Boolean), `crf21_observaciones` (Memo),
+  `crf21_rol` (String), `crf21_operator_code` (String)
+- Relacion lookup `crf21_pallet_id` → `crf21_pallet` (OneToManyRelationship,
+  CascadeDelete=RemoveLink)
+
+#### 2. `mapping.py` — nuevas constantes
+
+```python
+ENTITY_SET_CALIDAD_PALLET_MUESTRA  = "crf21_calidad_pallet_muestras"
+LOGICAL_NAME_CALIDAD_PALLET_MUESTRA = "crf21_calidad_pallet_muestra"
+CALIDAD_PALLET_MUESTRA_FIELDS = {
+    "id":               "crf21_calidad_pallet_muestraid",
+    "pallet_id":        "crf21_pallet_id",
+    "pallet_id_value":  "_crf21_pallet_id_value",
+    "numero_muestra":   "crf21_numero_muestra",
+    "temperatura_fruta": "crf21_temperatura_fruta",
+    "peso_caja_muestra": "crf21_peso_caja_muestra",
+    "n_frutos":         "crf21_n_frutos",
+    "aprobado":         "crf21_aprobado",
+    "observaciones":    "crf21_observaciones",
+    "rol":              "crf21_rol",
+    "operator_code":    "crf21_operator_code",
+    "created_at":       "createdon",
+    "updated_at":       "modifiedon",
+}
+```
+
+#### 3. `domain/repositories/base.py` — nuevo record y repositorio abstracto
+
+```python
+@dataclass
+class CalidadPalletMuestraRecord:
+    id: Any
+    pallet_id: Any
+    numero_muestra: Optional[int] = None
+    temperatura_fruta: Optional[Decimal] = None
+    peso_caja_muestra: Optional[Decimal] = None
+    n_frutos: Optional[int] = None
+    aprobado: Optional[bool] = None
+    observaciones: str = ""
+    operator_code: str = ""
+    source_system: str = "local"
+    rol: str = ""
+
+class CalidadPalletMuestraRepository(ABC):
+    def create(pallet_id, *, operator_code, source_system, extra) -> CalidadPalletMuestraRecord
+    def list_by_pallet(pallet_id) -> list[CalidadPalletMuestraRecord]
+```
+
+`Repositories` dataclass: campo `calidad_pallet_muestras: CalidadPalletMuestraRepository`
+agregado entre `calidad_pallets` y `camara_frios`.
+
+#### 4. `DataverseCalidadPalletMuestraRepository` y `SqliteCalidadPalletMuestraRepository`
+
+Ambos implementan `create` y `list_by_pallet`. El Dataverse usa
+`@odata.bind` para el lookup al pallet. El SQLite usa `CalidadPalletMuestra.objects.create`.
+
+Registrados en sus respectivos factories (`build_dataverse_repositories`,
+`build_sqlite_repositories`).
+
+#### 5. `PaletizadoView._save_muestras` migrado al repo layer
+
+**Antes:** llamaba `CalidadPalletMuestra.objects.create(pallet=pallet_orm, ...)` directamente.
+Muestras no se sincronizaban a Dataverse.
+
+**Despues:** usa `repos.calidad_pallet_muestras.create(pallet_id, extra={...})`.
+El pallet_id se obtiene via `repos.pallets.find_by_code(temporada, pallet_code)`,
+funcional en ambos modos (SQLite y Dataverse).
+
+El import de `CalidadPalletMuestra` (ORM) fue removido de `views.py`.
+
+#### 6. Fix CSRF en 5 endpoints
+
+| Archivo | Endpoints | Cambio |
+|---|---|---|
+| `operaciones/api/views.py` | `api_registrar_bin`, `api_crear_lote`, `api_cerrar_pallet`, `api_registrar_evento` | Removido `@csrf_exempt` |
+| `core/dataverse_views.py` | `save_first_bin_code` | Removido `@csrf_exempt` |
+
+#### 7. `usuarios/auth_backend.py` — excepciones acotadas
+
+`except Exception` generico reemplazado por tres handlers especificos:
+- `DataverseAuthError` → `logger.error` con mensaje de credenciales
+- `DataverseAPIError` → `logger.error` con mensaje de API
+- `Exception` fallback → `logger.exception` (incluye traceback)
+
+### Diagnostico previo a la implementacion
+
+Ejecutado `scripts/dataverse/run_all.py` con resultados:
+- Auth: PASS (WhoAmI OK)
+- 15 tablas originales: PASS (100% existentes con datos reales)
+- `07_validate_mapping.py`: 15/15 entidades PASS, 100% campo a campo coincidente
+- `crf21_registro_etapas`: NO EXISTE — esperado (gap conocido Issue #39)
+- `crf21_calidad_pallet_muestras`: NO EXISTE — creada en esta iteracion
+
+### Validacion final
+
+```
+python manage.py test   -> 196/196 OK (0 fallos, 0 errores)
+02_check_tables.py      -> 16/16 tablas PASS incluida crf21_calidad_pallet_muestras
+```
+
+### Brechas remanentes
+
+| Brecha | Estado |
+|---|---|
+| `crf21_registro_etapas` no existe en Dataverse | No-op con log; no bloquea el flujo. Gap conocido Issue #39. |
+| `SequenceCounter` sin tabla Dataverse | Cuenta registros (no atomico; aceptable para MVP) |
+| Transacciones ACID | Dataverse no soporta; brecha conocida |
+
+---
+
 
 ---
 
@@ -646,8 +812,9 @@ Los stubs elevan `NotImplementedError` con mensaje descriptivo si son invocados.
 |---|---|---|
 | `test_sequences_and_codes` | 17 | ✅ Pasan |
 | `test_iniciar_lote_recepcion` | 16 | ✅ Pasan |
+| `operaciones.tests` (nuevos) | 28 | ✅ Pasan |
 | Suites existentes | 82 | ✅ Pasan |
-| **Total** | **115** | **✅ OK** |
+| **Total** | **143** | **✅ OK** |
 
 Para correr todos:
 
@@ -655,3 +822,81 @@ Para correr todos:
 cd python-app/src
 python manage.py test operaciones.test
 ```
+
+---
+
+## 11. Conexión frontend → backend: flujo de recepción con lote abierto (2026-03-30)
+
+### Problema resuelto
+
+La UI web seguía usando el flujo legacy (bins sueltos + conformación manual de lote). Los casos de uso `iniciar_lote_recepcion`, `agregar_bin_a_lote_abierto` y `cerrar_lote_recepcion` ya existían en backend pero no estaban conectados a ninguna vista web.
+
+### Flujo nuevo implementado en frontend
+
+```mermaid
+sequenceDiagram
+    actor Op as Operador
+    participant W as RecepcionView
+    participant S as Sesion Django
+    participant UC as Use Cases
+
+    Op->>W: GET /operaciones/recepcion/
+    W->>S: ¿lote activo?
+    S-->>W: no
+    W-->>Op: mostrar formulario "Iniciar Lote"
+
+    Op->>W: POST action=iniciar_lote
+    W->>UC: iniciar_lote_recepcion(temporada)
+    UC-->>W: lote_code autogenerado, estado=abierto
+    W->>S: session[recepcion_lote_code] = lote_code
+    W-->>Op: redirect → recepcion (lote activo visible)
+
+    loop por cada bin
+        Op->>W: POST action=agregar_bin (atributos del bin)
+        W->>UC: agregar_bin_a_lote_abierto(temporada, lote_code, ...)
+        UC-->>W: bin_code autogenerado, asociado al lote
+        W-->>Op: redirect → recepcion (lista de bins actualizada)
+    end
+
+    Op->>W: POST action=cerrar_lote
+    W->>UC: cerrar_lote_recepcion(temporada, lote_code)
+    UC-->>W: lote estado=cerrado
+    W->>S: del session[recepcion_lote_code]
+    W-->>Op: redirect → recepcion (sin lote activo)
+```
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `operaciones/views.py` | `RecepcionView` reescrita con tres acciones; `DashboardView` usa datos reales; `PesajeView` marcada como legacy |
+| `operaciones/templates/operaciones/recepcion.html` | Reescrito: estado sin lote / estado con lote abierto / lista de bins real |
+| `operaciones/templates/operaciones/pesaje.html` | Aviso de flujo legacy añadido |
+| `operaciones/templates/operaciones/dashboard.html` | KPIs y tabla de lotes recientes desde DB; navegación directa entre etapas |
+| `domain/repositories/base.py` | Nuevos métodos abstractos: `BinRepository.list_by_lote`, `LoteRepository.list_recent`, `BinLoteRepository.list_by_lote` |
+| `infrastructure/sqlite/repositories.py` | Implementaciones SQLite de los tres métodos nuevos |
+| `infrastructure/dataverse/repositories/__init__.py` | Stubs de los tres métodos (log + retorno vacío; documentado como pendiente) |
+| `operaciones/tests.py` | 28 tests nuevos: use cases + repository queries + integración de vistas |
+
+### Sesión Django
+
+La clave `recepcion_lote_code` en sesión almacena el `lote_code` activo. Ciclo de vida:
+- Se escribe al iniciar lote (`action=iniciar_lote`).
+- Se lee en cada GET y en `action=agregar_bin`.
+- Se elimina al cerrar lote (`action=cerrar_lote`) o si el lote ya no existe en DB.
+
+### Estado de soporte por backend
+
+| Funcionalidad | SQLite | Dataverse |
+|---|---|---|
+| Iniciar lote | ✅ Funcional | ✅ Funcional (estado no persiste en DV) |
+| Agregar bin al lote | ✅ Funcional | ✅ Funcional |
+| Cerrar lote | ✅ Funcional | ✅ (estado no persiste en DV) |
+| Listar bins del lote activo | ✅ Funcional | ⚠️ Stub — retorna lista vacía |
+| Dashboard con datos reales | ✅ Funcional | ⚠️ Stub — retorna lista vacía |
+
+### Pendiente
+
+- Dataverse: implementar `list_by_lote` para `BinRepository` y `BinLoteRepository` (requiere query OData sobre la tabla `crf21_bin_lote` filtrando por `lote_id`).
+- Dataverse: implementar `list_recent` para `LoteRepository` (requiere filtro por rango de fechas dado que `temporada` no existe en DV).
+- Template de desverdizado/ingreso-packing: todavía requieren que el operador ingrese manualmente el `lote_code`. Considerar persistir el lote cerrado más reciente en sesión para pre-rellenarlo automáticamente.

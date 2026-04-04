@@ -24,6 +24,8 @@ from django.contrib.auth.hashers import check_password
 
 from usuarios.permissions import SESSION_KEY_ROL, SESSION_KEY_CODIGO_OPERADOR, \
     SESSION_KEY_USUARIO_ID, SESSION_KEY_ACTIVO, SESSION_KEY_BLOQUEADO, parsear_roles
+from infrastructure.dataverse.auth import DataverseAuthError
+from infrastructure.dataverse.client import DataverseAPIError
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -56,8 +58,14 @@ class CaliProAuthBackend:
             django_user._calipro_perfil = perfil
             return django_user
 
-        except Exception as exc:
-            logger.exception("Error en CaliProAuthBackend.authenticate: %s", exc)
+        except DataverseAuthError as exc:
+            logger.error("Error de credenciales Dataverse para '%s': %s", username, exc)
+            return None
+        except DataverseAPIError as exc:
+            logger.error("Error de API Dataverse para '%s': %s", username, exc)
+            return None
+        except Exception:
+            logger.exception("Error inesperado en CaliProAuthBackend.authenticate para '%s'", username)
             return None
 
     def get_user(self, user_id):

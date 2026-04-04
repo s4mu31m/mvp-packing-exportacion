@@ -33,6 +33,7 @@ class BinRecord:
     id_bin: str = ""
     fecha_cosecha: Optional[date] = None
     variedad_fruta: str = ""
+    color: str = ""
     kilos_bruto_ingreso: Optional[Decimal] = None
     kilos_neto_ingreso: Optional[Decimal] = None
 
@@ -246,6 +247,21 @@ class CalidadPalletRecord:
     peso_caja_muestra: Optional[Decimal] = None
     estado_visual_fruta: str = ""
     presencia_defectos: Optional[bool] = None
+    aprobado: Optional[bool] = None
+    observaciones: str = ""
+    operator_code: str = ""
+    source_system: str = "local"
+    rol: str = ""
+
+
+@dataclass
+class CalidadPalletMuestraRecord:
+    id: Any
+    pallet_id: Any
+    numero_muestra: Optional[int] = None
+    temperatura_fruta: Optional[Decimal] = None
+    peso_caja_muestra: Optional[Decimal] = None
+    n_frutos: Optional[int] = None
     aprobado: Optional[bool] = None
     observaciones: str = ""
     operator_code: str = ""
@@ -586,6 +602,19 @@ class CalidadPalletRepository(ABC):
         """Lista los registros de calidad de un pallet."""
 
 
+class CalidadPalletMuestraRepository(ABC):
+
+    @abstractmethod
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> CalidadPalletMuestraRecord:
+        """Crea un registro de muestra individual de calidad para un pallet."""
+
+    @abstractmethod
+    def list_by_pallet(self, pallet_id: Any) -> list[CalidadPalletMuestraRecord]:
+        """Lista las muestras de calidad de un pallet."""
+
+
 class CamaraFrioRepository(ABC):
 
     @abstractmethod
@@ -651,6 +680,7 @@ class Repositories:
     registros_packing: RegistroPackingRepository
     control_proceso_packings: ControlProcesoPackingRepository
     calidad_pallets: CalidadPalletRepository
+    calidad_pallet_muestras: CalidadPalletMuestraRepository
     camara_frios: CamaraFrioRepository
     mediciones_temperatura: MedicionTemperaturaSalidaRepository
     # Gestion de correlativos

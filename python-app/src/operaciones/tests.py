@@ -1,7 +1,11 @@
 """
-Smoke tests del flujo web operativo.
-No buscan cobertura total — validan que las vistas críticas renderizan
-sin errores y que las acciones POST del flujo principal no explotan.
+Tests del flujo operativo de packing.
+
+Cobertura:
+  - Use cases: iniciar_lote_recepcion, agregar_bin_a_lote_abierto, cerrar_lote_recepcion
+  - Repositories: list_by_lote, list_recent
+  - Smoke tests: vistas críticas renderizan 200
+  - Flujo recepcion via POST web
 """
 import datetime
 
@@ -9,11 +13,17 @@ from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+from operaciones.application.use_cases import (
+    iniciar_lote_recepcion,
+    agregar_bin_a_lote_abierto,
+    cerrar_lote_recepcion,
+)
+from infrastructure.repository_factory import get_repositories
 from operaciones.models import (
-    Lote,
-    LotePlantaEstado,
     Bin,
     BinLote,
+    Lote,
+    LotePlantaEstado,
     Pallet,
     PalletLote,
     IngresoAPacking,
@@ -21,11 +31,12 @@ from operaciones.models import (
 )
 
 User = get_user_model()
+
 TEMPORADA = str(datetime.date.today().year)
 
 
 def _make_user():
-    return User.objects.create_user(username="tester", password="pass1234")
+    return User.objects.create_user(username="tester", password="pass1234", is_superuser=True, is_staff=True)
 
 
 def _make_lote(estado=LotePlantaEstado.ABIERTO, **kwargs):
@@ -55,6 +66,226 @@ def _make_bin(lote, **kwargs):
     b = Bin.objects.create(**defaults)
     BinLote.objects.create(bin=b, lote=lote)
     return b
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _iniciar(extra=None):
+    payload = {"temporada": TEMPORADA, "operator_code": "OP-TEST", "source_system": "test"}
+    if extra:
+        payload.update(extra)
+    return iniciar_lote_recepcion(payload)
+
+
+def _agregar_bin(lote_code, extra=None):
+    payload = {
+        "temporada": TEMPORADA,
+        "lote_code": lote_code,
+        "operator_code": "OP-TEST",
+        "source_system": "test",
+        "variedad_fruta": "Thompson",
+        "kilos_neto_ingreso": "200",
+        "kilos_bruto_ingreso": "210",
+    }
+    if extra:
+        payload.update(extra)
+    return agregar_bin_a_lote_abierto(payload)
+
+
+def _cerrar(lote_code):
+    return cerrar_lote_recepcion({
+        "temporada": TEMPORADA,
+        "lote_code": lote_code,
+        "operator_code": "OP-TEST",
+        "source_system": "test",
+    })
+
+
+# ---------------------------------------------------------------------------
+# Use case: iniciar_lote_recepcion
+# ---------------------------------------------------------------------------
+
+class IniciarLoteRecepcionTest(TestCase):
+
+    def test_crea_lote_abierto(self):
+        result = _iniciar()
+        self.assertTrue(result.ok, result.errors)
+        self.assertEqual(result.code, "LOTE_INICIADO")
+        self.assertIn("lote_code", result.data)
+        self.assertEqual(result.data["estado"], "abierto")
+
+    def test_lote_code_autogenerado_no_vacio(self):
+        result = _iniciar()
+        self.assertTrue(result.ok)
+        lote_code = result.data["lote_code"]
+        self.assertTrue(len(lote_code) > 0)
+
+    def test_lote_persiste_en_db(self):
+        result = _iniciar()
+        self.assertTrue(result.ok)
+        repos = get_repositories()
+        lote = repos.lotes.find_by_code(TEMPORADA, result.data["lote_code"])
+        self.assertIsNotNone(lote)
+        self.assertEqual(lote.estado, "abierto")
+        self.assertEqual(lote.cantidad_bins, 0)
+
+    def test_dos_lotes_codigos_distintos(self):
+        r1 = _iniciar()
+        r2 = _iniciar()
+        self.assertTrue(r1.ok)
+        self.assertTrue(r2.ok)
+        self.assertNotEqual(r1.data["lote_code"], r2.data["lote_code"])
+
+    def test_rechaza_sin_temporada(self):
+        result = iniciar_lote_recepcion({})
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "INVALID_PAYLOAD")
+
+
+# ---------------------------------------------------------------------------
+# Use case: agregar_bin_a_lote_abierto
+# ---------------------------------------------------------------------------
+
+class AgregarBinALoteAbiertoTest(TestCase):
+
+    def setUp(self):
+        result = _iniciar()
+        self.assertTrue(result.ok)
+        self.lote_code = result.data["lote_code"]
+
+    def test_agrega_bin_exitosamente(self):
+        result = _agregar_bin(self.lote_code)
+        self.assertTrue(result.ok, result.errors)
+        self.assertEqual(result.code, "BIN_AGREGADO")
+        self.assertIn("bin_code", result.data)
+        self.assertEqual(result.data["lote_code"], self.lote_code)
+
+    def test_bin_code_autogenerado(self):
+        result = _agregar_bin(self.lote_code)
+        self.assertTrue(result.ok)
+        self.assertTrue(len(result.data["bin_code"]) > 0)
+
+    def test_lote_cantidad_bins_incrementa(self):
+        repos = get_repositories()
+        _agregar_bin(self.lote_code)
+        _agregar_bin(self.lote_code)
+        lote = repos.lotes.find_by_code(TEMPORADA, self.lote_code)
+        self.assertEqual(lote.cantidad_bins, 2)
+
+    def test_bin_queda_asociado_al_lote(self):
+        result = _agregar_bin(self.lote_code)
+        self.assertTrue(result.ok)
+        repos = get_repositories()
+        lote = repos.lotes.find_by_code(TEMPORADA, self.lote_code)
+        bins = repos.bins.list_by_lote(lote.id)
+        self.assertEqual(len(bins), 1)
+        self.assertEqual(bins[0].bin_code, result.data["bin_code"])
+
+    def test_rechaza_lote_inexistente(self):
+        result = _agregar_bin("LOTE-NOEXISTE")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "LOTE_NOT_FOUND")
+
+    def test_rechaza_lote_cerrado(self):
+        _agregar_bin(self.lote_code)
+        _cerrar(self.lote_code)
+        result = _agregar_bin(self.lote_code)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "LOTE_NOT_OPEN")
+
+    def test_rechaza_sin_lote_code(self):
+        result = agregar_bin_a_lote_abierto({"temporada": TEMPORADA})
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "INVALID_PAYLOAD")
+
+
+# ---------------------------------------------------------------------------
+# Use case: cerrar_lote_recepcion
+# ---------------------------------------------------------------------------
+
+class CerrarLoteRecepcionTest(TestCase):
+
+    def setUp(self):
+        result = _iniciar()
+        self.assertTrue(result.ok)
+        self.lote_code = result.data["lote_code"]
+
+    def test_rechaza_cerrar_lote_sin_bins(self):
+        result = _cerrar(self.lote_code)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "LOTE_SIN_BINS")
+
+    def test_cierra_lote_con_bins(self):
+        _agregar_bin(self.lote_code)
+        result = _cerrar(self.lote_code)
+        self.assertTrue(result.ok, result.errors)
+        self.assertEqual(result.code, "LOTE_CERRADO")
+        self.assertEqual(result.data["estado"], "cerrado")
+
+    def test_estado_persiste_cerrado_en_db(self):
+        _agregar_bin(self.lote_code)
+        _cerrar(self.lote_code)
+        repos = get_repositories()
+        lote = repos.lotes.find_by_code(TEMPORADA, self.lote_code)
+        self.assertEqual(lote.estado, "cerrado")
+
+    def test_rechaza_cerrar_lote_ya_cerrado(self):
+        _agregar_bin(self.lote_code)
+        _cerrar(self.lote_code)
+        result = _cerrar(self.lote_code)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "LOTE_NOT_OPEN")
+
+    def test_rechaza_cerrar_lote_inexistente(self):
+        result = cerrar_lote_recepcion({
+            "temporada": TEMPORADA,
+            "lote_code": "LOTE-NOEXISTE",
+        })
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "LOTE_NOT_FOUND")
+
+
+# ---------------------------------------------------------------------------
+# Repository: list_by_lote / list_recent
+# ---------------------------------------------------------------------------
+
+class RepositoryQueryTest(TestCase):
+
+    def test_bins_list_by_lote_vacio(self):
+        r = _iniciar()
+        repos = get_repositories()
+        lote = repos.lotes.find_by_code(TEMPORADA, r.data["lote_code"])
+        bins = repos.bins.list_by_lote(lote.id)
+        self.assertEqual(bins, [])
+
+    def test_bins_list_by_lote_con_datos(self):
+        r = _iniciar()
+        lote_code = r.data["lote_code"]
+        _agregar_bin(lote_code)
+        _agregar_bin(lote_code)
+        repos = get_repositories()
+        lote = repos.lotes.find_by_code(TEMPORADA, lote_code)
+        bins = repos.bins.list_by_lote(lote.id)
+        self.assertEqual(len(bins), 2)
+
+    def test_lotes_list_recent(self):
+        _iniciar()
+        _iniciar()
+        repos = get_repositories()
+        lotes = repos.lotes.list_recent(TEMPORADA)
+        self.assertGreaterEqual(len(lotes), 2)
+
+    def test_bin_lotes_list_by_lote(self):
+        r = _iniciar()
+        lote_code = r.data["lote_code"]
+        _agregar_bin(lote_code)
+        repos = get_repositories()
+        lote = repos.lotes.find_by_code(TEMPORADA, lote_code)
+        bin_lotes = repos.bin_lotes.list_by_lote(lote.id)
+        self.assertEqual(len(bin_lotes), 1)
+        self.assertEqual(bin_lotes[0].lote_id, lote.id)
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +342,10 @@ class ViewsGetSmokeTest(TestCase):
         self.assertEqual(resp.status_code, 200)
 
     def test_consulta_jefatura_redirect_sin_rol(self):
-        """Operador sin is_staff es redirigido fuera de consulta."""
+        """Operador sin rol admin/jefatura es redirigido fuera de consulta."""
+        self.user.is_superuser = False
+        self.user.is_staff = False
+        self.user.save()
         url = reverse("operaciones:consulta")
         resp = self.client.get(url)
         self.assertIn(resp.status_code, [302, 403])

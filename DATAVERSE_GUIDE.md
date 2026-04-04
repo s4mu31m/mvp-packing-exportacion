@@ -130,7 +130,7 @@ Valida si las tablas definidas por el proyecto están accesibles.
  
 #### Qué hace
  
-- Recorre una lista fija de tablas Dataverse, que actualmente considera las 14 tablas implementadas en Dataverse.
+- Recorre una lista fija de tablas Dataverse, que actualmente considera las 16 tablas activas del modelo.
 - Para cada tabla, llama `client.list_rows(entity_set_name=table, top=1)`.
 - Si la tabla responde, marca `accessible: true`.
 - Si hay al menos un registro, devuelve `sample_count`, `pk` y `sample_record`.
@@ -182,22 +182,30 @@ Si no hay registros o no existe el campo, responde con error 404.
  
 ## 6. Tablas Dataverse consideradas por la integración actual
  
-El endpoint `check_tables/` trabaja con esta lista fija de tablas:
- 
+El endpoint `check_tables/` trabaja con esta lista fija de tablas (16 activas validadas
+el 2026-04-04 via `scripts/dataverse/07_validate_mapping.py`):
+
 1. `crf21_bins`
-2. `crf21_calidad_desverdizados`
-3. `crf21_camara_mantencions`
-4. `crf21_lote_plantas`
-5. `crf21_bin_lote_plantas`
-6. `crf21_calidad_pallets`
-7. `crf21_camara_frios`
-8. `crf21_control_proceso_packings`
-9. `crf21_desverdizados`
-10. `crf21_ingreso_packings`
-11. `crf21_lote_planta_pallets`
-12. `crf21_medicion_temperatura_salidas`
-13. `crf21_pallets`
-14. `crf21_registro_packings`
+2. `crf21_lote_plantas`
+3. `crf21_pallets`
+4. `crf21_bin_lote_plantas`
+5. `crf21_lote_planta_pallets`
+6. `crf21_camara_mantencions`
+7. `crf21_desverdizados`
+8. `crf21_calidad_desverdizados`
+9. `crf21_ingreso_packings`
+10. `crf21_registro_packings`
+11. `crf21_control_proceso_packings`
+12. `crf21_calidad_pallets`
+13. `crf21_camara_frios`
+14. `crf21_medicion_temperatura_salidas`
+15. `crf21_usuariooperativos`
+16. `crf21_calidad_pallet_muestras` *(creada 2026-04-04 via Metadata API)*
+
+Tablas aceptadas como no-op (no existen en Dataverse intencionalmente):
+
+- `crf21_registro_etapas` — trazabilidad de etapas, gap conocido Issue #39.
+  Los repositorios operan sin esta tabla; `DataverseRegistroEtapaRepository` es no-op.
  
 ---
  
@@ -461,18 +469,26 @@ print(settings.DATAVERSE_API_VERSION)
 ## 13. Estado actual resumido
  
 ### Actualmente existe
- 
-- configuración Dataverse vía `.env`
-- selector `PERSISTENCE_BACKEND`
-- cliente Dataverse funcional con métodos tipados
-- endpoint de ping, chequeo de tablas y dos endpoints de prueba sobre bins
- 
-### Actualmente no existe
- 
-- endpoint `/discover/`
-- endpoints `/bin/`, `/lote-planta/`, `/pallet/`
-- capa REST completa por entidad del dominio
-- contrato final de sincronización total entre Django y Dataverse
+
+- Configuracion Dataverse via `.env`
+- Selector `PERSISTENCE_BACKEND` (sqlite / dataverse)
+- Cliente Dataverse funcional con metodos tipados
+- Endpoints de ping, chequeo de tablas y prueba sobre bins
+- **16 tablas activas en Dataverse** con repositorios implementados (SQLite + Dataverse)
+- `CalidadPalletMuestra`: tabla creada 2026-04-04 via Metadata API;
+  `DataverseCalidadPalletMuestraRepository` y `SqliteCalidadPalletMuestraRepository`
+  operativos; `_save_muestras` migrado al repo layer en `PaletizadoView`
+- Scripts standalone de diagnostico en `scripts/dataverse/` (00–09 + run_all.py)
+- 100% de mapeo de campos validado via `07_validate_mapping.py`
+
+### Actualmente no existe / gaps conocidos
+
+- Endpoint `/discover/`
+- Endpoints REST por entidad (`/bin/`, `/lote-planta/`, `/pallet/`)
+- `crf21_registro_etapas` — no existe en Dataverse; `DataverseRegistroEtapaRepository`
+  es no-op (log local). No es un bloqueante operativo.
+- Atomicidad en `DataverseSequenceCounterRepository` — race condition bajo alta
+  concurrencia. Aceptable para la escala del MVP.
  
 ---
  
@@ -495,10 +511,37 @@ print(settings.DATAVERSE_API_VERSION)
  
 ---
 
-## 16. Última actualización
+## 16. Scripts de diagnostico standalone
 
-Marzo 2026  
-Alineado a los commits:
+Los scripts en `scripts/dataverse/` permiten diagnosticar el estado de Dataverse
+sin levantar el servidor Django. Cargan credenciales desde `.env` automaticamente.
 
-- `ebdd41d084a8a0a398e34b01a4c5540ec2cc104e`
-- `2493a804bc7dc5b514fb7478e3c52f88588eeb85`
+```bash
+# Ejecutar desde la raiz del repositorio
+python scripts/dataverse/run_all.py        # Suite completa (00-07)
+python scripts/dataverse/02_check_tables.py # Solo verificacion de tablas
+python scripts/dataverse/07_validate_mapping.py  # Validar campos vs esquema real
+python scripts/dataverse/09_create_calidad_pallet_muestras.py  # Crear tabla CPM
+```
+
+| Script | Proposito |
+|--------|-----------|
+| `00_check_env.py` | Verifica variables de entorno |
+| `01_whoami.py` | Prueba autenticacion OAuth2 |
+| `02_check_tables.py` | Verifica existencia y conteo de las 16 tablas |
+| `03_query_bins.py` | Consulta ultimos 10 bins |
+| `04_query_lotes.py` | Consulta ultimos 10 lotes |
+| `05_query_pallets.py` | Consulta ultimos 10 pallets |
+| `06_query_usuarios.py` | Lista operadores (sin password hash) |
+| `07_validate_mapping.py` | Valida campos del mapping.py vs esquema Dataverse |
+| `09_create_calidad_pallet_muestras.py` | Crea/verifica tabla crf21_calidad_pallet_muestras |
+
+---
+
+## 17. Ultima actualizacion
+
+Abril 2026
+Alineado al estado del repositorio validado el 2026-04-04:
+- 16 tablas activas con repositorios completos
+- crf21_calidad_pallet_muestras creada via Metadata API
+- Scripts de diagnostico validados contra el ambiente real

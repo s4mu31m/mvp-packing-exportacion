@@ -44,7 +44,8 @@ class BinForm(forms.Form):
         widget=forms.TextInput(attrs={"placeholder": "Uva de mesa"}),
     )
     variedad_fruta = forms.CharField(
-        max_length=100, required=False, label="Variedad",
+        max_length=100, required=True, label="Variedad",
+        widget=forms.TextInput(attrs={"placeholder": "Ej: Thompson Seedless"}),
     )
     color = forms.CharField(
         max_length=30, required=False, label="Color (numero)",
@@ -60,6 +61,7 @@ class BinForm(forms.Form):
         max_length=20, required=False, label="Cuartel",
         widget=forms.TextInput(attrs={"placeholder": "C01"}),
     )
+    # --- Campos operativos adicionales ---
     hora_recepcion = forms.CharField(
         max_length=5, required=False, label="Hora recepcion (HH:mm)",
         widget=forms.TextInput(attrs={"placeholder": "08:30", "class": "campo-hora"}),
@@ -80,6 +82,35 @@ class BinForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
+
+
+class PesajeLoteForm(forms.Form):
+    """Pesaje de lote cerrado post-recepcion."""
+    kilos_bruto_conformacion = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True,
+        label="Kilos Recepcionados Bruto",
+        widget=forms.NumberInput(attrs={"placeholder": "0.00", "step": "0.01"}),
+    )
+    kilos_neto_conformacion = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True,
+        label="Kilos Recepcionados Neto",
+        widget=forms.NumberInput(attrs={"placeholder": "0.00", "step": "0.01"}),
+    )
+    requiere_desverdizado = forms.BooleanField(
+        required=False, label="Requiere Desverdizado",
+    )
+    operator_code = forms.CharField(
+        max_length=50, required=False, label="Codigo Operador",
+        widget=forms.TextInput(attrs={"placeholder": "OP-001"}),
+    )
+
+    def clean(self):
+        cd = super().clean()
+        bruto = cd.get("kilos_bruto_conformacion")
+        neto  = cd.get("kilos_neto_conformacion")
+        if bruto is not None and neto is not None and neto > bruto:
+            self.add_error("kilos_neto_conformacion", "Kilos neto no puede superar kilos bruto")
+        return cd
 
 
 class LoteForm(forms.Form):
