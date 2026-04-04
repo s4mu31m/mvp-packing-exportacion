@@ -81,7 +81,10 @@ def cerrar_lote_recepcion(payload: dict, *, repos: Repositories | None = None) -
         )
 
     # Campos a actualizar al cerrar
-    campos_update: dict = {"estado": LotePlantaEstado.CERRADO}
+    campos_update: dict = {
+        "estado":        LotePlantaEstado.CERRADO,
+        "etapa_actual":  "Pesaje",   # persiste etapa en Dataverse desde 2026-03-31
+    }
     for campo in ["requiere_desverdizado", "disponibilidad_camara_desverdizado",
                   "kilos_bruto_conformacion", "kilos_neto_conformacion"]:
         if payload.get(campo) not in [None, ""]:

@@ -143,6 +143,13 @@ LOTE_PLANTA_FIELDS = {
     "source_event_id":                      "crf21_source_event_id",
     "created_at":                           "createdon",
     "updated_at":                           "modifiedon",
+    # etapa_actual: campo que registra la etapa de proceso en la que se encuentra el lote.
+    # Valores posibles: "Recepcion", "Pesaje", "Mantencion", "Desverdizado",
+    # "Ingreso Packing", "Packing / Proceso", "Paletizado",
+    # "Calidad Pallet", "Camara Frio", "Temperatura Salida".
+    # Registros anteriores al 2026-03-31 tienen este campo en null;
+    # el backend aplica derive_etapa_lote() como fallback.
+    "etapa_actual":                         "crf21_etapa_actual",
     # Nota: temporada, estado, temporada_codigo, correlativo_temporada NO existen
     # en Dataverse. Se gestionan solo en SQLite.
 }
@@ -386,6 +393,25 @@ CALIDAD_PALLET_MUESTRA_FIELDS = {
 # ---------------------------------------------------------------------------
 # Helpers de construccion OData
 # ---------------------------------------------------------------------------
+
+USUARIO_OPERATIVO_FIELDS = {
+    # PK
+    "id":             "crf21_usuariooperativoid",
+    "dataverse_id":   "crf21_usuariooperativoid",
+    # Campos operativos
+    "usernamelogin":  "crf21_usernamelogin",
+    "nombrecompleto": "crf21_nombrecompleto",
+    "correo":         "crf21_correo",
+    "passwordhash":   "crf21_passwordhash",
+    "rol":            "crf21_rol",
+    "activo":         "crf21_activo",
+    "bloqueado":      "crf21_bloqueado",
+    "codigooperador": "crf21_codigooperador",
+    # Campos de sistema (solo lectura)
+    "created_at":     "createdon",
+    "updated_at":     "modifiedon",
+}
+
 
 def odata_bind(entity_set: str, guid: str) -> str:
     """Construye el valor @odata.bind para un lookup field."""

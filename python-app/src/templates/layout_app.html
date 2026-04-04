@@ -19,12 +19,17 @@
       <div class="user-avatar">{{ request.user.username|slice:":2"|upper }}</div>
       <div>
         <div class="user-name">{{ request.user.get_full_name|default:request.user.username }}</div>
-        <div class="user-role">{{ request.user.perfil.rol_display }}</div>
+        <div class="user-role">
+          {% if request.user.is_superuser %}Administrador
+          {% elif request.user.is_staff %}Jefatura
+          {% else %}Operador
+          {% endif %}
+        </div>
       </div>
     </div>
-    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline">
+    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline;">
       {% csrf_token %}
-      <button type="submit" class="btn btn-ghost btn-sm">⎋</button>
+      <button type="submit" class="btn btn-ghost btn-sm" title="Cerrar sesión">⎋</button>
     </form>
   </div>
 </nav>

@@ -8,31 +8,44 @@ Repositorio principal del proyecto **MVP Packing Exportación**, orientado a la 
 
 ## Propósito
 
-Establecer una base ordenada para levantar requerimientos, definir alcance, documentar la arquitectura y construir una primera solución funcional orientada al uso en terreno.
+Digitalizar el flujo operativo de recepción, trazabilidad y packing de fruta en planta, reemplazando registros manuales por un sistema web que centraliza la información en Dataverse (Microsoft Power Platform).
 
 ---
 
-## Estado actual
-
-El proyecto completó los tres primeros pasos del MVP:
+## Estado actual — 2026-03-30
 
 | Paso | Estado | Descripción |
 |------|--------|-------------|
 | Paso 1 — Configuración del proyecto | ✅ Completado | Proyecto Django inicializado, estructura base definida |
-| Paso 2 — Modelo de datos local en Django | ✅ Completado | Entidades Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa implementadas |
-| Paso 3 — Lógica de negocio por casos de uso | ✅ Completado | Capa de aplicación con casos de uso implementados y validados con tests |
-| Paso 4 — Interfaz operativa mínima (REST) | 🔲 Pendiente | Exposición de casos de uso vía endpoints |
-| Paso 5 — Integración con Dataverse | 🔲 Pendiente | Sincronización con Dataverse como base estructural de datos |
+| Paso 2 — Modelo de datos local | ✅ Completado | Entidades Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa, SequenceCounter implementadas |
+| Paso 3 — Lógica de negocio (casos de uso) | ✅ Completado | Capa de aplicación con casos de uso, validados con tests |
+| Paso 4 — Interfaz operativa web | ✅ Completado | Vistas HTML operativas para cada etapa del flujo |
+| Paso 4b — API REST | ✅ Completado | Endpoints DRF expuestos para bins, lotes, pallets, eventos y trazabilidad |
+| Paso 5 — Integración con Dataverse | 🔄 En progreso | Cliente OData y endpoints de diagnóstico implementados; sincronización completa pendiente |
 
 ---
 
-## Eje funcional principal
+## Flujo operativo cubierto
 
 ```
-Bin → Lote → Etapa → Pallet
+Recepción → Pesaje → Desverdizado → Ingreso Packing → Proceso → Control → Paletizado → Cámaras
 ```
 
-Los bins llegan **preconstruidos** desde el módulo previo. Este módulo recibe, valida, relaciona y traza.
+Cada etapa tiene su propia vista web y registra eventos auditables (`RegistroEtapa`). La recepción implementa el flujo completo: apertura de lote, registro de bins con código generado automáticamente y pesaje.
+
+---
+
+## Generación automática de códigos
+
+Los códigos operacionales **nunca se digitan manualmente**. El backend los construye a partir de los atributos base capturados en el frontend:
+
+| Entidad | Formato | Ejemplo |
+|---------|---------|---------|
+| Bin | `{productor}-{cultivo}-{variedad}-{cuartel}-{DDMMYY}-{correlativo:03d}` | `AG01-LM-Eur-C05-120326-001` |
+| Lote (LotePlanta) | `LP-{temporada}-{correlativo:06d}` | `LP-2025-2026-000001` |
+| Pallet | `PA-{YYYYMMDD}-{correlativo:04d}` | `PA-20260329-0012` |
+
+Los correlativos se gestionan mediante `SequenceCounter` con `select_for_update()` para garantizar unicidad bajo concurrencia.
 
 ---
 
@@ -53,49 +66,71 @@ mvp-packing-exportacion/
 │   └── planning/
 ├── power-platform/
 ├── python-app/
-│   ├── README.md
 │   ├── requirements.txt
 │   └── src/
 │       ├── manage.py
-│       ├── config/
-│       ├── core/
+│       ├── config/              # Settings, URLs raíz, WSGI/ASGI
+│       ├── core/                # Modelos base, context processors, endpoints Dataverse
 │       ├── operaciones/
-│       ├── usuarios/
-│       ├── domain/
+│       │   ├── models.py        # Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa, SequenceCounter
+│       │   ├── application/     # Casos de uso, DTOs, resultados, excepciones
+│       │   ├── api/             # Serializers y vistas DRF (REST)
+│       │   ├── services/        # Generadores de código, secuencias, validadores, temporada
+│       │   ├── templates/       # Vistas HTML por etapa operativa
+│       │   ├── urls.py          # Rutas API REST
+│       │   └── web_urls.py      # Rutas vistas web
+│       ├── usuarios/            # Autenticación y portal de acceso
+│       ├── domain/              # Interfaces de repositorios (abstracciones)
 │       └── infrastructure/
+│           ├── dataverse/       # Cliente OData, autenticación, mapping de campos
+│           └── sqlite/          # Implementación de repositorios en SQLite
 └── README.md
 ```
 
 ---
 
-## Descripción de carpetas
+## API REST (`/api/operaciones/`)
 
-### `.github/`
-Plantillas de issues y pull requests para gestión colaborativa del repositorio.
+| Método | Endpoint | Caso de uso |
+|--------|----------|-------------|
+| POST | `/api/operaciones/bins/` | Registrar bin recibido |
+| POST | `/api/operaciones/lotes/` | Crear lote de recepción |
+| POST | `/api/operaciones/pallets/` | Cerrar pallet |
+| GET | `/api/operaciones/trazabilidad/` | Consulta de trazabilidad |
+| POST | `/api/operaciones/eventos/` | Registrar evento de etapa |
 
-### `docs/`
-Documentación funcional y técnica del proyecto, organizada por dominio:
+## Vistas web (`/operaciones/`)
 
-- **actas/**: minutas y acuerdos de reuniones.
-- **alcance/**: definición del alcance funcional del MVP.
-- **arquitectura/**: decisiones y lineamientos de arquitectura.
-- **levantamiento/**: flujo operativo, actores y hallazgos del levantamiento.
-- **planning/**: roadmap, estado de avance y planificación.
+| Ruta | Vista |
+|------|-------|
+| `/operaciones/` | Dashboard |
+| `/operaciones/recepcion/` | Recepción de bins y apertura de lote |
+| `/operaciones/pesaje/` | Pesaje y asignación de lote |
+| `/operaciones/desverdizado/` | Ingreso/salida de desverdizado |
+| `/operaciones/ingreso-packing/` | Ingreso a proceso de packing |
+| `/operaciones/proceso/` | Proceso de packing |
+| `/operaciones/control/` | Control de calidad |
+| `/operaciones/paletizado/` | Paletizado |
+| `/operaciones/camaras/` | Cámaras de frío y mantención |
+| `/operaciones/consulta/` | Consulta de jefatura |
 
-### `power-platform/`
-Espacio reservado para documentar la línea de trabajo asociada a Microsoft Power Platform y Dataverse.
+## Diagnóstico Dataverse (`/api/dataverse/`)
 
-### `python-app/`
-Módulo backend en Python/Django. Contiene la lógica de negocio, modelos de dominio, casos de uso, servicios y la capa de integración con Dataverse.
+| Endpoint | Descripción |
+|----------|-------------|
+| `/api/dataverse/ping/` | Verifica conectividad con Dataverse |
+| `/api/dataverse/check_tables/` | Lista tablas disponibles |
+| `/api/dataverse/save_first_bin_code/` | Escribe un registro de prueba |
+| `/api/dataverse/get_first_bin_code/` | Lee el registro de prueba |
 
 ---
 
 ## Tecnologías
 
 - **Python + Django** — backend, lógica de negocio, casos de uso
-- **Django REST Framework** — exposición de API REST
-- **Microsoft Dataverse / Power Platform** — base estructural de datos (integración preparada, pendiente de activar)
-- **SQLite** — base de datos local para desarrollo
+- **Django REST Framework** — API REST
+- **Microsoft Dataverse / Power Platform** — destino de sincronización (integración en progreso)
+- **SQLite** — base de datos local de desarrollo
 - **GitHub** — gestión del proyecto
 
 ---

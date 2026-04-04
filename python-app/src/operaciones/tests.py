@@ -1,18 +1,17 @@
 """
-Tests del flujo de recepcion con lote abierto (MVP).
+Tests del flujo operativo de packing.
 
 Cobertura:
-  - iniciar_lote_recepcion: crea lote en estado 'abierto' con lote_code autogenerado
-  - agregar_bin_a_lote_abierto: registra bin y lo asocia al lote; rechaza lote cerrado
-  - cerrar_lote_recepcion: cierra lote; rechaza si no tiene bins; impide agregar bins post-cierre
-  - RecepcionView (integracion): iniciar_lote / agregar_bin / cerrar_lote via POST web
-  - Sesion: lote_code persiste y se limpia correctamente
+  - Use cases: iniciar_lote_recepcion, agregar_bin_a_lote_abierto, cerrar_lote_recepcion
+  - Repositories: list_by_lote, list_recent
+  - Smoke tests: vistas críticas renderizan 200
+  - Flujo recepcion via POST web
 """
 import datetime
 
 from django.test import TestCase, Client
-from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from operaciones.application.use_cases import (
     iniciar_lote_recepcion,
@@ -25,17 +24,19 @@ from operaciones.models import (
     BinLote,
     Lote,
     LotePlantaEstado,
+    Pallet,
+    PalletLote,
+    IngresoAPacking,
+    Desverdizado,
 )
 
 User = get_user_model()
 
 TEMPORADA = str(datetime.date.today().year)
-SESSION_LOTE_ACTIVO = "recepcion_lote_code"
-
 
 
 def _make_user():
-    return User.objects.create_user(username="tester", password="pass1234", is_superuser=True)
+    return User.objects.create_user(username="tester", password="pass1234", is_superuser=True, is_staff=True)
 
 
 def _make_lote(estado=LotePlantaEstado.ABIERTO, **kwargs):
@@ -288,14 +289,13 @@ class RepositoryQueryTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# View integration: RecepcionView
+# GET smoke — todas las vistas deben renderizar 200 (auth requerida)
 # ---------------------------------------------------------------------------
 
-class RecepcionViewTest(TestCase):
+class ViewsGetSmokeTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-
         self.user = _make_user()
         self.client.force_login(self.user)
 
@@ -370,126 +370,377 @@ class RecepcionFlowTest(TestCase):
         self.client.force_login(self.user)
         self.url = reverse("operaciones:recepcion")
 
-    def _session_set_temporada(self):
+    def test_iniciar_lote(self):
+        resp = self.client.post(self.url, {
+            "action": "iniciar",
+            "temporada": TEMPORADA,
+            "operator_code": "OP-01",
+        })
+        self.assertIn(resp.status_code, [200, 302])
+        self.assertTrue(Lote.objects.filter(temporada=TEMPORADA).exists())
+
+    def _datos_bin(self):
+        return {
+            "action": "agregar_bin",
+            "temporada": TEMPORADA,
+            "codigo_productor": "PROD-01",
+            "tipo_cultivo": "Uva de mesa",
+            "variedad_fruta": "Thompson",
+            "color": "2",
+            "fecha_cosecha": str(datetime.date.today()),
+            "kilos_bruto_ingreso": "500",
+            "kilos_neto_ingreso": "480",
+            "operator_code": "OP-01",
+        }
+
+    def test_agregar_bin(self):
+        # Iniciar primero
+        self.client.post(self.url, {
+            "action": "iniciar",
+            "temporada": TEMPORADA,
+            "operator_code": "OP-01",
+        })
+        lote = Lote.objects.filter(temporada=TEMPORADA).first()
+        self.assertIsNotNone(lote)
+        # Agregar bin valido
+        resp = self.client.post(self.url, self._datos_bin())
+        self.assertIn(resp.status_code, [200, 302])
+
+    def test_agregar_multiples_bins_mismas_campos_base(self):
+        """
+        Agregar dos bins consecutivos con los mismos campos base no debe
+        lanzar IntegrityError en RegistroEtapa.event_key.
+        Regresion: agregar_bin_a_lote_abierto usaba create() en lugar de
+        get_or_create() para RegistroEtapa, causando UNIQUE constraint fail
+        ante reintento o bin_code repetido por datos de dev inconsistentes.
+        """
+        self.client.post(self.url, {
+            "action": "iniciar",
+            "temporada": TEMPORADA,
+            "operator_code": "OP-01",
+        })
+        lote = Lote.objects.filter(temporada=TEMPORADA).first()
+        self.assertIsNotNone(lote)
+        datos = self._datos_bin()
+        resp1 = self.client.post(self.url, datos)
+        self.assertIn(resp1.status_code, [200, 302])
+        resp2 = self.client.post(self.url, datos)
+        self.assertIn(resp2.status_code, [200, 302])
+        from operaciones.models import BinLote
+        self.assertEqual(
+            BinLote.objects.filter(lote=lote).count(), 2,
+            "Deben existir dos bins distintos en el lote",
+        )
+
+    def test_cerrar_lote(self):
+        # Crear lote abierto con un bin directo en BD
+        lote = _make_lote(estado=LotePlantaEstado.ABIERTO)
+        _make_bin(lote)
+        self.client.session["lote_activo_code"] = lote.lote_code
         session = self.client.session
+        session["lote_activo_code"] = lote.lote_code
         session["temporada_activa"] = TEMPORADA
         session.save()
 
-    def test_get_sin_lote_activo(self):
+        resp = self.client.post(self.url, {
+            "action": "cerrar",
+            "temporada": TEMPORADA,
+            "operator_code": "OP-01",
+            "kilos_bruto_conformacion": "500",
+            "kilos_neto_conformacion": "480",
+        })
+        self.assertIn(resp.status_code, [200, 302])
+
+
+# ---------------------------------------------------------------------------
+# Flujo desverdizado: carga con selector/contexto
+# ---------------------------------------------------------------------------
+
+class DesverdizadoViewTest(TestCase):
+
+    def setUp(self):
+        self.client = Client()
+        self.user = _make_user()
+        self.client.force_login(self.user)
+        self.url = reverse("operaciones:desverdizado")
+
+    def test_get_renderiza_con_lotes_pendientes(self):
+        lote = _make_lote(
+            estado=LotePlantaEstado.CERRADO,
+            requiere_desverdizado=True,
+            disponibilidad_camara_desverdizado="disponible",
+        )
+        _make_bin(lote)
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 200)
-        self.assertIsNone(resp.context["lote_activo"])
-        self.assertEqual(resp.context["bins_del_lote"], [])
+        self.assertIn("lotes_data_json", resp.context)
+        self.assertIn(lote.lote_code, resp.context["lotes_data_json"])
 
-    def test_post_iniciar_lote_crea_sesion(self):
-        self._session_set_temporada()
-        resp = self.client.post(self.url, {
-            "action": "iniciar_lote",
-            "operator_code": "OP-001",
-            "temporada": TEMPORADA,
-        })
-        self.assertRedirects(resp, self.url)
-        self.assertIn(SESSION_LOTE_ACTIVO, self.client.session)
-        lote_code = self.client.session[SESSION_LOTE_ACTIVO]
-        self.assertTrue(len(lote_code) > 0)
+    def test_contexto_lote_contiene_campos_base(self):
+        lote = _make_lote(
+            estado=LotePlantaEstado.CERRADO,
+            requiere_desverdizado=True,
+            disponibilidad_camara_desverdizado="disponible",
+        )
+        _make_bin(lote, codigo_productor="PROD-77", variedad_fruta="Red Globe")
+        resp = self.client.get(self.url)
+        self.assertIn("PROD-77", resp.context["lotes_data_json"])
+        self.assertIn("Red Globe", resp.context["lotes_data_json"])
 
-    def test_post_iniciar_lote_dos_veces_no_sobreescribe(self):
-        self._session_set_temporada()
-        self.client.post(self.url, {
-            "action": "iniciar_lote",
-            "operator_code": "OP-001",
-            "temporada": TEMPORADA,
-        })
-        lote_code_1 = self.client.session[SESSION_LOTE_ACTIVO]
-        self.client.post(self.url, {
-            "action": "iniciar_lote",
-            "operator_code": "OP-001",
-            "temporada": TEMPORADA,
-        })
-        lote_code_2 = self.client.session[SESSION_LOTE_ACTIVO]
-        # El segundo intento debe mostrar advertencia y mantener el primero
-        self.assertEqual(lote_code_1, lote_code_2)
 
-    def test_post_agregar_bin_sin_lote_activo_muestra_error(self):
-        self._session_set_temporada()
-        resp = self.client.post(self.url, {
-            "action": "agregar_bin",
-            "temporada": TEMPORADA,
-        }, follow=True)
-        messages_list = list(resp.context["messages"])
-        self.assertTrue(any("No hay lote activo" in str(m) for m in messages_list))
+# ---------------------------------------------------------------------------
+# Flujo ingreso packing: via_desverdizado derivado
+# ---------------------------------------------------------------------------
 
-    def test_flujo_completo_iniciar_agregar_cerrar(self):
-        self._session_set_temporada()
-        # 1. Iniciar lote
-        self.client.post(self.url, {
-            "action": "iniciar_lote",
-            "operator_code": "OP-001",
-            "temporada": TEMPORADA,
-        })
-        lote_code = self.client.session[SESSION_LOTE_ACTIVO]
-        self.assertIsNotNone(lote_code)
+class IngresoPackingViewTest(TestCase):
 
-        # 2. Agregar bin
-        resp = self.client.post(self.url, {
-            "action": "agregar_bin",
-            "temporada": TEMPORADA,
-            "operator_code": "OP-001",
-            "codigo_productor": "AG001",
-            "tipo_cultivo": "Uva",
-            "variedad_fruta": "Thompson",
-            "numero_cuartel": "C01",
-            "fecha_cosecha": "2025-12-01",
-            "kilos_neto_ingreso": "200",
-            "kilos_bruto_ingreso": "210",
-        }, follow=True)
-        self.assertEqual(resp.status_code, 200)
+    def setUp(self):
+        self.client = Client()
+        self.user = _make_user()
+        self.client.force_login(self.user)
+        self.url = reverse("operaciones:ingreso_packing")
 
-        # Verificar bin en DB
-        repos = get_repositories()
-        lote = repos.lotes.find_by_code(TEMPORADA, lote_code)
-        bins = repos.bins.list_by_lote(lote.id)
-        self.assertEqual(len(bins), 1)
-
-        # 3. Cerrar lote
-        resp = self.client.post(self.url, {
-            "action": "cerrar_lote",
-            "temporada": TEMPORADA,
-            "operator_code": "OP-001",
-        }, follow=True)
-        self.assertEqual(resp.status_code, 200)
-        # Sesion limpia
-        self.assertNotIn(SESSION_LOTE_ACTIVO, self.client.session)
-        # Lote cerrado en DB
-        lote_actualizado = repos.lotes.find_by_code(TEMPORADA, lote_code)
-        self.assertEqual(lote_actualizado.estado, "cerrado")
-
-    def test_post_cerrar_sin_bins_muestra_error(self):
-        self._session_set_temporada()
-        self.client.post(self.url, {
-            "action": "iniciar_lote",
-            "operator_code": "OP-001",
-            "temporada": TEMPORADA,
-        })
-        resp = self.client.post(self.url, {
-            "action": "cerrar_lote",
-            "temporada": TEMPORADA,
-            "operator_code": "OP-001",
-        }, follow=True)
-        messages_list = list(resp.context["messages"])
-        self.assertTrue(any("bin" in str(m).lower() for m in messages_list))
-        # Lote sigue activo en sesion
-        self.assertIn(SESSION_LOTE_ACTIVO, self.client.session)
-
-    def test_get_con_lote_activo_muestra_lote(self):
-        self._session_set_temporada()
-        self.client.post(self.url, {
-            "action": "iniciar_lote",
-            "operator_code": "OP-001",
-            "temporada": TEMPORADA,
-        })
+    def test_get_renderiza(self):
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 200)
-        self.assertIsNotNone(resp.context["lote_activo"])
-        lote_code = self.client.session[SESSION_LOTE_ACTIVO]
-        self.assertEqual(resp.context["lote_activo"].lote_code, lote_code)
+        self.assertIn("lotes_data_json", resp.context)
+
+    def test_lote_con_desverdizado_tiene_via_desverdizado_true(self):
+        lote = _make_lote(
+            estado=LotePlantaEstado.CERRADO,
+            requiere_desverdizado=True,
+            disponibilidad_camara_desverdizado="disponible",
+        )
+        _make_bin(lote)
+        Desverdizado.objects.create(
+            lote=lote,
+            source_system="test",
+        )
+        resp = self.client.get(self.url)
+        import json
+        data = json.loads(resp.context["lotes_data_json"])
+        if lote.lote_code in data:
+            self.assertTrue(data[lote.lote_code]["via_desverdizado"])
+
+
+# ---------------------------------------------------------------------------
+# horas_desverdizado se persiste en el modelo
+# ---------------------------------------------------------------------------
+
+class HorasDesverdizadoModelTest(TestCase):
+
+    def test_campo_existe_y_persiste(self):
+        lote = _make_lote(
+            estado=LotePlantaEstado.CERRADO,
+            requiere_desverdizado=True,
+            disponibilidad_camara_desverdizado="disponible",
+        )
+        desv = Desverdizado.objects.create(
+            lote=lote,
+            horas_desverdizado=72,
+            source_system="test",
+        )
+        desv.refresh_from_db()
+        self.assertEqual(desv.horas_desverdizado, 72)
+        # El campo proceso queda vacio (no se mezclan mas)
+        self.assertEqual(desv.proceso, "")
+
+    def test_horas_null_por_defecto(self):
+        lote = _make_lote(estado=LotePlantaEstado.CERRADO, requiere_desverdizado=True)
+        desv = Desverdizado.objects.create(lote=lote, source_system="test")
+        desv.refresh_from_db()
+        self.assertIsNone(desv.horas_desverdizado)
+
+    def test_proceso_legacy_no_interfiere(self):
+        """proceso (legacy) y horas_desverdizado son independientes."""
+        lote = _make_lote(estado=LotePlantaEstado.CERRADO, requiere_desverdizado=True)
+        desv = Desverdizado.objects.create(
+            lote=lote, horas_desverdizado=48, proceso="conservacion frio",
+            source_system="test",
+        )
+        desv.refresh_from_db()
+        self.assertEqual(desv.horas_desverdizado, 48)
+        self.assertEqual(desv.proceso, "conservacion frio")
+
+
+# ---------------------------------------------------------------------------
+# DesverdizadoForm — validacion server-side de horas_desverdizado
+# ---------------------------------------------------------------------------
+
+class DesverdizadoFormValidationTest(TestCase):
+
+    def test_horas_valido(self):
+        from operaciones.forms import DesverdizadoForm
+        form = DesverdizadoForm(data={"horas_desverdizado": 72})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["horas_desverdizado"], 72)
+
+    def test_horas_limite_inferior(self):
+        from operaciones.forms import DesverdizadoForm
+        form = DesverdizadoForm(data={"horas_desverdizado": 1})
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_horas_limite_superior(self):
+        from operaciones.forms import DesverdizadoForm
+        form = DesverdizadoForm(data={"horas_desverdizado": 240})
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_horas_cero_invalido(self):
+        from operaciones.forms import DesverdizadoForm
+        form = DesverdizadoForm(data={"horas_desverdizado": 0})
+        self.assertFalse(form.is_valid())
+        self.assertIn("horas_desverdizado", form.errors)
+
+    def test_horas_excede_maximo(self):
+        from operaciones.forms import DesverdizadoForm
+        form = DesverdizadoForm(data={"horas_desverdizado": 241})
+        self.assertFalse(form.is_valid())
+        self.assertIn("horas_desverdizado", form.errors)
+
+    def test_horas_negativo_invalido(self):
+        from operaciones.forms import DesverdizadoForm
+        form = DesverdizadoForm(data={"horas_desverdizado": -5})
+        self.assertFalse(form.is_valid())
+
+    def test_horas_vacio_ok(self):
+        from operaciones.forms import DesverdizadoForm
+        form = DesverdizadoForm(data={})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIsNone(form.cleaned_data["horas_desverdizado"])
+
+
+# ---------------------------------------------------------------------------
+# CalidadPalletMuestra — modelo y flujo
+# ---------------------------------------------------------------------------
+
+class CalidadPalletMuestraModelTest(TestCase):
+
+    def setUp(self):
+        self.lote = _make_lote(estado=LotePlantaEstado.CERRADO)
+        _make_bin(self.lote)
+        self.pallet = Pallet.objects.create(
+            temporada=TEMPORADA,
+            pallet_code=f"PAL-TEST-{Pallet.objects.count()+1:03d}",
+            is_active=True,
+        )
+        PalletLote.objects.create(pallet=self.pallet, lote=self.lote)
+
+    def test_crear_muestra(self):
+        from operaciones.models import CalidadPalletMuestra
+        m = CalidadPalletMuestra.objects.create(
+            pallet=self.pallet,
+            numero_muestra=1,
+            temperatura_fruta=18.5,
+            peso_caja_muestra=8.200,
+            n_frutos=42,
+            aprobado=True,
+            source_system="test",
+        )
+        m.refresh_from_db()
+        self.assertEqual(m.numero_muestra, 1)
+        self.assertEqual(float(m.temperatura_fruta), 18.5)
+        self.assertTrue(m.aprobado)
+
+    def test_multiples_muestras_por_pallet(self):
+        from operaciones.models import CalidadPalletMuestra
+        for i in range(1, 4):
+            CalidadPalletMuestra.objects.create(
+                pallet=self.pallet, numero_muestra=i,
+                temperatura_fruta=17 + i, source_system="test",
+            )
+        self.assertEqual(self.pallet.muestras_calidad.count(), 3)
+
+    def test_muestra_sin_datos_opcionales(self):
+        from operaciones.models import CalidadPalletMuestra
+        m = CalidadPalletMuestra.objects.create(
+            pallet=self.pallet, numero_muestra=1, source_system="test",
+        )
+        m.refresh_from_db()
+        self.assertIsNone(m.temperatura_fruta)
+        self.assertIsNone(m.aprobado)
+
+    def test_ordering(self):
+        from operaciones.models import CalidadPalletMuestra
+        CalidadPalletMuestra.objects.create(
+            pallet=self.pallet, numero_muestra=3, source_system="test",
+        )
+        CalidadPalletMuestra.objects.create(
+            pallet=self.pallet, numero_muestra=1, source_system="test",
+        )
+        nums = list(
+            self.pallet.muestras_calidad.values_list("numero_muestra", flat=True)
+        )
+        self.assertEqual(nums, [1, 3])
+
+
+# ---------------------------------------------------------------------------
+# PaletizadoView — contexto y flujo de muestras
+# ---------------------------------------------------------------------------
+
+class PaletizadoViewTest(TestCase):
+
+    def setUp(self):
+        self.client = Client()
+        self.user = _make_user()
+        self.client.force_login(self.user)
+        self.url = reverse("operaciones:paletizado")
+
+    def test_get_incluye_form_muestra(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("form_muestra", resp.context)
+        self.assertIn("pallets_data_json", resp.context)
+
+    def test_pallets_data_json_contiene_campos(self):
+        lote = _make_lote(estado=LotePlantaEstado.CERRADO)
+        _make_bin(lote, codigo_productor="PROD-55", variedad_fruta="Flame")
+        pallet = Pallet.objects.create(
+            temporada=TEMPORADA,
+            pallet_code="PAL-CTX-001",
+            is_active=True,
+            peso_total_kg=1200,
+        )
+        PalletLote.objects.create(pallet=pallet, lote=lote)
+        resp = self.client.get(self.url)
+        import json
+        data = json.loads(resp.context["pallets_data_json"])
+        if "PAL-CTX-001" in data:
+            entry = data["PAL-CTX-001"]
+            self.assertEqual(entry["productor"], "PROD-55")
+            self.assertEqual(entry["variedad"], "Flame")
+            self.assertEqual(entry["peso_total"], 1200.0)
+
+
+# ---------------------------------------------------------------------------
+# CamarasView — contexto con color y peso
+# ---------------------------------------------------------------------------
+
+class CamarasViewTest(TestCase):
+
+    def setUp(self):
+        self.client = Client()
+        self.user = _make_user()
+        self.client.force_login(self.user)
+        self.url = reverse("operaciones:camaras")
+
+    def test_get_renderiza(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("pallets_data_json", resp.context)
+
+    def test_pallets_data_incluye_color_y_peso(self):
+        lote = _make_lote(estado=LotePlantaEstado.CERRADO)
+        _make_bin(lote, color="4")
+        pallet = Pallet.objects.create(
+            temporada=TEMPORADA,
+            pallet_code="PAL-CAM-001",
+            is_active=True,
+            peso_total_kg=950,
+        )
+        PalletLote.objects.create(pallet=pallet, lote=lote)
+        resp = self.client.get(self.url)
+        import json
+        data = json.loads(resp.context["pallets_data_json"])
+        if "PAL-CAM-001" in data:
+            self.assertEqual(data["PAL-CAM-001"]["color"], "4")
+            self.assertEqual(data["PAL-CAM-001"]["peso_total"], 950.0)

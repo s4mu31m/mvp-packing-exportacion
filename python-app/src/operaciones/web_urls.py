@@ -13,5 +13,6 @@ urlpatterns = [
     path("control/",       views.ControlView.as_view(),        name="control"),
     path("paletizado/",    views.PaletizadoView.as_view(),     name="paletizado"),
     path("camaras/",       views.CamarasView.as_view(),        name="camaras"),
-    path("consulta/",      views.ConsultaJefaturaView.as_view(), name="consulta"),
+    path("consulta/",          views.ConsultaJefaturaView.as_view(),     name="consulta"),
+    path("consulta/exportar/", views.ExportarConsultaCSVView.as_view(), name="exportar_consulta"),
 ]

@@ -134,11 +134,11 @@ def agregar_bin_a_lote_abierto(payload: dict, *, repos: Repositories | None = No
         {"cantidad_bins": lote_record.cantidad_bins + 1},
     )
 
-    # Eventos
+    # Eventos (get_or_create para idempotencia — consistente con todos los demas use cases)
     event_key_bin = build_event_key(temporada, "BIN", bin_code, "BIN_REGISTRADO")
-    repos.registros.create(
-        temporada=temporada,
+    repos.registros.get_or_create(
         event_key=event_key_bin,
+        temporada=temporada,
         tipo_evento=TipoEvento.BIN_REGISTRADO,
         bin_id=bin_record.id,
         operator_code=operator_code,
@@ -148,9 +148,9 @@ def agregar_bin_a_lote_abierto(payload: dict, *, repos: Repositories | None = No
     )
 
     event_key_asoc = build_event_key(temporada, "BIN", bin_code, "LOTE", lote_code, "ASOCIADO")
-    repos.registros.create(
-        temporada=temporada,
+    repos.registros.get_or_create(
         event_key=event_key_asoc,
+        temporada=temporada,
         tipo_evento=TipoEvento.PESAJE,
         bin_id=bin_record.id,
         lote_id=lote_record.id,

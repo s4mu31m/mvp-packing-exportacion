@@ -1,5 +1,3 @@
-<<<<<<< Updated upstream
-=======
 # Cambios Técnicos — Iteración 2026-03-31 (b): Integración crf21_etapa_actual
 
 **Branch:** `main`
@@ -402,7 +400,10 @@ python manage.py test   -> 196/196 OK (0 fallos, 0 errores)
 
 ---
 
-# Cambios Tecnicos — Iteracion 2026-03-30: Flujo Operativo con Contexto de Lote: Flujo Operativo con Contexto de Lote
+
+---
+
+# Cambios Técnicos — Iteración 2026-03-30: Flujo Operativo con Contexto de Lote
 
 **Branch:** `main`
 **Fecha:** 2026-03-30
@@ -483,7 +484,6 @@ dashboard con KPIs reales, y DesverdizadoForm refactorizado.
 
 ---
 
->>>>>>> Stashed changes
 # Cambios Técnicos — Generación Dinámica de Códigos, Flujo de Recepción con Lote Abierto y Adaptación al Schema Real de Dataverse
 
 **Branch:** `feature/mvp-dataverse-backend-switch`

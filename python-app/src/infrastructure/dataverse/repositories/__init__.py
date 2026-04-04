@@ -19,6 +19,16 @@ ADAPTACIONES BACKEND → DATAVERSE (schema real validado 2026-03-29):
     existentes en Dataverse — no requiere tabla dedicada. No es atomico, pero
     es aceptable para la escala del MVP.
 
+ESTADO (derivado en Dataverse):
+  El campo ``estado`` no existe en Dataverse. La estrategia adoptada es:
+  - Al leer un lote de Dataverse, se retorna estado="abierto" por defecto.
+  - ``cerrar_lote_recepcion`` llama a repos.lotes.update(..., {"estado": "cerrado"})
+    pero el campo es ignorado silenciosamente por DataverseLoteRepository.update.
+  - La vista RecepcionView limpia la sesion activa al cerrar (session pop), por
+    lo que el usuario no puede seguir agregando bins aunque el estado en
+    Dataverse no cambie formalmente.
+  - Esta es una limitacion conocida del modelo Dataverse. Ver TECHNICAL_CHANGES.md.
+
 TRANSACCIONES:
   Dataverse Web API no soporta transacciones ACID. En error parcial en
   operaciones multi-paso se requieren compensaciones manuales. Brecha conocida.
@@ -26,7 +36,6 @@ TRANSACCIONES:
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
@@ -108,7 +117,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Helpers: OData row → record type
+# Helpers: parsing de valores OData
 # ---------------------------------------------------------------------------
 
 def _parse_date(val: Any) -> Optional[datetime.date]:
@@ -140,17 +149,23 @@ def _str(val: Any) -> str:
     return str(val) if val is not None else ""
 
 
+# ---------------------------------------------------------------------------
+# Helpers: OData row → record type
+# ---------------------------------------------------------------------------
+
 def _row_to_bin(row: dict) -> BinRecord:
     return BinRecord(
         id=row.get(BIN_FIELDS["id"]),
         temporada="",                               # no existe en Dataverse
-        bin_code=row.get(BIN_FIELDS["bin_code"], ""),
-        operator_code=row.get(BIN_FIELDS["operator_code"], ""),
-        source_system=row.get(BIN_FIELDS["source_system"], "dataverse"),
-        source_event_id=row.get(BIN_FIELDS["source_event_id"], ""),
+        bin_code=_str(row.get(BIN_FIELDS["bin_code"])),
+        operator_code=_str(row.get(BIN_FIELDS["operator_code"])),
+        source_system=_str(row.get(BIN_FIELDS["source_system"])) or "dataverse",
+        source_event_id=_str(row.get(BIN_FIELDS["source_event_id"])),
         is_active=row.get("statecode", 0) == 0,
-        id_bin=row.get(BIN_FIELDS["id_bin"], ""),
-        variedad_fruta=row.get(BIN_FIELDS["variedad_fruta"], ""),
+        id_bin=_str(row.get(BIN_FIELDS["id_bin"])),
+        variedad_fruta=_str(row.get(BIN_FIELDS["variedad_fruta"])),
+        kilos_bruto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_bruto_ingreso"])),
+        kilos_neto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_neto_ingreso"])),
     )
 
 
@@ -158,17 +173,23 @@ def _row_to_lote(row: dict) -> LoteRecord:
     return LoteRecord(
         id=row.get(LOTE_FIELDS["id"]),
         temporada="",                               # no existe en Dataverse
-        lote_code=row.get(LOTE_FIELDS["lote_code"], ""),
-        operator_code=row.get(LOTE_FIELDS["operator_code"], ""),
-        source_system=row.get(LOTE_FIELDS["source_system"], "dataverse"),
-        source_event_id=row.get(LOTE_FIELDS["source_event_id"], ""),
+        lote_code=_str(row.get(LOTE_FIELDS["lote_code"])),
+        operator_code=_str(row.get(LOTE_FIELDS["operator_code"])),
+        source_system=_str(row.get(LOTE_FIELDS["source_system"])) or "dataverse",
+        source_event_id=_str(row.get(LOTE_FIELDS["source_event_id"])),
         is_active=row.get("statecode", 0) == 0,
-        id_lote_planta=row.get(LOTE_FIELDS["id_lote_planta"], ""),
-        cantidad_bins=row.get(LOTE_FIELDS["cantidad_bins"], 0) or 0,
-        # estado, temporada_codigo, correlativo_temporada no existen en Dataverse
+        id_lote_planta=_str(row.get(LOTE_FIELDS["id_lote_planta"])),
+        cantidad_bins=int(row.get(LOTE_FIELDS["cantidad_bins"]) or 0),
+        kilos_bruto_conformacion=_parse_decimal(row.get(LOTE_FIELDS["kilos_bruto_conformacion"])),
+        kilos_neto_conformacion=_parse_decimal(row.get(LOTE_FIELDS["kilos_neto_conformacion"])),
+        requiere_desverdizado=bool(row.get(LOTE_FIELDS["requiere_desverdizado"])),
+        disponibilidad_camara_desverdizado=_str(row.get(LOTE_FIELDS["disponibilidad_camara_desverdizado"])) or None,
+        # estado, temporada_codigo, correlativo_temporada no existen en Dataverse.
+        # etapa_actual se lee desde crf21_etapa_actual; None si no ha sido escrito aún.
         estado="abierto",
         temporada_codigo="",
         correlativo_temporada=None,
+        etapa_actual=_str(row.get(LOTE_FIELDS["etapa_actual"])) or None,
     )
 
 
@@ -176,12 +197,12 @@ def _row_to_pallet(row: dict) -> PalletRecord:
     return PalletRecord(
         id=row.get(PALLET_FIELDS["id"]),
         temporada="",                               # no existe en Dataverse
-        pallet_code=row.get(PALLET_FIELDS["pallet_code"], ""),
-        operator_code=row.get(PALLET_FIELDS["operator_code"], ""),
+        pallet_code=_str(row.get(PALLET_FIELDS["pallet_code"])),
+        operator_code=_str(row.get(PALLET_FIELDS["operator_code"])),
         source_system="dataverse",
         source_event_id="",
         is_active=row.get("statecode", 0) == 0,
-        id_pallet=row.get(PALLET_FIELDS["id_pallet"], ""),
+        id_pallet=_str(row.get(PALLET_FIELDS["id_pallet"])),
     )
 
 
@@ -376,7 +397,7 @@ _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "id", "id_lote_planta", "lote_code", "operator_code", "source_system",
     "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
     "kilos_neto_conformacion", "requiere_desverdizado",
-    "disponibilidad_camara_desverdizado",
+    "disponibilidad_camara_desverdizado", "etapa_actual",
 )]
 _BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
 
@@ -395,10 +416,7 @@ class DataverseBinRepository(BinRepository):
         f = f"{BIN_FIELDS['bin_code']} eq '{bin_code}'"
         result = self._client.list_rows(
             ENTITY_SET_BIN,
-            select=[BIN_FIELDS[k] for k in (
-                "id", "id_bin", "bin_code", "operator_code",
-                "source_system", "source_event_id", "variedad_fruta",
-            )],
+            select=_BIN_SELECT,
             filter_expr=f,
             top=1,
         )
@@ -421,35 +439,34 @@ class DataverseBinRepository(BinRepository):
             BIN_FIELDS["source_system"]:   source_system,
             BIN_FIELDS["source_event_id"]: source_event_id,
         }
-        # Mapear campos extra conocidos al esquema Dataverse
-        extra = extra or {}
         _extra_map = {
-            "codigo_productor":  BIN_FIELDS["codigo_productor"],
-            "nombre_productor":  BIN_FIELDS["nombre_productor"],
-            "tipo_cultivo":      BIN_FIELDS["tipo_cultivo"],
-            "variedad_fruta":    BIN_FIELDS["variedad_fruta"],
-            "numero_cuartel":    BIN_FIELDS["numero_cuartel"],
-            "nombre_cuartel":    BIN_FIELDS["nombre_cuartel"],
-            "predio":            BIN_FIELDS["predio"],
-            "sector":            BIN_FIELDS["sector"],
-            "lote_productor":    BIN_FIELDS["lote_productor"],
-            "color":             BIN_FIELDS["color"],
-            "estado_fisico":     BIN_FIELDS["estado_fisico"],
-            "a_o_r":             BIN_FIELDS["a_o_r"],
-            "hora_recepcion":    BIN_FIELDS["hora_recepcion"],
-            "kilos_bruto_ingreso": BIN_FIELDS["kilos_bruto_ingreso"],
-            "kilos_neto_ingreso":  BIN_FIELDS["kilos_neto_ingreso"],
-            "n_cajas_campo":     BIN_FIELDS["n_cajas_campo"],
-            "observaciones":     BIN_FIELDS["observaciones"],
-            "n_guia":            BIN_FIELDS["n_guia"],
-            "transporte":        BIN_FIELDS["transporte"],
-            "capataz":           BIN_FIELDS["capataz"],
+            "codigo_productor":   BIN_FIELDS["codigo_productor"],
+            "nombre_productor":   BIN_FIELDS["nombre_productor"],
+            "tipo_cultivo":       BIN_FIELDS["tipo_cultivo"],
+            "variedad_fruta":     BIN_FIELDS["variedad_fruta"],
+            "numero_cuartel":     BIN_FIELDS["numero_cuartel"],
+            "nombre_cuartel":     BIN_FIELDS["nombre_cuartel"],
+            "predio":             BIN_FIELDS["predio"],
+            "sector":             BIN_FIELDS["sector"],
+            "lote_productor":     BIN_FIELDS["lote_productor"],
+            "color":              BIN_FIELDS["color"],
+            "estado_fisico":      BIN_FIELDS["estado_fisico"],
+            "a_o_r":              BIN_FIELDS["a_o_r"],
+            "hora_recepcion":     BIN_FIELDS["hora_recepcion"],
+            "kilos_bruto_ingreso":BIN_FIELDS["kilos_bruto_ingreso"],
+            "kilos_neto_ingreso": BIN_FIELDS["kilos_neto_ingreso"],
+            "n_cajas_campo":      BIN_FIELDS["n_cajas_campo"],
+            "observaciones":      BIN_FIELDS["observaciones"],
+            "n_guia":             BIN_FIELDS["n_guia"],
+            "transporte":         BIN_FIELDS["transporte"],
+            "capataz":            BIN_FIELDS["capataz"],
             "codigo_contratista": BIN_FIELDS["codigo_contratista"],
             "nombre_contratista": BIN_FIELDS["nombre_contratista"],
         }
         for domain_key, dv_field in _extra_map.items():
-            if domain_key in extra and extra[domain_key] not in (None, ""):
-                body[dv_field] = extra[domain_key]
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
 
         row = self._client.create_row(ENTITY_SET_BIN, body) or {}
         return BinRecord(
@@ -469,20 +486,48 @@ class DataverseBinRepository(BinRepository):
         )
         result = self._client.list_rows(
             ENTITY_SET_BIN,
-            select=[BIN_FIELDS[k] for k in (
-                "id", "id_bin", "bin_code", "operator_code",
-                "source_system", "source_event_id", "variedad_fruta",
-            )],
+            select=_BIN_SELECT,
             filter_expr=f"({codes_filter})",
             top=len(bin_codes) + 10,
         )
         return [_row_to_bin(r) for r in (result or {}).get("value", [])]
 
     def list_by_lote(self, lote_id: Any) -> list[BinRecord]:
-        # Stub: listado de bins por lote no implementado en MVP Dataverse.
-        # Dataverse no expone join directo bin→lote en el esquema crf21_*.
-        logger.debug("dataverse:BinRepository.list_by_lote no implementado (lote_id=%s)", lote_id)
-        return []
+        """
+        Obtiene los bins de un lote consultando primero la tabla de union
+        crf21_bin_lote_plantas por lote, luego resolviendo los bins por sus IDs.
+
+        Estrategia de dos pasos:
+          1. crf21_bin_lote_plantas filtrado por _crf21_lote_planta_id_value = lote_id
+          2. crf21_bins filtrado por los bin_ids obtenidos
+        """
+        # Paso 1: obtener bin_ids asociados al lote
+        f = f"{BIN_LOTE_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_BIN_LOTE,
+            select=[BIN_LOTE_FIELDS["bin_id_value"]],
+            filter_expr=f,
+            top=9999,
+        )
+        bin_ids = [
+            r.get(BIN_LOTE_FIELDS["bin_id_value"])
+            for r in (result or {}).get("value", [])
+            if r.get(BIN_LOTE_FIELDS["bin_id_value"])
+        ]
+        if not bin_ids:
+            return []
+
+        # Paso 2: obtener los bins por sus IDs
+        ids_filter = " or ".join(
+            f"{BIN_FIELDS['id']} eq {bid}" for bid in bin_ids
+        )
+        result2 = self._client.list_rows(
+            ENTITY_SET_BIN,
+            select=_BIN_SELECT,
+            filter_expr=f"({ids_filter})",
+            top=len(bin_ids) + 10,
+        )
+        return [_row_to_bin(r) for r in (result2 or {}).get("value", [])]
 
 
 # ---------------------------------------------------------------------------
@@ -499,10 +544,7 @@ class DataverseLoteRepository(LoteRepository):
         f = f"{LOTE_FIELDS['lote_code']} eq '{lote_code}'"
         result = self._client.list_rows(
             ENTITY_SET_LOTE,
-            select=[LOTE_FIELDS[k] for k in (
-                "id", "id_lote_planta", "lote_code", "operator_code",
-                "source_system", "source_event_id", "cantidad_bins",
-            )],
+            select=_LOTE_SELECT,
             filter_expr=f,
             top=1,
         )
@@ -531,8 +573,10 @@ class DataverseLoteRepository(LoteRepository):
             LOTE_FIELDS["cantidad_bins"]:   0,
         }
         extra = extra or {}
-        if "fecha_conformacion" in extra and extra["fecha_conformacion"]:
+        if extra.get("fecha_conformacion"):
             body[LOTE_FIELDS["fecha_conformacion"]] = str(extra["fecha_conformacion"])
+        if extra.get("etapa_actual"):
+            body[LOTE_FIELDS["etapa_actual"]] = str(extra["etapa_actual"])
 
         row = self._client.create_row(ENTITY_SET_LOTE, body) or {}
         return LoteRecord(
@@ -545,6 +589,7 @@ class DataverseLoteRepository(LoteRepository):
             estado="abierto",
             temporada_codigo="",
             correlativo_temporada=None,
+            etapa_actual=extra.get("etapa_actual"),
         )
 
     def filter_by_codes(self, temporada: str, lote_codes: list[str]) -> list[LoteRecord]:
@@ -555,10 +600,7 @@ class DataverseLoteRepository(LoteRepository):
         )
         result = self._client.list_rows(
             ENTITY_SET_LOTE,
-            select=[LOTE_FIELDS[k] for k in (
-                "id", "id_lote_planta", "lote_code", "operator_code",
-                "source_system", "source_event_id", "cantidad_bins",
-            )],
+            select=_LOTE_SELECT,
             filter_expr=f"({codes_filter})",
             top=len(lote_codes) + 10,
         )
@@ -567,21 +609,17 @@ class DataverseLoteRepository(LoteRepository):
             r.temporada = temporada
         return records
 
-    def list_recent(self, temporada: str, limit: int = 20) -> list[LoteRecord]:
-        # Stub: list_recent no implementado en MVP Dataverse.
-        # temporada no existe en Dataverse; requeriria filtro por rango de fechas.
-        logger.debug("dataverse:LoteRepository.list_recent no implementado (temporada=%s)", temporada)
-        return []
-
     def update(self, lote_id: Any, fields: dict) -> LoteRecord:
         # Mapear campos del dominio a campos Dataverse (solo los que existen)
         _updatable = {
-            "cantidad_bins":            LOTE_FIELDS["cantidad_bins"],
-            "kilos_bruto_conformacion": LOTE_FIELDS["kilos_bruto_conformacion"],
-            "kilos_neto_conformacion":  LOTE_FIELDS["kilos_neto_conformacion"],
-            "requiere_desverdizado":    LOTE_FIELDS["requiere_desverdizado"],
-            "disponibilidad_camara_desverdizado": LOTE_FIELDS["disponibilidad_camara_desverdizado"],
-            "operator_code":            LOTE_FIELDS["operator_code"],
+            "cantidad_bins":                        LOTE_FIELDS["cantidad_bins"],
+            "kilos_bruto_conformacion":             LOTE_FIELDS["kilos_bruto_conformacion"],
+            "kilos_neto_conformacion":              LOTE_FIELDS["kilos_neto_conformacion"],
+            "requiere_desverdizado":                LOTE_FIELDS["requiere_desverdizado"],
+            "disponibilidad_camara_desverdizado":   LOTE_FIELDS["disponibilidad_camara_desverdizado"],
+            "operator_code":                        LOTE_FIELDS["operator_code"],
+            # etapa_actual: campo disponible desde 2026-03-31
+            "etapa_actual":                         LOTE_FIELDS["etapa_actual"],
         }
         body = {
             dv_field: fields[domain_key]
@@ -596,10 +634,7 @@ class DataverseLoteRepository(LoteRepository):
         # Recuperar registro actualizado
         result = self._client.list_rows(
             ENTITY_SET_LOTE,
-            select=[LOTE_FIELDS[k] for k in (
-                "id", "id_lote_planta", "lote_code", "operator_code",
-                "source_system", "source_event_id", "cantidad_bins",
-            )],
+            select=_LOTE_SELECT,
             filter_expr=f"{LOTE_FIELDS['id']} eq {lote_id}",
             top=1,
         )
@@ -607,6 +642,20 @@ class DataverseLoteRepository(LoteRepository):
         return _row_to_lote(rows[0]) if rows else LoteRecord(
             id=lote_id, temporada="", lote_code="",
         )
+
+    def list_recent(self, limit: int = 50) -> list[LoteRecord]:
+        """
+        Retorna los lotes mas recientes ordenados por fecha de creacion descendente.
+        Usado por DashboardView en modo Dataverse para mostrar KPIs reales.
+        temporada no existe en Dataverse: se retorna temporada="" en todos los records.
+        """
+        result = self._client.list_rows(
+            ENTITY_SET_LOTE,
+            select=_LOTE_SELECT,
+            orderby="createdon desc",
+            top=limit,
+        )
+        return [_row_to_lote(r) for r in (result or {}).get("value", [])]
 
 
 # ---------------------------------------------------------------------------
@@ -622,9 +671,7 @@ class DataversePalletRepository(PalletRepository):
         f = f"{PALLET_FIELDS['pallet_code']} eq '{pallet_code}'"
         result = self._client.list_rows(
             ENTITY_SET_PALLET,
-            select=[PALLET_FIELDS[k] for k in (
-                "id", "id_pallet", "pallet_code", "operator_code", "fecha",
-            )],
+            select=[PALLET_FIELDS[k] for k in ("id", "id_pallet", "pallet_code", "operator_code", "fecha")],
             filter_expr=f,
             top=1,
         )
@@ -654,8 +701,9 @@ class DataversePalletRepository(PalletRepository):
         }
         extra = extra or {}
         for domain_key in ("fecha", "tipo_caja", "cajas_por_pallet", "peso_total_kg", "destino_mercado"):
-            if domain_key in extra and extra[domain_key] not in (None, ""):
-                body[PALLET_FIELDS[domain_key]] = extra[domain_key]
+            v = extra.get(domain_key)
+            if v not in (None, ""):
+                body[PALLET_FIELDS[domain_key]] = v
         row = self._client.create_row(ENTITY_SET_PALLET, body) or {}
         return PalletRecord(
             id=row.get(PALLET_FIELDS["id"]),
@@ -716,15 +764,28 @@ class DataverseBinLoteRepository(BinLoteRepository):
         conflicts = []
         for row in (result or {}).get("value", []):
             conflicts.append(BinAssignmentConflict(
-                bin_code=str(row.get(BIN_LOTE_FIELDS["bin_id_value"], "")),
-                lote_code=str(row.get(BIN_LOTE_FIELDS["lote_id_value"], "")),
+                bin_code=_str(row.get(BIN_LOTE_FIELDS["bin_id_value"])),
+                lote_code=_str(row.get(BIN_LOTE_FIELDS["lote_id_value"])),
             ))
         return conflicts
 
     def list_by_lote(self, lote_id: Any) -> list[BinLoteRecord]:
-        # Stub: listado de asociaciones por lote no implementado en MVP Dataverse.
-        logger.debug("dataverse:BinLoteRepository.list_by_lote no implementado (lote_id=%s)", lote_id)
-        return []
+        """Retorna todos los registros de la tabla union bin-lote para un lote dado."""
+        f = f"{BIN_LOTE_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_BIN_LOTE,
+            select=_BIN_LOTE_SELECT,
+            filter_expr=f,
+            top=9999,
+        )
+        records = []
+        for row in (result or {}).get("value", []):
+            records.append(BinLoteRecord(
+                id=row.get(BIN_LOTE_FIELDS["id"]),
+                bin_id=row.get(BIN_LOTE_FIELDS["bin_id_value"]),
+                lote_id=lote_id,
+            ))
+        return records
 
 
 # ---------------------------------------------------------------------------
@@ -754,6 +815,31 @@ class DataversePalletLoteRepository(PalletLoteRepository):
             id=row.get(PALLET_LOTE_FIELDS["id"]),
             pallet_id=row.get(PALLET_LOTE_FIELDS["pallet_id_value"]),
             lote_id=lote_id,
+        )
+
+    def find_by_pallet(self, pallet_id: Any) -> Optional[PalletLoteRecord]:
+        """
+        Retorna la asociacion lote-pallet dado un pallet_id.
+        Usado para actualizar etapa_actual del lote en operaciones pallet-nivel
+        (calidad_pallet, camara_frio, medicion_temperatura).
+        """
+        f = f"{PALLET_LOTE_FIELDS['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_PALLET_LOTE,
+            select=[PALLET_LOTE_FIELDS["id"],
+                    PALLET_LOTE_FIELDS["pallet_id_value"],
+                    PALLET_LOTE_FIELDS["lote_id_value"]],
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        if not rows:
+            return None
+        row = rows[0]
+        return PalletLoteRecord(
+            id=row.get(PALLET_LOTE_FIELDS["id"]),
+            pallet_id=pallet_id,
+            lote_id=row.get(PALLET_LOTE_FIELDS["lote_id_value"]),
         )
 
     def get_or_create(
@@ -873,6 +959,7 @@ class DataverseRegistroEtapaRepository(RegistroEtapaRepository):
         return record, True
 
     def list_recent(self, limit: int = 100) -> list[RegistroEtapaRecord]:
+        # Sin tabla en Dataverse: retorna lista vacia (no es informacion critica).
         return []
 
 
@@ -885,11 +972,6 @@ class DataverseSequenceCounterRepository(SequenceCounterRepository):
     Genera correlativos contando registros existentes en Dataverse.
     No es atomico — race conditions posibles bajo alta concurrencia.
     Aceptable para la escala del MVP.
-
-    Estrategias por entidad:
-      bin    — cuenta bins con bin_code que empiece por el prefijo de la dimension
-      lote   — cuenta lotes en el rango de fechas de la temporada
-      pallet — cuenta pallets con fecha en el dia de la dimension
     """
 
     def __init__(self, client) -> None:
@@ -919,9 +1001,9 @@ class DataverseSequenceCounterRepository(SequenceCounterRepository):
         parts = dimension.split("|")
         prefix = "-".join(parts) + "-"
         result = self._client.list_rows(
-            "crf21_bins",
-            select=["crf21_bin_code"],
-            filter_expr=f"startswith(crf21_bin_code,'{prefix}')",
+            ENTITY_SET_BIN,
+            select=[BIN_FIELDS["bin_code"]],
+            filter_expr=f"startswith({BIN_FIELDS['bin_code']},'{prefix}')",
             top=9999,
         )
         return len((result or {}).get("value", []))
@@ -935,11 +1017,11 @@ class DataverseSequenceCounterRepository(SequenceCounterRepository):
         except ValueError:
             return 0
         result = self._client.list_rows(
-            "crf21_lote_plantas",
-            select=["crf21_lote_plantaid"],
+            ENTITY_SET_LOTE,
+            select=[LOTE_FIELDS["id"]],
             filter_expr=(
-                f"crf21_fecha_conformacion ge {start}"
-                f" and crf21_fecha_conformacion le {end}"
+                f"{LOTE_FIELDS['fecha_conformacion']} ge {start}"
+                f" and {LOTE_FIELDS['fecha_conformacion']} le {end}"
             ),
             top=9999,
         )
@@ -955,27 +1037,12 @@ class DataverseSequenceCounterRepository(SequenceCounterRepository):
         next_d = d + datetime.timedelta(days=1)
         end   = f"{next_d.isoformat()}T00:00:00Z"
         result = self._client.list_rows(
-            "crf21_pallets",
-            select=["crf21_palletid"],
-            filter_expr=f"crf21_fecha ge {start} and crf21_fecha lt {end}",
+            ENTITY_SET_PALLET,
+            select=[PALLET_FIELDS["id"]],
+            filter_expr=f"{PALLET_FIELDS['fecha']} ge {start} and {PALLET_FIELDS['fecha']} lt {end}",
             top=9999,
         )
         return len((result or {}).get("value", []))
-
-
-# ---------------------------------------------------------------------------
-# Stub implementations para nuevas entidades (pendientes de uso en Dataverse)
-# ---------------------------------------------------------------------------
-
-class _DataverseStubMixin:
-    _entity_name: str = "entidad"
-
-    def _not_implemented(self, method: str):
-        raise NotImplementedError(
-            f"DataverseRepository para {self._entity_name}.{method} "
-            "no esta implementado aun. Valide el esquema con el equipo de "
-            "Power Platform y complete la implementacion OData en este modulo."
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -1624,6 +1691,83 @@ class DataverseMedicionTemperaturaSalidaRepository(MedicionTemperaturaSalidaRepo
             top=100,
         )
         return [_row_to_medicion_temperatura(r, pallet_id) for r in (result or {}).get("value", [])]
+
+
+# ---------------------------------------------------------------------------
+# Resolver de etapa actual — fuente principal: campo persistido en Dataverse
+# ---------------------------------------------------------------------------
+
+def resolve_etapa_lote(lote, repos=None) -> str:
+    """
+    Retorna la etapa actual del lote como string display-friendly.
+
+    Estrategia:
+      1. Si el lote tiene etapa_actual persistida (no null), la retorna directamente.
+         Este es el camino feliz para todos los lotes creados desde 2026-03-31.
+      2. Si etapa_actual es null (registros anteriores a la integracion) y repos
+         esta disponible, deriva la etapa consultando tablas de etapas en orden
+         inverso (mas avanzada primero). Esto es costoso en Dataverse (multiples
+         API calls) y NO debe usarse para listados bulk.
+      3. Si repos es None o falla la derivacion, retorna 'Recepcion' como fallback
+         conservador (los lotes sin etapa eran mayormente de recepcion).
+
+    IMPORTANTE: para listados bulk (dashboard, consulta), llamar sin repos o con
+    repos=None para evitar N*K llamadas a Dataverse.
+    Para vista de detalle de un solo lote, pasar repos para derivacion completa.
+
+    Args:
+        lote: LoteRecord (Dataverse) o instancia ORM Lote (SQLite).
+        repos: Repositories opcional para derivacion completa de fallback.
+
+    Returns:
+        str con la etapa (ej. "Recepcion", "Pesaje", "Desverdizado", etc.)
+    """
+    # Lote Dataverse con etapa_actual persistida
+    etapa_persistida = getattr(lote, "etapa_actual", None)
+    if etapa_persistida:
+        return etapa_persistida
+
+    # Fallback conservador sin repos (uso en bulk listings)
+    if repos is None:
+        return "Recepcion"
+
+    # Derivacion completa para registros antiguos (uso en detalle individual)
+    try:
+        lote_id = lote.id
+        # Orden inverso: etapa mas avanzada primero
+        pl = repos.pallet_lotes.find_by_lote(lote_id)
+        if pl:
+            # Si hay pallet, verificar si tiene camara_frio
+            try:
+                cf = repos.camara_frios.find_by_pallet(pl.pallet_id)
+                if cf:
+                    return "Camara Frio"
+            except Exception:
+                pass
+            return "Paletizado"
+
+        ip = repos.ingresos_packing.find_by_lote(lote_id)
+        if ip:
+            # puede tener registros packing tambien
+            return "Ingreso Packing"
+
+        desv = repos.desverdizados.find_by_lote(lote_id)
+        if desv:
+            return "Desverdizado"
+
+        cm = repos.camara_mantencions.find_by_lote(lote_id)
+        if cm:
+            return "Mantencion"
+
+        # Sin registros de etapas avanzadas: Pesaje o Recepcion
+        cantidad_bins = getattr(lote, "cantidad_bins", 0)
+        if cantidad_bins and int(cantidad_bins) > 0:
+            return "Pesaje"
+
+        return "Recepcion"
+    except Exception as exc:
+        logger.debug("resolve_etapa_lote fallback error para lote %s: %s", getattr(lote, "id", "?"), exc)
+        return "Recepcion"
 
 
 # ---------------------------------------------------------------------------

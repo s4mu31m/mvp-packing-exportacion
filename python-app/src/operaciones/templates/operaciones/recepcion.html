@@ -1,192 +1,235 @@
 {% extends "layout_app.html" %}
 {% load static %}
 
-{% block title %}Recepcion Bins — CaliPro{% endblock %}
-
-{% block page_title %}Recepcion de Bins{% endblock %}
+{% block title %}Recepción Bins — CaliPro{% endblock %}
+{% block page_title %}Recepción de Bins{% endblock %}
 {% block page_subtitle %}
-  {% if lote_activo %}
-    Lote activo: <strong>{{ lote_activo.lote_code }}</strong> — estado: {{ lote_activo.estado }}
-  {% else %}
-    Sin lote activo — inicie un lote para comenzar la recepcion
-  {% endif %}
+  {% if lote %}Lote activo: {{ lote.lote_code }}{% else %}Sin lote activo{% endif %}
 {% endblock %}
 
 {% block page_actions %}
-  {% if lote_activo %}
-    <span class="badge badge-teal">{{ lote_activo.lote_code }}</span>
-    <span style="font-size:.8rem;color:var(--text-muted);margin-left:.5rem">
-      {{ bins_del_lote|length }} bin(s) &bull; {{ total_peso_neto|floatformat:0 }} kg neto
+  {% if lote %}
+    <span class="badge badge-teal">{{ lote.lote_code }}</span>
+    <span class="badge" style="background:var(--surface-2);color:var(--text-muted)">
+      {{ lote.cantidad_bins }} bin{{ lote.cantidad_bins|pluralize:"s" }}
     </span>
   {% endif %}
 {% endblock %}
 
 {% block page_body %}
-  {% include "packing/_step_indicator.html" with active_step="recepcion" %}
-
   {% if messages %}
-    <div style="margin-bottom:1rem">
-      {% for msg in messages %}
-        <div class="alert alert-{{ msg.tags }}">{{ msg }}</div>
-      {% endfor %}
-    </div>
+    {% for msg in messages %}
+      <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
+    {% endfor %}
   {% endif %}
 
-  {% if not lote_activo %}
-    {# ================================================================== #}
-    {# ESTADO: sin lote activo — mostrar solo el formulario de inicio       #}
-    {# ================================================================== #}
-    <div class="card" style="max-width:480px">
-      <h3 style="margin-bottom:1rem">Iniciar Lote de Recepcion</h3>
-      <p style="color:var(--text-muted);margin-bottom:1.5rem">
-        Para agregar bins debe iniciar primero un lote. El codigo de lote se
-        genera automaticamente.
-      </p>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="iniciar_lote">
-        <input type="hidden" name="temporada" value="{{ request.session.temporada_activa|default:'' }}">
+  {% if not lote %}
+  <!-- ===== SIN LOTE ACTIVO: formulario para iniciar ===== -->
+  <div class="card" style="max-width:480px">
+    <div class="card-title" style="margin-bottom:1rem">Iniciar sesion de recepcion</div>
+    <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1.2rem">
+      Cada sesion crea un nuevo lote planta. Los bins se agregan dentro del lote.
+    </p>
+    <form method="post" id="form-iniciar">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="iniciar">
+      {% for field in form_iniciar %}
         <div class="form-group">
-          <label class="form-label" for="id_operator_code_inicio">Codigo operador</label>
-          <input type="text" id="id_operator_code_inicio" name="operator_code"
-                 class="form-control" placeholder="OP-001" maxlength="50">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
         </div>
-        <div class="flex-row mt-4">
-          <button type="submit" class="btn btn-primary ml-auto">Iniciar Lote</button>
-        </div>
-      </form>
-    </div>
+      {% endfor %}
+      <div class="flex-row mt-4">
+        <button type="submit" class="btn btn-primary ml-auto">+ Iniciar Lote</button>
+      </div>
+    </form>
+  </div>
 
   {% else %}
-    {# ================================================================== #}
-    {# ESTADO: lote activo — agregar bins + lista + cierre                 #}
-    {# ================================================================== #}
-    <div class="op-layout">
+  <!-- ===== LOTE ACTIVO: agregar bins ===== -->
+  <div class="op-layout">
 
-      {# ---- COLUMNA IZQUIERDA: formulario agregar bin ---- #}
-      <div class="flex-col">
+    <!-- FORMULARIO DE BINS -->
+    <div class="flex-col">
 
-        {% if lote_activo.estado == "abierto" %}
-          <div class="card">
-            <h4 style="margin-bottom:1rem">Agregar Bin al Lote {{ lote_activo.lote_code }}</h4>
-            <form method="post" id="form-agregar-bin">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="agregar_bin">
-              <input type="hidden" name="temporada" value="{{ request.session.temporada_activa|default:'' }}">
+      <!-- Panel: campos base del lote (bloqueados si ya hay bins) -->
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-title" style="margin-bottom:.8rem">
+          Datos base del lote
+          {% if campos_base %}
+            <span style="font-size:.78rem;font-weight:400;color:var(--text-muted);margin-left:.5rem">
+              — fijos para todos los bins de este lote
+            </span>
+          {% endif %}
+        </div>
+        <form method="post" id="form-bin">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="agregar_bin">
 
-              {% for field in form_bin %}
-                <div class="form-group">
-                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                  {{ field }}
-                  {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-                  {% for err in field.errors %}
-                    <div class="form-error">{{ err }}</div>
-                  {% endfor %}
+          <!-- Campos base del lote -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+            {% for field in form_bin %}
+              {% if field.name in "codigo_productor,tipo_cultivo,variedad_fruta,color,fecha_cosecha" %}
+                <div class="form-group" style="margin-bottom:.5rem">
+                  <label class="form-label" for="{{ field.id_for_label }}">
+                    {{ field.label }}
+                    {% if campos_base %}
+                      <span style="font-size:.7rem;color:var(--text-muted)">(fijo)</span>
+                    {% endif %}
+                  </label>
+                  {% if campos_base %}
+                    {# Campo bloqueado: mostrar como readonly #}
+                    <input type="text"
+                           class="form-control"
+                           name="{{ field.html_name }}"
+                           value="{{ field.value }}"
+                           readonly
+                           style="background:var(--surface-2);color:var(--text-muted);cursor:not-allowed">
+                  {% else %}
+                    {{ field }}
+                  {% endif %}
+                  {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
                 </div>
-              {% endfor %}
-
-              <div class="flex-row mt-4">
-                <button type="reset" class="btn btn-ghost">Limpiar</button>
-                <button type="submit" class="btn btn-primary ml-auto">+ Agregar Bin</button>
-              </div>
-            </form>
-          </div>
-
-          {# Cerrar lote #}
-          <div class="card" style="margin-top:1rem;border:1px solid var(--warning, #f59e0b)">
-            <h4 style="margin-bottom:.5rem">Cerrar Lote</h4>
-            <p style="color:var(--text-muted);margin-bottom:1rem;font-size:.88rem">
-              Al cerrar el lote no se podran agregar mas bins.
-              {% if bins_del_lote|length == 0 %}
-                <strong>El lote debe tener al menos un bin para poder cerrarse.</strong>
               {% endif %}
-            </p>
-            <form method="post" id="form-cerrar-lote"
-                  onsubmit="return confirm('Cerrar lote {{ lote_activo.lote_code }} con {{ bins_del_lote|length }} bin(s)?')">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="cerrar_lote">
-              <input type="hidden" name="temporada" value="{{ request.session.temporada_activa|default:'' }}">
-              <div class="form-group">
-                <label class="form-label" for="id_operator_code_cierre">Codigo operador (cierre)</label>
-                <input type="text" id="id_operator_code_cierre" name="operator_code"
-                       class="form-control" placeholder="OP-001" maxlength="50">
-              </div>
-              <div class="flex-row mt-2">
-                <button type="submit" class="btn btn-warning ml-auto"
-                        {% if bins_del_lote|length == 0 %}disabled title="Agregue al menos un bin antes de cerrar"{% endif %}>
-                  Cerrar Lote
-                </button>
-              </div>
-            </form>
+            {% endfor %}
           </div>
 
-        {% else %}
-          {# Lote cerrado o en otro estado #}
-          <div class="card">
-            <p style="color:var(--text-muted)">
-              El lote <strong>{{ lote_activo.lote_code }}</strong> esta en estado
-              <strong>{{ lote_activo.estado }}</strong>. No se pueden agregar mas bins.
-            </p>
-            <form method="post">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="cerrar_lote">
-              <input type="hidden" name="temporada" value="{{ request.session.temporada_activa|default:'' }}">
-              <p style="color:var(--text-muted);font-size:.85rem">
-                Si desea iniciar un nuevo lote, primero
-                <a href="{% url 'operaciones:recepcion' %}?clear=1">limpie la sesion</a>.
-              </p>
-            </form>
-          </div>
-        {% endif %}
+          <div class="section-divider" style="margin:.8rem 0"></div>
 
+          <!-- Campos variables por bin -->
+          <div class="card-title" style="margin-bottom:.6rem;font-size:.9rem">Datos del bin</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+            {% for field in form_bin %}
+              {% if field.name not in "codigo_productor,tipo_cultivo,variedad_fruta,color,fecha_cosecha" %}
+                {% if field.name != "observaciones" %}
+                  <div class="form-group" style="margin-bottom:.5rem">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+                    {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+                  </div>
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          <!-- Observaciones + Operador -->
+          {% for field in form_bin %}
+            {% if field.name == "observaciones" %}
+              <div class="form-group" style="margin-top:.5rem">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+              </div>
+            {% endif %}
+          {% endfor %}
+          <div class="form-group" style="margin-top:.5rem">
+            <label class="form-label">Codigo operador</label>
+            <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+          </div>
+
+          <div class="flex-row mt-4">
+            <button type="reset" class="btn btn-ghost">Limpiar</button>
+            <button type="submit" class="btn btn-primary ml-auto">+ Agregar Bin</button>
+          </div>
+        </form>
       </div>
 
-      {# ---- PANEL LATERAL: bins del lote ---- #}
-      <div class="op-sidebar-panel">
-        <div class="op-sidebar-title">
-          Bins en {{ lote_activo.lote_code }}
-          <span style="float:right;font-size:.8rem;font-weight:400;color:var(--text-muted)">
-            {{ lote_activo.estado }}
-          </span>
+      <!-- Panel: cerrar lote -->
+      <div class="card" style="background:var(--surface-0);border:1px solid var(--border)">
+        <div class="card-title" style="color:var(--warning,#c07a00);margin-bottom:.8rem">
+          Cerrar lote de recepcion
         </div>
-
-        <div id="bins-list">
-          {% for bin in bins_del_lote %}
-            <div class="bin-item" style="padding:.5rem 0;border-bottom:1px solid var(--border-color,#333)">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <strong style="font-size:.85rem;font-family:monospace;letter-spacing:.02em">{{ bin.bin_code }}</strong>
-                <span style="color:var(--teal-400);font-size:.85rem">
-                  {{ bin.kilos_neto_ingreso|floatformat:1|default:"—" }} kg
-                </span>
+        {% if lote.cantidad_bins == 0 %}
+          <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:.8rem">
+            Agregue al menos un bin antes de cerrar el lote.
+          </p>
+        {% endif %}
+        <form method="post" id="form-cerrar">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="cerrar">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+            {% for field in form_cerrar %}
+              <div class="form-group" style="margin-bottom:.5rem">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+                {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
               </div>
-              {% if bin.variedad_fruta %}
-                <div style="color:var(--text-muted);font-size:.78rem">{{ bin.variedad_fruta }}</div>
-              {% endif %}
-              {% if bin.fecha_cosecha %}
-                <div style="color:var(--text-dim);font-size:.75rem">Cosecha: {{ bin.fecha_cosecha }}</div>
-              {% endif %}
-            </div>
-          {% empty %}
-            <div class="empty-state">
-              <div class="empty-state-desc">Sin bins registrados aun</div>
-            </div>
-          {% endfor %}
-        </div>
-
-        <div class="section-divider"></div>
-        <div class="flex-row" style="font-size:.82rem">
-          <span style="color:var(--text-muted)">Total bins:</span>
-          <strong style="margin-left:auto">{{ bins_del_lote|length }}</strong>
-        </div>
-        <div class="flex-row mt-2" style="font-size:.82rem">
-          <span style="color:var(--text-muted)">Total neto:</span>
-          <strong style="color:var(--teal-400);margin-left:auto">
-            {{ total_peso_neto|floatformat:0 }} kg
-          </strong>
-        </div>
+            {% endfor %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Codigo operador</label>
+            <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+          </div>
+          <div class="flex-row mt-4">
+            <button type="submit" class="btn btn-primary ml-auto"
+                    {% if lote.cantidad_bins == 0 %}disabled{% endif %}>
+              Cerrar Lote ({{ lote.cantidad_bins }} bin{{ lote.cantidad_bins|pluralize:"s" }})
+            </button>
+          </div>
+        </form>
       </div>
 
     </div>
+
+    <!-- PANEL LATERAL: bins del lote -->
+    <div class="op-sidebar-panel">
+      <div class="op-sidebar-title">Bins en {{ lote.lote_code }}</div>
+
+      <!-- Resumen campos base -->
+      {% if campos_base %}
+        <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.8rem;line-height:1.6">
+          <strong>Productor:</strong> {{ campos_base.codigo_productor|default:"—" }}<br>
+          <strong>Cultivo:</strong> {{ campos_base.tipo_cultivo|default:"—" }}<br>
+          <strong>Variedad:</strong> {{ campos_base.variedad_fruta|default:"—" }}<br>
+          <strong>Color:</strong> {{ campos_base.color|default:"—" }}<br>
+          <strong>F. Cosecha:</strong> {{ campos_base.fecha_cosecha|default:"—" }}
+        </div>
+        <div class="section-divider"></div>
+      {% endif %}
+
+      <div id="bins-list" style="margin-top:.5rem">
+        {% for bin in bins_del_lote %}
+          <div style="display:flex;justify-content:space-between;align-items:center;
+                      padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.82rem">
+            <div>
+              <span style="font-weight:600">{{ bin.bin_code }}</span><br>
+              <span style="color:var(--text-muted)">
+                C{{ bin.numero_cuartel|default:"?" }}
+                • {{ bin.hora_recepcion|default:"" }}
+              </span>
+            </div>
+            <div style="text-align:right">
+              <span style="color:var(--teal-400);font-weight:600">
+                {{ bin.kilos_neto_ingreso|floatformat:0|default:"—" }} kg
+              </span><br>
+              <span style="font-size:.75rem;color:var(--text-muted)">{{ bin.a_o_r|default:"" }}</span>
+            </div>
+          </div>
+        {% empty %}
+          <div class="empty-state">
+            <div class="empty-state-desc">Sin bins registrados aun</div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="section-divider" style="margin-top:.8rem"></div>
+      <div class="flex-row" style="font-size:.82rem;margin-top:.5rem">
+        <span style="color:var(--text-muted)">Total bins:</span>
+        <strong style="margin-left:auto">{{ bins_del_lote|length }}</strong>
+      </div>
+      <div class="flex-row mt-4" style="font-size:.82rem">
+        <span style="color:var(--text-muted)">Total neto:</span>
+        <strong style="color:var(--teal-400);margin-left:auto">
+          {{ total_peso_neto|floatformat:0 }} kg
+        </strong>
+      </div>
+    </div>
+
+  </div>
   {% endif %}
+
+{% include "operaciones/includes/op_common_js.html" %}
 
 {% endblock %}

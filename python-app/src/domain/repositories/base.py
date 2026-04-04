@@ -60,6 +60,11 @@ class LoteRecord:
     estado: str = "abierto"
     temporada_codigo: str = ""
     correlativo_temporada: Optional[int] = None
+    # etapa_actual: persiste la etapa de proceso en Dataverse.
+    # En SQLite este campo no existe en el modelo; se deriva en vista via _etapa_lote().
+    # En Dataverse se lee desde crf21_etapa_actual; puede ser None para
+    # registros anteriores al 2026-03-31 (usar derive_etapa_lote() como fallback).
+    etapa_actual: Optional[str] = None
 
 
 @dataclass
@@ -331,9 +336,13 @@ class BinRepository(ABC):
     def filter_by_codes(self, temporada: str, bin_codes: list[str]) -> list[BinRecord]:
         """Retorna los bins que existen para la temporada y los codigos dados."""
 
-    @abstractmethod
     def list_by_lote(self, lote_id: Any) -> list[BinRecord]:
-        """Lista los bins asociados al lote dado (via tabla BinLote)."""
+        """
+        Retorna los bins asociados a un lote.
+        Implementacion por defecto: lista vacia (compatibilidad con SQLite que
+        accede a esta relacion via ORM directo). Dataverse sobreescribe este metodo.
+        """
+        return []
 
 
 class LoteRepository(ABC):
@@ -363,9 +372,14 @@ class LoteRepository(ABC):
     def update(self, lote_id: Any, fields: dict) -> LoteRecord:
         """Actualiza campos del lote. Retorna el record actualizado."""
 
-    @abstractmethod
-    def list_recent(self, temporada: str, limit: int = 20) -> list[LoteRecord]:
-        """Lista los lotes mas recientes de la temporada, ordenados de mas nuevo a mas antiguo."""
+    def list_recent(self, limit: int = 50) -> list[LoteRecord]:
+        """
+        Retorna los lotes mas recientes (ordenados por fecha de creacion descendente).
+        Implementacion por defecto: lista vacia. Dataverse sobreescribe para
+        proveer datos reales al dashboard cuando PERSISTENCE_BACKEND=dataverse.
+        SQLite accede a lotes via ORM directo en las vistas.
+        """
+        return []
 
 
 class PalletRepository(ABC):
@@ -406,9 +420,13 @@ class BinLoteRepository(ABC):
     def find_existing_assignments(self, bin_ids: list[Any]) -> list[BinAssignmentConflict]:
         """Retorna bins de la lista que ya estan asignados a algun lote."""
 
-    @abstractmethod
     def list_by_lote(self, lote_id: Any) -> list[BinLoteRecord]:
-        """Retorna todas las asociaciones bin-lote para el lote dado."""
+        """
+        Retorna todos los registros bin-lote de un lote dado.
+        Implementacion por defecto: lista vacia. Dataverse sobreescribe.
+        SQLite usa ORM directo via lote.bin_lotes.all().
+        """
+        return []
 
 
 class PalletLoteRepository(ABC):
@@ -428,6 +446,15 @@ class PalletLoteRepository(ABC):
     @abstractmethod
     def find_by_lote(self, lote_id: Any) -> Optional[PalletLoteRecord]:
         """Retorna la asignacion de pallet para un lote, o None si no tiene."""
+
+    def find_by_pallet(self, pallet_id: Any) -> Optional[PalletLoteRecord]:
+        """
+        Retorna la asociacion lote-pallet dado un pallet_id, o None.
+        Implementacion por defecto: None (SQLite accede via ORM directo).
+        Dataverse sobreescribe para actualizar etapa_actual del lote cuando
+        operaciones pallet-nivel (calidad_pallet, camara_frio) necesitan el lote_id.
+        """
+        return None
 
 
 class RegistroEtapaRepository(ABC):

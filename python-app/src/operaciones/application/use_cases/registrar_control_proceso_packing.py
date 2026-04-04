@@ -58,6 +58,9 @@ def registrar_control_proceso_packing(
         extra=data.get("extra", {}),
     )
 
+    # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
+    repos.lotes.update(lote.id, {"etapa_actual": "Packing / Proceso"})
+
     event_key = build_event_key(
         temporada, "LOTE", lote_code, "CONTROL_PROCESO_PACKING", str(record.id)
     )

@@ -2,216 +2,157 @@
 
 Componente Python del proyecto **MVP Packing Exportación**.
 
-Este módulo concentra el backend Django con la lógica de negocio, modelos de dominio, casos de uso y la capa de integración con Dataverse.
+Backend Django con lógica de negocio, modelos de dominio, casos de uso y capa de integración con Dataverse (Microsoft Power Platform).
 
 > Referencia completa: [05.1 Backend Python Django — Wiki](https://github.com/s4mu31m/mvp-packing-exportacion/wiki/05.1-%C2%B7-Backend-Python-%E2%80%94-Django)
 
 ---
 
-## Estado actual
+## Estado actual (2026-03-31)
 
-**Pasos 1, 2 y 3 completados.** El núcleo operacional está implementado, testeado y listo para ser extendido.
+El flujo MVP completo está implementado y funcional en ambos backends.
 
-| Paso | Estado | Descripción |
-|------|--------|-------------|
-| Paso 1 — Configuración del proyecto | ✅ Completado | Proyecto Django inicializado, settings por entorno |
-| Paso 2 — Modelo de datos local | ✅ Completado | Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa |
-| Paso 3 — Casos de uso | ✅ Completado | 4 casos de uso implementados y validados con tests |
-| Paso 4 — Interfaz operativa (REST + UI) | 🔲 Pendiente | Endpoints funcionales, UI tablet-first |
-| Paso 5 — Integración Dataverse | 🔲 Pendiente | Mapping y sync con Dataverse activo |
+| Componente | SQLite | Dataverse |
+|---|---|---|
+| Recepción de bins (flujo lote abierto) | Funcional | Funcional |
+| Pesaje / conformación de lote | Funcional | Funcional |
+| Dashboard con KPIs | Funcional | Funcional (con limitaciones de estado, ver abajo) |
+| Cámara de mantención | Funcional | Funcional |
+| Desverdizado | Funcional | Funcional |
+| Calidad desverdizado | Funcional | Funcional |
+| Ingreso a packing | Funcional | Funcional |
+| Registro packing | Funcional | Funcional |
+| Control proceso packing | Funcional | Funcional |
+| Calidad pallet | Funcional | Funcional |
+| Cámara de frío | Funcional | Funcional |
+| Medición temperatura salida | Funcional | Funcional |
+| Trazabilidad (registro_etapas) | Funcional | No-op con log local (tabla no existe en Dataverse) |
+| CalidadPalletMuestra | Funcional | Solo SQLite (tabla no existe en Dataverse aún) |
+
+---
+
+## Cómo probar localmente en SQLite
+
+```bash
+cd src
+# Asegurarse que .env tiene PERSISTENCE_BACKEND=sqlite (o sin esa variable)
+python manage.py migrate
+python manage.py runserver
+```
+
+Acceder en `http://localhost:8000/`.
+
+---
+
+## Cómo probar con Dataverse
+
+1. Configurar `.env` con las credenciales Dataverse:
+
+```
+PERSISTENCE_BACKEND=dataverse
+DATAVERSE_URL=https://<org>.crm2.dynamics.com
+DATAVERSE_TENANT_ID=<tenant-id>
+DATAVERSE_CLIENT_ID=<client-id>
+DATAVERSE_CLIENT_SECRET=<secret>
+DATAVERSE_API_VERSION=v9.2
+DATAVERSE_TIMEOUT=30
+```
+
+2. Verificar conectividad:
+
+```bash
+cd src
+# Ping Dataverse
+curl http://localhost:8000/api/dataverse/ping/
+
+# Verificar tablas (requiere servidor corriendo)
+curl http://localhost:8000/api/dataverse/check_tables/
+```
+
+3. Levantar servidor:
+
+```bash
+python manage.py runserver
+```
+
+Las vistas de recepción, dashboard y todas las etapas operacionales escriben
+y leen desde Dataverse. Los tests de Django siguen corriendo contra SQLite
+(no requieren Dataverse activo).
+
+---
+
+## Diferencias entre backends SQLite y Dataverse
+
+| Concepto | SQLite | Dataverse |
+|---|---|---|
+| `temporada` | Campo explícito en modelos | No existe; se filtra por fechas o se ignora |
+| `estado` del lote | Persiste (abierto/cerrado/finalizado) | No persiste; siempre retorna `"abierto"` |
+| `temporada_codigo`, `correlativo_temporada` | Persisten | No persisten; retornan `""` y `None` |
+| Dashboard: lotes cerrados/finalizados | Contador real | Siempre 0 (estado no trackeable) |
+| Trazabilidad de etapas | `RegistroEtapa` en SQLite | Log local (no persiste en Dataverse) |
+| Correlativos de código | SequenceCounter atómico | Conteo de registros existentes (no atómico) |
+| Transacciones | ACID via Django ORM | No soportado por Dataverse Web API |
+| `CalidadPalletMuestra` | ORM directo | No implementado en Dataverse |
+
+---
+
+## Selección de backend
+
+```python
+# config/settings/base.py o .env
+PERSISTENCE_BACKEND = "sqlite"      # desarrollo local (default)
+PERSISTENCE_BACKEND = "dataverse"   # producción / pruebas reales
+```
+
+---
+
+## Tests
+
+```bash
+cd src
+python manage.py check
+python manage.py test operaciones.test
+# 115 tests, todos pasan en SQLite
+```
+
+Los tests corren siempre en SQLite. Para smoke tests contra Dataverse real,
+usar el shell de Django con `PERSISTENCE_BACKEND=dataverse` en `.env`.
+
+---
+
+## Estructura principal
+
+```text
+python-app/
+├── .env                       # Variables de entorno (no commitear)
+├── requirements.txt
+├── README.md
+├── TECHNICAL_CHANGES.md       # Historial técnico detallado
+└── src/
+    ├── config/settings/       # base.py, local.py, production.py
+    ├── core/
+    │   └── dataverse_views.py # Endpoints ping/check_tables
+    ├── domain/
+    │   └── repositories/base.py  # Contratos de repositorio (ABCs + records)
+    ├── infrastructure/
+    │   ├── repository_factory.py # Selector sqlite|dataverse
+    │   ├── sqlite/repositories.py
+    │   └── dataverse/
+    │       ├── auth.py        # OAuth2 client credentials
+    │       ├── client.py      # OData HTTP client
+    │       ├── mapping.py     # Schema real Dataverse (prefijo crf21_*)
+    │       └── repositories/__init__.py  # Implementaciones Dataverse
+    └── operaciones/
+        ├── models.py
+        ├── views.py
+        ├── forms.py
+        ├── application/use_cases/  # 13 casos de uso
+        ├── services/
+        └── test/                   # 115 tests
+```
 
 ---
 
 ## Responsable principal
 
 **Samuel Montiel**
-
----
-
-## Estructura actual
-
-```text
-python-app/
-├── requirements.txt
-├── README.md
-└── src/
-    ├── db.sqlite3
-    ├── manage.py
-    ├── config/
-    │   ├── urls.py
-    │   ├── asgi.py
-    │   ├── wsgi.py
-    │   └── settings/
-    │       ├── base.py
-    │       ├── local.py
-    │       ├── production.py
-    │       └── __init__.py
-    ├── core/
-    │   ├── models.py              # TimeStampedModel, AuditSourceModel (abstractos)
-    │   └── dataverse_views.py     # Endpoints de prueba Dataverse
-    ├── operaciones/
-    │   ├── models.py              # Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa
-    │   ├── application/
-    │   │   ├── use_cases/
-    │   │   │   ├── registrar_bin_recibido.py
-    │   │   │   ├── crear_lote_recepcion.py
-    │   │   │   ├── cerrar_pallet.py
-    │   │   │   └── registrar_evento_etapa.py
-    │   │   ├── results.py
-    │   │   ├── dto.py
-    │   │   └── exceptions.py
-    │   ├── services/
-    │   │   ├── normalizers.py
-    │   │   ├── validators.py
-    │   │   └── event_builder.py
-    │   ├── api/
-    │   │   ├── views.py           # Endpoints REST
-    │   │   └── serializers.py     # Pendiente de implementar
-    │   ├── views.py               # Vistas web (stubs pendientes de conectar)
-    │   ├── urls.py
-    │   ├── web_urls.py
-    │   └── test/
-    │       ├── test_registrar_bin_recibido.py
-    │       ├── test_crear_lote_recepcion.py
-    │       ├── test_cerrar_pallet.py
-    │       ├── test_registrar_evento_etapa.py
-    │       └── test_flujo_mvp.py
-    ├── usuarios/
-    │   ├── views.py               # Login, logout, portal
-    │   └── templates/usuarios/
-    ├── domain/                    # Reservado para capa de dominio
-    └── infrastructure/
-        └── dataverse/
-            ├── auth.py            # DataverseTokenProvider (OAuth2)
-            ├── client.py          # DataverseClient (HTTP)
-            ├── mapping.py         # Pendiente de implementar
-            └── repositories/     # Pendiente de implementar
-```
-
----
-
-## Casos de uso implementados
-
-### `registrar_bin_recibido`
-Registra la recepción de un bin preconstruido.
-- Valida que el bin no exista para la temporada
-- Crea el `Bin` y registra evento `BIN_REGISTRADO` en `RegistroEtapa`
-
-### `crear_lote_recepcion`
-Crea un lote agrupando bins.
-- Valida que todos los bins existan y no estén ya asignados a otro lote
-- Crea el `Lote`, las relaciones `BinLote` y registra evento `LOTE_CREADO`
-
-### `cerrar_pallet`
-Consolida lotes en un pallet.
-- Opera con `get_or_create` (idempotente)
-- Crea `Pallet`, relaciones `PalletLote` y registra eventos `PALLET_CREADO`, `LOTE_ASIGNADO_PALLET`, `PALLET_CERRADO`
-
-### `registrar_evento_etapa`
-Registra cualquier evento del flujo operativo.
-- Flexible: acepta bin, lote y/o pallet según el tipo de evento
-- Soporta 14 tipos de evento (PESAJE, DESVERDIZADO_INGRESO, CONTROL_CALIDAD, etc.)
-
----
-
-## API REST disponible
-
-| Método | Endpoint | Caso de uso |
-|--------|----------|-------------|
-| POST | `/api/operaciones/bins/` | `registrar_bin_recibido` |
-| POST | `/api/operaciones/lotes/` | `crear_lote_recepcion` |
-| POST | `/api/operaciones/pallets/` | `cerrar_pallet` |
-| POST | `/api/operaciones/eventos/` | `registrar_evento_etapa` |
-| GET | `/api/operaciones/trazabilidad/` | Consulta de RegistroEtapa |
-
----
-
-## Reglas de negocio implementadas
-
-- Un bin no puede registrarse más de una vez con el mismo código en la misma temporada
-- Un lote no puede crearse si alguno de los bins referenciados no existe
-- Un bin no puede pertenecer a más de un lote al mismo tiempo
-- Un pallet solo se crea si los lotes que lo conforman existen previamente
-- Todo evento operacional queda registrado en `RegistroEtapa` para trazabilidad
-
----
-
-## Ejecución local
-
-### 1. Activar entorno virtual
-
-En Windows:
-```bash
-.venv\Scripts\activate
-```
-
-En Linux / macOS:
-```bash
-source .venv/bin/activate
-```
-
-### 2. Instalar dependencias
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Entrar al proyecto Django
-
-```bash
-cd src
-```
-
-### 4. Aplicar migraciones
-
-```bash
-python manage.py migrate
-```
-
-### 5. Levantar servidor local
-
-```bash
-python manage.py runserver
-```
-
----
-
-## Verificación técnica
-
-```bash
-# Verificar integridad del proyecto
-python manage.py check
-
-# Ejecutar suite de tests
-python manage.py test operaciones
-
-# Verificar conectividad con Dataverse (requiere .env configurado)
-python manage.py dataverse_ping
-```
-
----
-
-## Restricciones técnicas actuales
-
-- Base de datos **SQLite** para desarrollo. No apta para producción con concurrencia — migrar a PostgreSQL antes del piloto.
-- Endpoints REST sin autenticación activa — debe resolverse antes de exponer en cualquier entorno compartido.
-- Serializers DRF: archivo `api/serializers.py` vacío — respuestas en JSON manual.
-- Vistas web (Dashboard, Recepción, Consulta): stubs con datos mock, pendientes de conectar con casos de uso.
-- Integración Dataverse: client y auth implementados, `mapping.py` y repositorios pendientes.
-
----
-
-## Configuración de Dataverse
-
-Variables requeridas en `.env`:
-
-```
-DATAVERSE_URL=
-DATAVERSE_TENANT_ID=
-DATAVERSE_CLIENT_ID=
-DATAVERSE_CLIENT_SECRET=
-DATAVERSE_API_VERSION=v9.2
-DATAVERSE_TIMEOUT=30
-```
-
-Ver `SETUP.md` para instrucciones detalladas de configuración.

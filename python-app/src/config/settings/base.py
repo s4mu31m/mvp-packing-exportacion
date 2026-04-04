@@ -40,6 +40,15 @@ DATAVERSE_TIMEOUT = int(os.getenv("DATAVERSE_TIMEOUT", "30"))
 #   "dataverse" → Microsoft Dataverse vía Web API OData v4
 PERSISTENCE_BACKEND = os.getenv("PERSISTENCE_BACKEND", "sqlite")
 
+# Backends de autenticación:
+#   - CaliProAuthBackend: fuente de verdad en ambos modos (SQLite y Dataverse)
+#   - ModelBackend: fallback SOLO en modo sqlite, para bootstrap via createsuperuser.
+#     En modo dataverse se excluye para evitar que credenciales Django nativas
+#     omitan la verificación contra crf21_usuariooperativos.
+AUTHENTICATION_BACKENDS = ["usuarios.auth_backend.CaliProAuthBackend"]
+if PERSISTENCE_BACKEND.lower().strip() == "sqlite":
+    AUTHENTICATION_BACKENDS.append("django.contrib.auth.backends.ModelBackend")
+
 LANGUAGE_CODE = "es-cl"
 TIME_ZONE = os.getenv("TIME_ZONE", "America/Santiago")
 USE_I18N = True
@@ -62,6 +71,7 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -111,9 +121,9 @@ TEMPLATES = [
 ]
 
 STATIC_URL = "/static/"
-
-STATICFILES_DIRS = [BASE_DIR / "static"]  # src/static/
-
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 LOGIN_URL = "/usuarios/login/"
 
 LOGIN_REDIRECT_URL = "/usuarios/portal/"
