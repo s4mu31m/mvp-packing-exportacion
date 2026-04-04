@@ -427,8 +427,8 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "numero_cuartel": cd.get("numero_cuartel") or "",
             "color": cd.get("color") or "",
             "hora_recepcion": cd.get("hora_recepcion") or "",
-            "kilos_bruto_ingreso": str(cd["kilos_bruto_ingreso"]) if cd.get("kilos_bruto_ingreso") else None,
-            "kilos_neto_ingreso": str(cd["kilos_neto_ingreso"]) if cd.get("kilos_neto_ingreso") else None,
+            "kilos_bruto_ingreso": float(cd["kilos_bruto_ingreso"]) if cd.get("kilos_bruto_ingreso") else None,
+            "kilos_neto_ingreso": float(cd["kilos_neto_ingreso"]) if cd.get("kilos_neto_ingreso") else None,
             "a_o_r": cd.get("a_o_r") or None,
             "observaciones": cd.get("observaciones") or "",
         }
@@ -472,8 +472,8 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "source_system": "web",
             "requiere_desverdizado": cd.get("requiere_desverdizado") or False,
             "disponibilidad_camara_desverdizado": cd.get("disponibilidad_camara_desverdizado") or None,
-            "kilos_bruto_conformacion": str(cd["kilos_bruto_conformacion"]) if cd.get("kilos_bruto_conformacion") else None,
-            "kilos_neto_conformacion": str(cd["kilos_neto_conformacion"]) if cd.get("kilos_neto_conformacion") else None,
+            "kilos_bruto_conformacion": float(cd["kilos_bruto_conformacion"]) if cd.get("kilos_bruto_conformacion") else None,
+            "kilos_neto_conformacion": float(cd["kilos_neto_conformacion"]) if cd.get("kilos_neto_conformacion") else None,
         }
         result = cerrar_lote_recepcion(payload)
         if result.ok:
@@ -568,8 +568,8 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                         "camara_numero": cd.get("camara_numero"),
                         "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
                         "hora_ingreso": cd.get("hora_ingreso"),
-                        "temperatura_camara": str(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
-                        "humedad_relativa": str(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
+                        "temperatura_camara": float(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
+                        "humedad_relativa": float(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
                         "observaciones": cd.get("observaciones"),
                     },
                 }
@@ -592,8 +592,8 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                         "hora_ingreso": cd.get("hora_ingreso"),
                         "color_salida": cd.get("color") or "",
                         "horas_desverdizado": cd.get("horas_desverdizado"),
-                        "kilos_enviados_terreno": str(cd["kilos_enviados_terreno"]) if cd.get("kilos_enviados_terreno") else None,
-                        "kilos_recepcionados": str(cd["kilos_recepcionados"]) if cd.get("kilos_recepcionados") else None,
+                        "kilos_enviados_terreno": float(cd["kilos_enviados_terreno"]) if cd.get("kilos_enviados_terreno") else None,
+                        "kilos_recepcionados": float(cd["kilos_recepcionados"]) if cd.get("kilos_recepcionados") else None,
                     },
                 }
                 result = registrar_desverdizado(payload)
@@ -654,9 +654,33 @@ def _lote_info(temporada: str, lote_code: str) -> dict:
         except Exception:
             pass
 
+        # Fallback: suma de kilos de bins si no hay conformacion ni desverdizado
+        if kilos_neto is None:
+            total_bin_neto = sum(
+                float(bl.bin.kilos_neto_ingreso)
+                for bl in bin_lotes
+                if bl.bin.kilos_neto_ingreso is not None
+            )
+            if total_bin_neto > 0:
+                kilos_neto = total_bin_neto
+        if kilos_bruto is None:
+            total_bin_bruto = sum(
+                float(bl.bin.kilos_bruto_ingreso)
+                for bl in bin_lotes
+                if bl.bin.kilos_bruto_ingreso is not None
+            )
+            if total_bin_bruto > 0:
+                kilos_bruto = total_bin_bruto
+
         fecha_cosecha_str = ""
         if primer_bin and primer_bin.fecha_cosecha:
             fecha_cosecha_str = str(primer_bin.fecha_cosecha)
+
+        # color: usar el primer bin que lo tenga
+        color = next(
+            (bl.bin.color for bl in bin_lotes if bl.bin.color),
+            "",
+        )
 
         return {
             "lote_code":           lote.lote_code,
@@ -668,7 +692,7 @@ def _lote_info(temporada: str, lote_code: str) -> dict:
             "requiere_desverdizado": lote.requiere_desverdizado,
             "productor":    primer_bin.codigo_productor if primer_bin else "",
             "variedad":     primer_bin.variedad_fruta   if primer_bin else "",
-            "color":        primer_bin.color            if primer_bin else "",
+            "color":        color,
             "fecha_cosecha": fecha_cosecha_str,
             "tipo_cultivo": primer_bin.tipo_cultivo     if primer_bin else "",
         }
@@ -800,8 +824,8 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "extra": {
                 "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
                 "hora_ingreso": cd.get("hora_ingreso"),
-                "kilos_bruto_ingreso_packing": str(cd["kilos_bruto_ingreso_packing"]) if cd.get("kilos_bruto_ingreso_packing") else None,
-                "kilos_neto_ingreso_packing": str(cd["kilos_neto_ingreso_packing"]) if cd.get("kilos_neto_ingreso_packing") else None,
+                "kilos_bruto_ingreso_packing": float(cd["kilos_bruto_ingreso_packing"]) if cd.get("kilos_bruto_ingreso_packing") else None,
+                "kilos_neto_ingreso_packing": float(cd["kilos_neto_ingreso_packing"]) if cd.get("kilos_neto_ingreso_packing") else None,
                 "observaciones": cd.get("observaciones"),
             },
         }
@@ -871,7 +895,7 @@ class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 "calibre": cd.get("calibre"),
                 "tipo_envase": cd.get("tipo_envase"),
                 "cantidad_cajas_producidas": cd.get("cantidad_cajas_producidas"),
-                "merma_seleccion_pct": str(cd["merma_seleccion_pct"]) if cd.get("merma_seleccion_pct") else None,
+                "merma_seleccion_pct": float(cd["merma_seleccion_pct"]) if cd.get("merma_seleccion_pct") else None,
             },
         }
         result = registrar_registro_packing(payload)
@@ -926,10 +950,10 @@ class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
                 "hora": cd.get("hora"),
                 "n_bins_procesados": cd.get("n_bins_procesados"),
-                "temp_agua_tina": str(cd["temp_agua_tina"]) if cd.get("temp_agua_tina") else None,
-                "ph_agua": str(cd["ph_agua"]) if cd.get("ph_agua") else None,
+                "temp_agua_tina": float(cd["temp_agua_tina"]) if cd.get("temp_agua_tina") else None,
+                "ph_agua": float(cd["ph_agua"]) if cd.get("ph_agua") else None,
                 "recambio_agua": cd.get("recambio_agua"),
-                "rendimiento_lote_pct": str(cd["rendimiento_lote_pct"]) if cd.get("rendimiento_lote_pct") else None,
+                "rendimiento_lote_pct": float(cd["rendimiento_lote_pct"]) if cd.get("rendimiento_lote_pct") else None,
                 "observaciones_generales": cd.get("observaciones_generales"),
             },
         }
@@ -1029,8 +1053,8 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "extra": {
                         "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
                         "hora": cd.get("hora"),
-                        "temperatura_fruta": str(cd["temperatura_fruta"]) if cd.get("temperatura_fruta") else None,
-                        "peso_caja_muestra": str(cd["peso_caja_muestra"]) if cd.get("peso_caja_muestra") else None,
+                        "temperatura_fruta": float(cd["temperatura_fruta"]) if cd.get("temperatura_fruta") else None,
+                        "peso_caja_muestra": float(cd["peso_caja_muestra"]) if cd.get("peso_caja_muestra") else None,
                         "estado_visual_fruta": cd.get("estado_visual_fruta"),
                         "presencia_defectos": cd.get("presencia_defectos"),
                         "aprobado": cd.get("aprobado"),
@@ -1112,8 +1136,8 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "source_system": "web",
                     "extra": {
                         "camara_numero": cd.get("camara_numero"),
-                        "temperatura_camara": str(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
-                        "humedad_relativa": str(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
+                        "temperatura_camara": float(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
+                        "humedad_relativa": float(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
                         "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
                         "hora_ingreso": cd.get("hora_ingreso"),
                         "destino_despacho": cd.get("destino_despacho"),
@@ -1136,7 +1160,7 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "extra": {
                         "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
                         "hora": cd.get("hora"),
-                        "temperatura_pallet": str(cd["temperatura_pallet"]) if cd.get("temperatura_pallet") else None,
+                        "temperatura_pallet": float(cd["temperatura_pallet"]) if cd.get("temperatura_pallet") else None,
                         "punto_medicion": cd.get("punto_medicion"),
                         "dentro_rango": cd.get("dentro_rango"),
                         "observaciones": cd.get("observaciones"),

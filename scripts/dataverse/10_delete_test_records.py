@@ -29,6 +29,7 @@ import _setup  # noqa: F401
 from infrastructure.dataverse.client import DataverseClient, DataverseAPIError
 
 SOURCE_SYSTEM_FIELD = "crf21_source_system"
+OPERATOR_CODE_FIELD = "crf21_operator_code"
 MAX_ROWS = 5000  # techo por consulta; suficiente para datos de test
 
 
@@ -83,7 +84,7 @@ def main(dry_run: bool) -> dict:
     client = DataverseClient()
 
     # ── Fase 1: Descubrir raíces con source_system='test' ─────────────────
-    print("\n[1/4]  Buscando bins y lotes con source_system='test'...")
+    print("\n[1/4]  Buscando bins con source_system='test' y lotes con operator_code='OP-001'...")
 
     test_bins = _list_rows(
         client, "crf21_bins",
@@ -92,8 +93,8 @@ def main(dry_run: bool) -> dict:
     )
     test_lotes = _list_rows(
         client, "crf21_lote_plantas",
-        select=["crf21_lote_plantaid", "crf21_id_lote_planta", SOURCE_SYSTEM_FIELD],
-        filter_expr=f"{SOURCE_SYSTEM_FIELD} eq 'test'",
+        select=["crf21_lote_plantaid", "crf21_id_lote_planta", OPERATOR_CODE_FIELD],
+        filter_expr=f"{OPERATOR_CODE_FIELD} eq 'OP-001'",
     )
 
     bin_ids  = [r["crf21_binid"]         for r in test_bins  if r.get("crf21_binid")]
@@ -105,7 +106,7 @@ def main(dry_run: bool) -> dict:
     if len(bin_ids) > 15:
         print(f"    ... y {len(bin_ids) - 15} más")
 
-    print(f"\n  Lotes source_system=test : {len(lote_ids)}")
+    print(f"\n  Lotes operator_code=OP-001 : {len(lote_ids)}")
     for r in test_lotes[:15]:
         print(f"    - {r.get('crf21_id_lote_planta', '—'):<40}  {r['crf21_lote_plantaid']}")
     if len(lote_ids) > 15:

@@ -184,7 +184,11 @@ def _row_to_lote(row: dict) -> LoteRecord:
         kilos_bruto_conformacion=_parse_decimal(row.get(LOTE_FIELDS["kilos_bruto_conformacion"])),
         kilos_neto_conformacion=_parse_decimal(row.get(LOTE_FIELDS["kilos_neto_conformacion"])),
         requiere_desverdizado=bool(row.get(LOTE_FIELDS["requiere_desverdizado"])),
-        disponibilidad_camara_desverdizado=_str(row.get(LOTE_FIELDS["disponibilidad_camara_desverdizado"])) or None,
+        disponibilidad_camara_desverdizado=(
+            "disponible" if row.get(LOTE_FIELDS["disponibilidad_camara_desverdizado"]) is True
+            else "no_disponible" if row.get(LOTE_FIELDS["disponibilidad_camara_desverdizado"]) is False
+            else None
+        ),
         # estado, temporada_codigo, correlativo_temporada no existen en Dataverse.
         # etapa_actual se lee desde crf21_etapa_actual; None si no ha sido escrito aún.
         estado="abierto",
@@ -624,11 +628,14 @@ class DataverseLoteRepository(LoteRepository):
             # etapa_actual: campo disponible desde 2026-03-31
             "etapa_actual":                         LOTE_FIELDS["etapa_actual"],
         }
-        body = {
-            dv_field: fields[domain_key]
-            for domain_key, dv_field in _updatable.items()
-            if domain_key in fields
-        }
+        body = {}
+        for domain_key, dv_field in _updatable.items():
+            if domain_key not in fields:
+                continue
+            v = fields[domain_key]
+            if domain_key == "disponibilidad_camara_desverdizado" and isinstance(v, str):
+                v = True if v == "disponible" else False
+            body[dv_field] = v
         # Campos no soportados en Dataverse: estado, temporada_codigo,
         # correlativo_temporada — se ignoran silenciosamente.
         if body:
