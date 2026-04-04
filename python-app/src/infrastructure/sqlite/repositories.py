@@ -416,7 +416,13 @@ class SqliteLoteRepository(LoteRepository):
 
     def update(self, lote_id: Any, fields: dict) -> LoteRecord:
         from operaciones.models import Lote
-        Lote.objects.filter(pk=lote_id).update(**fields)
+        # Filtrar solo campos que existen en el modelo SQLite para evitar FieldError
+        # cuando el llamante (use case compartido con Dataverse) pasa campos como
+        # 'etapa_actual' que solo existen en Dataverse y no en el schema SQLite.
+        model_fields = {f.name for f in Lote._meta.get_fields() if hasattr(f, "name")}
+        safe_fields = {k: v for k, v in fields.items() if k in model_fields}
+        if safe_fields:
+            Lote.objects.filter(pk=lote_id).update(**safe_fields)
         obj = Lote.objects.get(pk=lote_id)
         return _lote_to_record(obj)
 

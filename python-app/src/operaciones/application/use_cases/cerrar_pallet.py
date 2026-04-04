@@ -118,6 +118,8 @@ def cerrar_pallet(payload: dict, *, repos: Repositories | None = None) -> UseCas
 
         if relation_created:
             relaciones_nuevas += 1
+            # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
+            repos.lotes.update(lote_record.id, {"etapa_actual": "Paletizado"})
             repos.registros.get_or_create(
                 event_key=build_event_key(
                     temporada, "PALLET", pallet_code, "LOTE", lote_code, "ASIGNADO"

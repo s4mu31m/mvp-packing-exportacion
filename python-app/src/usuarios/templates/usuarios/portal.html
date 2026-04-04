@@ -3,39 +3,64 @@
 {% block title %}Portal — CaliPro{% endblock %}
 
 {% block content %}
-<div class="container" style="padding: 32px;">
-  <div style="margin-bottom: 24px;">
-    <h1 style="margin-bottom: 8px;">Portal de módulos</h1>
-    <p>Bienvenido, {{ user.username }}.</p>
+<div class="container" style="padding: 32px; max-width: 960px; margin: 0 auto;">
+  <!-- Encabezado -->
+  <div style="margin-bottom: 28px; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+    <div>
+      <h1 style="margin: 0 0 6px 0; font-size: 1.6rem;">Portal de módulos</h1>
+      <p style="margin: 0; color: var(--text-muted);">
+        Bienvenido, <strong>{{ user.get_full_name|default:user.username }}</strong>.
+        {% if es_admin %}
+          <span style="margin-left: 8px; padding: 2px 8px; border-radius: 4px; background: rgba(251,191,36,.15); color: #fbbf24; font-size: .78rem; font-weight: 600;">Administrador</span>
+        {% elif es_jefatura %}
+          <span style="margin-left: 8px; padding: 2px 8px; border-radius: 4px; background: rgba(20,184,166,.15); color: var(--teal-400); font-size: .78rem; font-weight: 600;">Jefatura</span>
+        {% else %}
+          <span style="margin-left: 8px; padding: 2px 8px; border-radius: 4px; background: rgba(52,211,153,.15); color: var(--success); font-size: .78rem; font-weight: 600;">Operador</span>
+        {% endif %}
+      </p>
+    </div>
+    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" style="padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-primary); font-size: .88rem; cursor: pointer;">Cerrar sesión</button>
+    </form>
   </div>
 
-  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px;">
+  <!-- Mensajes -->
+  {% if messages %}
+    {% for msg in messages %}
+      <div style="padding: 10px 14px; margin-bottom: 12px; border-radius: 8px;
+        {% if msg.tags == 'error' %}background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3); color: var(--danger);
+        {% else %}background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.3); color: var(--success);{% endif %}">
+        {{ msg }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Módulos -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
     {% for modulo in modulos %}
-      <div style="border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; background:var(--bg-card);">
-        <div style="font-size:32px; margin-bottom:8px;">{{ modulo.icono }}</div>
-        <h2 style="margin:0 0 8px 0; font-size:20px; color:var(--text-primary);">{{ modulo.nombre }}</h2>
-        <p style="margin:0 0 16px 0; color:var(--text-muted);">{{ modulo.descripcion }}</p>
+      <div style="border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--bg-card);
+        {% if not modulo.disponible %}opacity: .6;{% endif %}">
+        <div style="font-size: 30px; margin-bottom: 10px;">{{ modulo.icono }}</div>
+        <h2 style="margin: 0 0 6px 0; font-size: 1.05rem; font-weight: 600;">{{ modulo.nombre }}</h2>
+        {% if modulo.rol_requerido %}
+          <div style="font-size: .72rem; color: var(--text-dim); margin-bottom: 6px;">{{ modulo.rol_requerido }}</div>
+        {% endif %}
+        <p style="margin: 0 0 16px 0; font-size: .88rem; color: var(--text-muted);">{{ modulo.descripcion }}</p>
 
         {% if modulo.disponible %}
-          <a href="{% url modulo.url_name %}" style="display:inline-block; padding:10px 14px; border-radius:var(--radius-sm); text-decoration:none; background:var(--teal-600); color:var(--text-primary); font-weight:500;">
+          <a href="{% url modulo.url_name %}"
+             style="display: inline-block; padding: 9px 16px; border-radius: 8px; text-decoration: none;
+                    border: 1px solid var(--teal-500); color: var(--teal-400); background: var(--teal-glow); font-size: .88rem; font-weight: 500;">
             Entrar
           </a>
         {% else %}
-          <span style="display:inline-block; padding:10px 14px; border-radius:var(--radius-sm); background:var(--bg-raised); color:var(--text-dim);">
-            No disponible
+          <span style="display: inline-block; padding: 9px 16px; border-radius: 8px; background: var(--bg-raised); color: var(--text-dim); font-size: .88rem;">
+            Próximamente
           </span>
         {% endif %}
       </div>
     {% endfor %}
-  </div>
-
-  <div style="margin-top: 24px;">
-    <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline;">
-      {% csrf_token %}
-      <button type="submit" style="background:none; border:none; padding:0; cursor:pointer; color:var(--text-muted); font-size:0.9rem; text-decoration:underline; font-family:var(--font-sans);">
-        Cerrar sesión
-      </button>
-    </form>
   </div>
 </div>
 {% endblock %}
