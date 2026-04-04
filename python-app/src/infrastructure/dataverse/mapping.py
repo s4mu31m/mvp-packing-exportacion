@@ -122,6 +122,13 @@ BIN_FIELDS = {
     "updated_at":           "modifiedon",
 }
 
+# OptionSet integer values for crf21_a_o_r (Picklist, validated 2026-04-04)
+AOR_DV = {
+    "aprobado":  137460000,
+    "objetado":  137460001,
+    "rechazado": 137460002,
+}
+
 LOTE_PLANTA_FIELDS = {
     # Identificadores
     "id":                                   "crf21_lote_plantaid",

@@ -94,6 +94,7 @@ from infrastructure.dataverse.mapping import (
     ENTITY_SET_CALIDAD_PALLET_MUESTRA,
     ENTITY_SET_CAMARA_FRIO,
     ENTITY_SET_MEDICION_TEMPERATURA,
+    AOR_DV,
     BIN_FIELDS,
     BIN_LOTE_FIELDS,
     LOTE_PLANTA_FIELDS,
@@ -466,6 +467,8 @@ class DataverseBinRepository(BinRepository):
         for domain_key, dv_field in _extra_map.items():
             v = (extra or {}).get(domain_key)
             if v not in (None, ""):
+                if domain_key == "a_o_r":
+                    v = AOR_DV.get(v, v)
                 body[dv_field] = v
 
         row = self._client.create_row(ENTITY_SET_BIN, body) or {}
