@@ -48,12 +48,20 @@ from operaciones.application.use_cases import (
     registrar_camara_frio,
     registrar_medicion_temperatura,
 )
+<<<<<<< Updated upstream
 from infrastructure.repository_factory import get_repositories
 
 
 # Claves de sesion para el flujo de recepcion y pesaje
 SESSION_LOTE_ACTIVO = "recepcion_lote_code"
 SESSION_PESAJE_LOTE = "pesaje_lote_code"
+=======
+from operaciones.models import (
+    Lote,
+    LotePlantaEstado,
+    Pallet,
+)
+>>>>>>> Stashed changes
 
 
 def _temporada(request) -> str:
@@ -560,6 +568,62 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
         ctx["form_calidad"] = CalidadPalletForm()
         return ctx
 
+<<<<<<< Updated upstream
+=======
+    def _save_muestras(self, request, pallet_id, operator_code):
+        """
+        Guarda muestras individuales de calidad enviadas desde el template.
+        Cada muestra llega como muestra_N_<campo> en el POST.
+
+<<<<<<< Updated upstream
+        Persistencia: solo SQLite (ORM directo). No pasa por el repository
+        layer porque CalidadPalletMuestra no tiene repositorio Dataverse aun.
+        TODO (Dataverse): cuando se implemente la tabla crf21_calidad_pallet_muestras
+        en Dataverse, migrar esta logica a un use case con repositorio.
+        """
+=======
+        Usa repos.calidad_pallet_muestras.create() — funciona tanto en modo
+        SQLite como en modo Dataverse (crf21_calidad_pallet_muestras).
+        """
+        from infrastructure.repository_factory import get_repositories
+        repos = get_repositories()
+>>>>>>> Stashed changes
+        saved = 0
+        for i in range(1, 4):  # maximo 3 muestras por sesion
+            prefix = f"muestra_{i}_"
+            temp = request.POST.get(f"{prefix}temperatura_fruta", "").strip()
+            peso = request.POST.get(f"{prefix}peso_caja_muestra", "").strip()
+            n_frutos = request.POST.get(f"{prefix}n_frutos", "").strip()
+            aprobado_raw = request.POST.get(f"{prefix}aprobado", "")
+            obs = request.POST.get(f"{prefix}observaciones", "").strip()
+
+            # Solo guardar si al menos un campo de medicion tiene dato
+            if not any([temp, peso, n_frutos]):
+                continue
+
+            aprobado = None
+            if aprobado_raw == "true":
+                aprobado = True
+            elif aprobado_raw == "false":
+                aprobado = False
+
+            repos.calidad_pallet_muestras.create(
+                pallet_id,
+                operator_code=operator_code,
+                source_system="web",
+                extra={
+                    "numero_muestra":    i,
+                    "temperatura_fruta": temp or None,
+                    "peso_caja_muestra": peso or None,
+                    "n_frutos":          int(n_frutos) if n_frutos else None,
+                    "aprobado":          aprobado,
+                    "observaciones":     obs,
+                },
+            )
+            saved += 1
+        return saved
+
+>>>>>>> Stashed changes
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "calidad")
         temporada = _temporada(request)
@@ -587,6 +651,27 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
                 }
                 result = registrar_calidad_pallet(payload)
                 _handle_result(request, result)
+<<<<<<< Updated upstream
+=======
+
+                # Guardar muestras individuales via repo (SQLite + Dataverse)
+                if result.ok and pallet_code:
+                    try:
+                        from infrastructure.repository_factory import get_repositories as _get_repos
+                        _repos = _get_repos()
+                        pallet_record = _repos.pallets.find_by_code(temporada, pallet_code)
+                        if pallet_record and pallet_record.id:
+                            n = self._save_muestras(
+                                request, pallet_record.id,
+                                request.session.get("crf21_codigooperador", ""),
+                            )
+                            if n:
+                                messages.info(
+                                    request, f"{n} muestra(s) de calidad registrada(s).",
+                                )
+                    except Exception:
+                        pass
+>>>>>>> Stashed changes
             else:
                 messages.error(request, "Formulario de calidad invalido.")
 

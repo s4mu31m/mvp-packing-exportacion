@@ -61,6 +61,8 @@ from domain.repositories.base import (
     ControlProcesoPackingRepository,
     CalidadPalletRecord,
     CalidadPalletRepository,
+    CalidadPalletMuestraRecord,
+    CalidadPalletMuestraRepository,
     CamaraFrioRecord,
     CamaraFrioRepository,
     MedicionTemperaturaSalidaRecord,
@@ -72,12 +74,38 @@ from infrastructure.dataverse.mapping import (
     ENTITY_SET_LOTE,
     ENTITY_SET_PALLET,
     ENTITY_SET_PALLET_LOTE,
+<<<<<<< Updated upstream
+=======
+    ENTITY_SET_CAMARA_MANTENCION,
+    ENTITY_SET_DESVERDIZADO,
+    ENTITY_SET_CALIDAD_DESVERDIZADO,
+    ENTITY_SET_INGRESO_PACKING,
+    ENTITY_SET_REGISTRO_PACKING,
+    ENTITY_SET_CONTROL_PROCESO_PACKING,
+    ENTITY_SET_CALIDAD_PALLET,
+    ENTITY_SET_CALIDAD_PALLET_MUESTRA,
+    ENTITY_SET_CAMARA_FRIO,
+    ENTITY_SET_MEDICION_TEMPERATURA,
+>>>>>>> Stashed changes
     BIN_FIELDS,
     BIN_LOTE_FIELDS,
     LOTE_PLANTA_FIELDS,
     LOTE_FIELDS,
     PALLET_FIELDS,
     PALLET_LOTE_FIELDS,
+<<<<<<< Updated upstream
+=======
+    CAMARA_MANTENCION_FIELDS,
+    DESVERDIZADO_FIELDS,
+    CALIDAD_DESVERDIZADO_FIELDS,
+    INGRESO_PACKING_FIELDS,
+    REGISTRO_PACKING_FIELDS,
+    CONTROL_PROCESO_PACKING_FIELDS,
+    CALIDAD_PALLET_FIELDS,
+    CALIDAD_PALLET_MUESTRA_FIELDS,
+    CAMARA_FRIO_FIELDS,
+    MEDICION_TEMPERATURA_FIELDS,
+>>>>>>> Stashed changes
     odata_bind,
 )
 
@@ -133,6 +161,205 @@ def _row_to_pallet(row: dict) -> PalletRecord:
     )
 
 
+<<<<<<< Updated upstream
+=======
+def _row_to_camara_mantencion(row: dict, lote_id: Any = None) -> CamaraMantencionRecord:
+    return CamaraMantencionRecord(
+        id=row.get(CAMARA_MANTENCION_FIELDS["id"]),
+        lote_id=lote_id or row.get(CAMARA_MANTENCION_FIELDS["lote_id_value"]),
+        camara_numero=_str(row.get(CAMARA_MANTENCION_FIELDS["camara_numero"])),
+        fecha_ingreso=_parse_date(row.get(CAMARA_MANTENCION_FIELDS["fecha_ingreso"])),
+        hora_ingreso=_str(row.get(CAMARA_MANTENCION_FIELDS["hora_ingreso"])),
+        fecha_salida=_parse_date(row.get(CAMARA_MANTENCION_FIELDS["fecha_salida"])),
+        hora_salida=_str(row.get(CAMARA_MANTENCION_FIELDS["hora_salida"])),
+        temperatura_camara=_parse_decimal(row.get(CAMARA_MANTENCION_FIELDS["temperatura_camara"])),
+        humedad_relativa=_parse_decimal(row.get(CAMARA_MANTENCION_FIELDS["humedad_relativa"])),
+        observaciones=_str(row.get(CAMARA_MANTENCION_FIELDS["observaciones"])),
+        operator_code=_str(row.get(CAMARA_MANTENCION_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(CAMARA_MANTENCION_FIELDS["rol"])),
+    )
+
+
+def _row_to_desverdizado(row: dict, lote_id: Any = None) -> DesverdizadoRecord:
+    return DesverdizadoRecord(
+        id=row.get(DESVERDIZADO_FIELDS["id"]),
+        lote_id=lote_id or row.get(DESVERDIZADO_FIELDS["lote_id_value"]),
+        fecha_ingreso=_parse_date(row.get(DESVERDIZADO_FIELDS["fecha_ingreso"])),
+        hora_ingreso=_str(row.get(DESVERDIZADO_FIELDS["hora_ingreso"])),
+        fecha_salida=_parse_date(row.get(DESVERDIZADO_FIELDS["fecha_salida"])),
+        hora_salida=_str(row.get(DESVERDIZADO_FIELDS["hora_salida"])),
+        kilos_enviados_terreno=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_enviados_terreno"])),
+        kilos_recepcionados=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_recepcionados"])),
+        kilos_procesados=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_procesados"])),
+        kilos_bruto_salida=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_bruto_salida"])),
+        kilos_neto_salida=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_neto_salida"])),
+        color_salida=_str(row.get(DESVERDIZADO_FIELDS["color_salida"])),
+        proceso=_str(row.get(DESVERDIZADO_FIELDS["proceso"])),
+        operator_code=_str(row.get(DESVERDIZADO_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(DESVERDIZADO_FIELDS["rol"])),
+    )
+
+
+def _row_to_calidad_desverdizado(row: dict, lote_id: Any = None) -> CalidadDesverdizadoRecord:
+    return CalidadDesverdizadoRecord(
+        id=row.get(CALIDAD_DESVERDIZADO_FIELDS["id"]),
+        lote_id=lote_id or row.get(CALIDAD_DESVERDIZADO_FIELDS["lote_id_value"]),
+        fecha=_parse_date(row.get(CALIDAD_DESVERDIZADO_FIELDS["fecha"])),
+        hora=_str(row.get(CALIDAD_DESVERDIZADO_FIELDS["hora"])),
+        temperatura_fruta=_parse_decimal(row.get(CALIDAD_DESVERDIZADO_FIELDS["temperatura_fruta"])),
+        color_evaluado=_str(row.get(CALIDAD_DESVERDIZADO_FIELDS["color_evaluado"])),
+        estado_visual=_str(row.get(CALIDAD_DESVERDIZADO_FIELDS["estado_visual"])),
+        presencia_defectos=row.get(CALIDAD_DESVERDIZADO_FIELDS["presencia_defectos"]),
+        aprobado=row.get(CALIDAD_DESVERDIZADO_FIELDS["aprobado"]),
+        observaciones=_str(row.get(CALIDAD_DESVERDIZADO_FIELDS["observaciones"])),
+        operator_code=_str(row.get(CALIDAD_DESVERDIZADO_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(CALIDAD_DESVERDIZADO_FIELDS["rol"])),
+    )
+
+
+def _row_to_ingreso_packing(row: dict, lote_id: Any = None) -> IngresoAPackingRecord:
+    return IngresoAPackingRecord(
+        id=row.get(INGRESO_PACKING_FIELDS["id"]),
+        lote_id=lote_id or row.get(INGRESO_PACKING_FIELDS["lote_id_value"]),
+        fecha_ingreso=_parse_date(row.get(INGRESO_PACKING_FIELDS["fecha_ingreso"])),
+        hora_ingreso=_str(row.get(INGRESO_PACKING_FIELDS["hora_ingreso"])),
+        kilos_bruto_ingreso_packing=_parse_decimal(row.get(INGRESO_PACKING_FIELDS["kilos_bruto_ingreso_packing"])),
+        kilos_neto_ingreso_packing=_parse_decimal(row.get(INGRESO_PACKING_FIELDS["kilos_neto_ingreso_packing"])),
+        via_desverdizado=bool(row.get(INGRESO_PACKING_FIELDS["via_desverdizado"])),
+        observaciones=_str(row.get(INGRESO_PACKING_FIELDS["observaciones"])),
+        operator_code=_str(row.get(INGRESO_PACKING_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(INGRESO_PACKING_FIELDS["rol"])),
+    )
+
+
+def _row_to_registro_packing(row: dict, lote_id: Any = None) -> RegistroPackingRecord:
+    return RegistroPackingRecord(
+        id=row.get(REGISTRO_PACKING_FIELDS["id"]),
+        lote_id=lote_id or row.get(REGISTRO_PACKING_FIELDS["lote_id_value"]),
+        fecha=_parse_date(row.get(REGISTRO_PACKING_FIELDS["fecha"])),
+        hora_inicio=_str(row.get(REGISTRO_PACKING_FIELDS["hora_inicio"])),
+        linea_proceso=_str(row.get(REGISTRO_PACKING_FIELDS["linea_proceso"])),
+        categoria_calidad=_str(row.get(REGISTRO_PACKING_FIELDS["categoria_calidad"])),
+        calibre=_str(row.get(REGISTRO_PACKING_FIELDS["calibre"])),
+        tipo_envase=_str(row.get(REGISTRO_PACKING_FIELDS["tipo_envase"])),
+        cantidad_cajas_producidas=row.get(REGISTRO_PACKING_FIELDS["cantidad_cajas_producidas"]),
+        peso_promedio_caja_kg=_parse_decimal(row.get(REGISTRO_PACKING_FIELDS["peso_promedio_caja_kg"])),
+        merma_seleccion_pct=_parse_decimal(row.get(REGISTRO_PACKING_FIELDS["merma_seleccion_pct"])),
+        operator_code=_str(row.get(REGISTRO_PACKING_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(REGISTRO_PACKING_FIELDS["rol"])),
+    )
+
+
+def _row_to_control_proceso(row: dict, lote_id: Any = None) -> ControlProcesoPackingRecord:
+    return ControlProcesoPackingRecord(
+        id=row.get(CONTROL_PROCESO_PACKING_FIELDS["id"]),
+        lote_id=lote_id or row.get(CONTROL_PROCESO_PACKING_FIELDS["lote_id_value"]),
+        fecha=_parse_date(row.get(CONTROL_PROCESO_PACKING_FIELDS["fecha"])),
+        hora=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["hora"])),
+        n_bins_procesados=row.get(CONTROL_PROCESO_PACKING_FIELDS["n_bins_procesados"]),
+        temp_agua_tina=_parse_decimal(row.get(CONTROL_PROCESO_PACKING_FIELDS["temp_agua_tina"])),
+        ph_agua=_parse_decimal(row.get(CONTROL_PROCESO_PACKING_FIELDS["ph_agua"])),
+        recambio_agua=row.get(CONTROL_PROCESO_PACKING_FIELDS["recambio_agua"]),
+        rendimiento_lote_pct=_parse_decimal(row.get(CONTROL_PROCESO_PACKING_FIELDS["rendimiento_lote_pct"])),
+        observaciones_generales=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["observaciones_generales"])),
+        operator_code=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["rol"])),
+    )
+
+
+def _row_to_calidad_pallet(row: dict, pallet_id: Any = None) -> CalidadPalletRecord:
+    return CalidadPalletRecord(
+        id=row.get(CALIDAD_PALLET_FIELDS["id"]),
+        pallet_id=pallet_id or row.get(CALIDAD_PALLET_FIELDS["pallet_id_value"]),
+        fecha=_parse_date(row.get(CALIDAD_PALLET_FIELDS["fecha"])),
+        hora=_str(row.get(CALIDAD_PALLET_FIELDS["hora"])),
+        temperatura_fruta=_parse_decimal(row.get(CALIDAD_PALLET_FIELDS["temperatura_fruta"])),
+        peso_caja_muestra=_parse_decimal(row.get(CALIDAD_PALLET_FIELDS["peso_caja_muestra"])),
+        estado_visual_fruta=_str(row.get(CALIDAD_PALLET_FIELDS["estado_visual_fruta"])),
+        presencia_defectos=row.get(CALIDAD_PALLET_FIELDS["presencia_defectos"]),
+        aprobado=row.get(CALIDAD_PALLET_FIELDS["aprobado"]),
+        observaciones=_str(row.get(CALIDAD_PALLET_FIELDS["observaciones"])),
+        operator_code=_str(row.get(CALIDAD_PALLET_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(CALIDAD_PALLET_FIELDS["rol"])),
+    )
+
+
+def _row_to_calidad_pallet_muestra(row: dict, pallet_id: Any = None) -> CalidadPalletMuestraRecord:
+    raw_n = row.get(CALIDAD_PALLET_MUESTRA_FIELDS["n_frutos"])
+    return CalidadPalletMuestraRecord(
+        id=row.get(CALIDAD_PALLET_MUESTRA_FIELDS["id"]),
+        pallet_id=pallet_id or row.get(CALIDAD_PALLET_MUESTRA_FIELDS["pallet_id_value"]),
+        numero_muestra=int(raw_n) if raw_n is not None else None,
+        temperatura_fruta=_parse_decimal(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["temperatura_fruta"])),
+        peso_caja_muestra=_parse_decimal(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["peso_caja_muestra"])),
+        n_frutos=int(raw_n) if raw_n is not None else None,
+        aprobado=row.get(CALIDAD_PALLET_MUESTRA_FIELDS["aprobado"]),
+        observaciones=_str(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["observaciones"])),
+        operator_code=_str(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["rol"])),
+    )
+
+
+def _row_to_camara_frio(row: dict, pallet_id: Any = None) -> CamaraFrioRecord:
+    return CamaraFrioRecord(
+        id=row.get(CAMARA_FRIO_FIELDS["id"]),
+        pallet_id=pallet_id or row.get(CAMARA_FRIO_FIELDS["pallet_id_value"]),
+        camara_numero=_str(row.get(CAMARA_FRIO_FIELDS["camara_numero"])),
+        temperatura_camara=_parse_decimal(row.get(CAMARA_FRIO_FIELDS["temperatura_camara"])),
+        humedad_relativa=_parse_decimal(row.get(CAMARA_FRIO_FIELDS["humedad_relativa"])),
+        fecha_ingreso=_parse_date(row.get(CAMARA_FRIO_FIELDS["fecha_ingreso"])),
+        hora_ingreso=_str(row.get(CAMARA_FRIO_FIELDS["hora_ingreso"])),
+        fecha_salida=_parse_date(row.get(CAMARA_FRIO_FIELDS["fecha_salida"])),
+        hora_salida=_str(row.get(CAMARA_FRIO_FIELDS["hora_salida"])),
+        destino_despacho=_str(row.get(CAMARA_FRIO_FIELDS["destino_despacho"])),
+        operator_code=_str(row.get(CAMARA_FRIO_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(CAMARA_FRIO_FIELDS["rol"])),
+    )
+
+
+def _row_to_medicion_temperatura(row: dict, pallet_id: Any = None) -> MedicionTemperaturaSalidaRecord:
+    return MedicionTemperaturaSalidaRecord(
+        id=row.get(MEDICION_TEMPERATURA_FIELDS["id"]),
+        pallet_id=pallet_id or row.get(MEDICION_TEMPERATURA_FIELDS["pallet_id_value"]),
+        fecha=_parse_date(row.get(MEDICION_TEMPERATURA_FIELDS["fecha"])),
+        hora=_str(row.get(MEDICION_TEMPERATURA_FIELDS["hora"])),
+        temperatura_pallet=_parse_decimal(row.get(MEDICION_TEMPERATURA_FIELDS["temperatura_pallet"])),
+        punto_medicion=_str(row.get(MEDICION_TEMPERATURA_FIELDS["punto_medicion"])),
+        dentro_rango=row.get(MEDICION_TEMPERATURA_FIELDS["dentro_rango"]),
+        observaciones=_str(row.get(MEDICION_TEMPERATURA_FIELDS["observaciones"])),
+        operator_code=_str(row.get(MEDICION_TEMPERATURA_FIELDS["operator_code"])),
+        source_system="dataverse",
+        rol=_str(row.get(MEDICION_TEMPERATURA_FIELDS["rol"])),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Selects reutilizables
+# ---------------------------------------------------------------------------
+
+_BIN_SELECT = [BIN_FIELDS[k] for k in (
+    "id", "id_bin", "bin_code", "operator_code", "source_system",
+    "source_event_id", "variedad_fruta", "kilos_bruto_ingreso", "kilos_neto_ingreso",
+)]
+_LOTE_SELECT = [LOTE_FIELDS[k] for k in (
+    "id", "id_lote_planta", "lote_code", "operator_code", "source_system",
+    "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
+    "kilos_neto_conformacion", "requiere_desverdizado",
+    "disponibilidad_camara_desverdizado", "etapa_actual",
+)]
+_BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
+
+
+>>>>>>> Stashed changes
 # ---------------------------------------------------------------------------
 # BinRepository
 # ---------------------------------------------------------------------------
@@ -802,8 +1029,78 @@ class DataverseCalidadPalletRepository(_DataverseStubMixin, CalidadPalletReposit
     def list_by_pallet(self, pallet_id): self._not_implemented("list_by_pallet")
 
 
+<<<<<<< Updated upstream
 class DataverseCamaraFrioRepository(_DataverseStubMixin, CamaraFrioRepository):
     _entity_name = "CamaraFrio"
+=======
+# ---------------------------------------------------------------------------
+# CalidadPalletMuestraRepository
+# ---------------------------------------------------------------------------
+
+class DataverseCalidadPalletMuestraRepository(CalidadPalletMuestraRepository):
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(
+        self,
+        pallet_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> CalidadPalletMuestraRecord:
+        body: dict = {
+            f"{CALIDAD_PALLET_MUESTRA_FIELDS['pallet_id']}@odata.bind": odata_bind(ENTITY_SET_PALLET, str(pallet_id)),
+            CALIDAD_PALLET_MUESTRA_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "numero_muestra":    CALIDAD_PALLET_MUESTRA_FIELDS["numero_muestra"],
+            "temperatura_fruta": CALIDAD_PALLET_MUESTRA_FIELDS["temperatura_fruta"],
+            "peso_caja_muestra": CALIDAD_PALLET_MUESTRA_FIELDS["peso_caja_muestra"],
+            "n_frutos":          CALIDAD_PALLET_MUESTRA_FIELDS["n_frutos"],
+            "aprobado":          CALIDAD_PALLET_MUESTRA_FIELDS["aprobado"],
+            "observaciones":     CALIDAD_PALLET_MUESTRA_FIELDS["observaciones"],
+            "rol":               CALIDAD_PALLET_MUESTRA_FIELDS["rol"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_CALIDAD_PALLET_MUESTRA, body) or {}
+        extra = extra or {}
+        return CalidadPalletMuestraRecord(
+            id=row.get(CALIDAD_PALLET_MUESTRA_FIELDS["id"]),
+            pallet_id=pallet_id,
+            numero_muestra=extra.get("numero_muestra"),
+            aprobado=extra.get("aprobado"),
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_pallet(self, pallet_id: Any) -> list[CalidadPalletMuestraRecord]:
+        f = f"{CALIDAD_PALLET_MUESTRA_FIELDS['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_CALIDAD_PALLET_MUESTRA,
+            select=[CALIDAD_PALLET_MUESTRA_FIELDS[k] for k in (
+                "id", "pallet_id_value", "numero_muestra",
+                "temperatura_fruta", "peso_caja_muestra", "n_frutos",
+                "aprobado", "observaciones", "operator_code",
+            )],
+            filter_expr=f,
+            orderby="crf21_numero_muestra asc",
+            top=100,
+        )
+        return [_row_to_calidad_pallet_muestra(r, pallet_id) for r in (result or {}).get("value", [])]
+
+
+# ---------------------------------------------------------------------------
+# CamaraFrioRepository
+# ---------------------------------------------------------------------------
+
+class DataverseCamaraFrioRepository(CamaraFrioRepository):
+>>>>>>> Stashed changes
 
     def __init__(self, client) -> None:
         self._client = client
@@ -845,6 +1142,7 @@ def build_dataverse_repositories() -> Repositories:
         registros_packing=DataverseRegistroPackingRepository(client),
         control_proceso_packings=DataverseControlProcesoPackingRepository(client),
         calidad_pallets=DataverseCalidadPalletRepository(client),
+        calidad_pallet_muestras=DataverseCalidadPalletMuestraRepository(client),
         camara_frios=DataverseCamaraFrioRepository(client),
         mediciones_temperatura=DataverseMedicionTemperaturaSalidaRepository(client),
     )

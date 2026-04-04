@@ -40,6 +40,11 @@ ENTITY_SET_CONTROL_PROCESO_PACKING = "crf21_control_proceso_packings"
 ENTITY_SET_CALIDAD_PALLET          = "crf21_calidad_pallets"
 ENTITY_SET_CAMARA_FRIO             = "crf21_camara_frios"
 ENTITY_SET_MEDICION_TEMPERATURA    = "crf21_medicion_temperatura_salidas"
+<<<<<<< Updated upstream
+=======
+ENTITY_SET_USUARIO_OPERATIVO       = "crf21_usuariooperativos"
+ENTITY_SET_CALIDAD_PALLET_MUESTRA  = "crf21_calidad_pallet_muestras"
+>>>>>>> Stashed changes
 
 # Aliases para compatibilidad con codigo que usa nombres genéricos
 ENTITY_SET_LOTE        = ENTITY_SET_LOTE_PLANTA
@@ -68,6 +73,11 @@ LOGICAL_NAME_CONTROL_PROCESO_PACKING = "crf21_control_proceso_packing"
 LOGICAL_NAME_CALIDAD_PALLET          = "crf21_calidad_pallet"
 LOGICAL_NAME_CAMARA_FRIO             = "crf21_camara_frio"
 LOGICAL_NAME_MEDICION_TEMPERATURA    = "crf21_medicion_temperatura_salida"
+<<<<<<< Updated upstream
+=======
+LOGICAL_NAME_USUARIO_OPERATIVO       = "crf21_usuariooperativo"
+LOGICAL_NAME_CALIDAD_PALLET_MUESTRA  = "crf21_calidad_pallet_muestra"
+>>>>>>> Stashed changes
 
 LOGICAL_NAME_LOTE        = LOGICAL_NAME_LOTE_PLANTA
 LOGICAL_NAME_BIN_LOTE    = LOGICAL_NAME_BIN_LOTE_PLANTA
@@ -356,6 +366,27 @@ MEDICION_TEMPERATURA_FIELDS = {
     "operator_code":        "crf21_operator_code",
     "created_at":           "createdon",
     "updated_at":           "modifiedon",
+}
+
+CALIDAD_PALLET_MUESTRA_FIELDS = {
+    # Identificadores
+    "id":               "crf21_calidad_pallet_muestraid",
+    # Lookup al pallet
+    "pallet_id":        "crf21_pallet_id",              # escritura: @odata.bind
+    "pallet_id_value":  "_crf21_pallet_id_value",        # lectura
+    # Campos operativos (espejo del modelo Django CalidadPalletMuestra)
+    "numero_muestra":   "crf21_numero_muestra",
+    "temperatura_fruta": "crf21_temperatura_fruta",
+    "peso_caja_muestra": "crf21_peso_caja_muestra",
+    "n_frutos":         "crf21_n_frutos",
+    "aprobado":         "crf21_aprobado",
+    "observaciones":    "crf21_observaciones",
+    # Control
+    "rol":              "crf21_rol",
+    "operator_code":    "crf21_operator_code",
+    # Sistema (solo lectura)
+    "created_at":       "createdon",
+    "updated_at":       "modifiedon",
 }
 
 # ---------------------------------------------------------------------------

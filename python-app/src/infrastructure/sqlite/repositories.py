@@ -38,6 +38,8 @@ from domain.repositories.base import (
     ControlProcesoPackingRepository,
     CalidadPalletRecord,
     CalidadPalletRepository,
+    CalidadPalletMuestraRecord,
+    CalidadPalletMuestraRepository,
     CamaraFrioRecord,
     CamaraFrioRepository,
     MedicionTemperaturaSalidaRecord,
@@ -273,6 +275,22 @@ def _calidad_pallet_to_record(obj) -> CalidadPalletRecord:
         peso_caja_muestra=obj.peso_caja_muestra,
         estado_visual_fruta=obj.estado_visual_fruta or "",
         presencia_defectos=obj.presencia_defectos,
+        aprobado=obj.aprobado,
+        observaciones=obj.observaciones or "",
+        operator_code=obj.operator_code,
+        source_system=obj.source_system,
+        rol=obj.rol or "",
+    )
+
+
+def _calidad_pallet_muestra_to_record(obj) -> CalidadPalletMuestraRecord:
+    return CalidadPalletMuestraRecord(
+        id=obj.id,
+        pallet_id=obj.pallet_id,
+        numero_muestra=obj.numero_muestra,
+        temperatura_fruta=obj.temperatura_fruta,
+        peso_caja_muestra=obj.peso_caja_muestra,
+        n_frutos=obj.n_frutos,
         aprobado=obj.aprobado,
         observaciones=obj.observaciones or "",
         operator_code=obj.operator_code,
@@ -738,6 +756,27 @@ class SqliteCalidadPalletRepository(CalidadPalletRepository):
         return [_calidad_pallet_to_record(obj) for obj in objs]
 
 
+class SqliteCalidadPalletMuestraRepository(CalidadPalletMuestraRepository):
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> CalidadPalletMuestraRecord:
+        from operaciones.models import CalidadPalletMuestra
+        fields = dict(extra or {})
+        obj = CalidadPalletMuestra.objects.create(
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(CalidadPalletMuestra, k)},
+        )
+        return _calidad_pallet_muestra_to_record(obj)
+
+    def list_by_pallet(self, pallet_id: Any) -> list[CalidadPalletMuestraRecord]:
+        from operaciones.models import CalidadPalletMuestra
+        objs = CalidadPalletMuestra.objects.filter(pallet_id=pallet_id).order_by("numero_muestra")
+        return [_calidad_pallet_muestra_to_record(obj) for obj in objs]
+
+
 class SqliteCamaraFrioRepository(CamaraFrioRepository):
 
     def find_by_pallet(self, pallet_id: Any) -> Optional[CamaraFrioRecord]:
@@ -829,6 +868,7 @@ def build_sqlite_repositories() -> Repositories:
         registros_packing=SqliteRegistroPackingRepository(),
         control_proceso_packings=SqliteControlProcesoPackingRepository(),
         calidad_pallets=SqliteCalidadPalletRepository(),
+        calidad_pallet_muestras=SqliteCalidadPalletMuestraRepository(),
         camara_frios=SqliteCamaraFrioRepository(),
         mediciones_temperatura=SqliteMedicionTemperaturaSalidaRepository(),
         sequences=SqliteSequenceCounterRepository(),

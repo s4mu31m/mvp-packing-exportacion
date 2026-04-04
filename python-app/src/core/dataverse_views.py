@@ -4,7 +4,6 @@ Vistas de prueba para la conexión con Dataverse.
 """
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
 from infrastructure.dataverse.client import DataverseClient, DataverseAPIError
 from infrastructure.dataverse.auth import DataverseAuthError
 import logging
@@ -145,7 +144,6 @@ def ping_dataverse(request):
         }, status=500)
     
 @require_http_methods(["POST"])
-@csrf_exempt
 def save_first_bin_code(request):
     """
     Guarda el valor de bin_code del primer registro de la tabla crf21_bins en un archivo local.

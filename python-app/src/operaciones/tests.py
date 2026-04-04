@@ -24,7 +24,43 @@ from infrastructure.repository_factory import get_repositories
 User = get_user_model()
 
 TEMPORADA = str(datetime.date.today().year)
+<<<<<<< Updated upstream
 SESSION_LOTE_ACTIVO = "recepcion_lote_code"
+=======
+
+
+def _make_user():
+    return User.objects.create_user(username="tester", password="pass1234", is_superuser=True)
+
+
+def _make_lote(estado=LotePlantaEstado.ABIERTO, **kwargs):
+    defaults = dict(
+        temporada=TEMPORADA,
+        lote_code=f"LP-TEST-{Lote.objects.count()+1:03d}",
+        estado=estado,
+        is_active=True,
+    )
+    defaults.update(kwargs)
+    return Lote.objects.create(**defaults)
+
+
+def _make_bin(lote, **kwargs):
+    defaults = dict(
+        temporada=TEMPORADA,
+        bin_code=f"BIN-T-{Bin.objects.count()+1:04d}",
+        codigo_productor="PROD-01",
+        tipo_cultivo="Uva de mesa",
+        variedad_fruta="Thompson",
+        color="2",
+        fecha_cosecha=datetime.date.today(),
+        kilos_bruto_ingreso=500,
+        kilos_neto_ingreso=480,
+    )
+    defaults.update(kwargs)
+    b = Bin.objects.create(**defaults)
+    BinLote.objects.create(bin=b, lote=lote)
+    return b
+>>>>>>> Stashed changes
 
 
 # ---------------------------------------------------------------------------
@@ -255,8 +291,83 @@ class RecepcionViewTest(TestCase):
 
     def setUp(self):
         self.client = Client()
+<<<<<<< Updated upstream
         self.user = User.objects.create_user(username="testop", password="pass1234")
         self.client.login(username="testop", password="pass1234")
+=======
+        self.user = _make_user()
+        self.client.force_login(self.user)
+
+    def _get_ok(self, url_name):
+        url = reverse(f"operaciones:{url_name}")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200, f"GET {url_name} returned {resp.status_code}")
+
+    def test_dashboard(self):
+        self._get_ok("dashboard")
+
+    def test_recepcion(self):
+        self._get_ok("recepcion")
+
+    def test_desverdizado(self):
+        self._get_ok("desverdizado")
+
+    def test_ingreso_packing(self):
+        self._get_ok("ingreso_packing")
+
+    def test_proceso(self):
+        self._get_ok("proceso")
+
+    def test_control(self):
+        self._get_ok("control")
+
+    def test_paletizado(self):
+        self._get_ok("paletizado")
+
+    def test_camaras(self):
+        self._get_ok("camaras")
+
+    def test_consulta_jefatura(self):
+        # Consulta requires jefatura role (is_staff)
+        self.user.is_staff = True
+        self.user.save()
+        self._get_ok("consulta")
+
+    def test_consulta_jefatura_con_filtros(self):
+        self.user.is_staff = True
+        self.user.save()
+        url = reverse("operaciones:consulta") + "?productor=PROD&estado=cerrado"
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_consulta_jefatura_redirect_sin_rol(self):
+        """Operador sin rol admin/jefatura es redirigido fuera de consulta."""
+        self.user.is_superuser = False
+        self.user.is_staff = False
+        self.user.save()
+        url = reverse("operaciones:consulta")
+        resp = self.client.get(url)
+        self.assertIn(resp.status_code, [302, 403])
+
+    def test_redirect_sin_auth(self):
+        """Sin login debe redirigir al login."""
+        self.client.logout()
+        url = reverse("operaciones:dashboard")
+        resp = self.client.get(url)
+        self.assertIn(resp.status_code, [302, 301])
+
+
+# ---------------------------------------------------------------------------
+# Flujo recepcion: iniciar lote → agregar bin → rechazar bin → cerrar lote
+# ---------------------------------------------------------------------------
+
+class RecepcionFlowTest(TestCase):
+
+    def setUp(self):
+        self.client = Client()
+        self.user = _make_user()
+        self.client.force_login(self.user)
+>>>>>>> Stashed changes
         self.url = reverse("operaciones:recepcion")
 
     def _session_set_temporada(self):
