@@ -13,7 +13,7 @@ Flujo legacy (solo compatibilidad):
 import datetime
 
 from django.shortcuts import render, redirect
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import TemplateView
 from django.contrib import messages
 from django.urls import reverse_lazy
@@ -48,20 +48,17 @@ from operaciones.application.use_cases import (
     registrar_camara_frio,
     registrar_medicion_temperatura,
 )
-<<<<<<< Updated upstream
 from infrastructure.repository_factory import get_repositories
-
-
-# Claves de sesion para el flujo de recepcion y pesaje
-SESSION_LOTE_ACTIVO = "recepcion_lote_code"
-SESSION_PESAJE_LOTE = "pesaje_lote_code"
-=======
 from operaciones.models import (
     Lote,
     LotePlantaEstado,
     Pallet,
 )
->>>>>>> Stashed changes
+
+
+# Claves de sesion para el flujo de recepcion y pesaje
+SESSION_LOTE_ACTIVO = "recepcion_lote_code"
+SESSION_PESAJE_LOTE = "pesaje_lote_code"
 
 
 def _temporada(request) -> str:
@@ -568,26 +565,16 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
         ctx["form_calidad"] = CalidadPalletForm()
         return ctx
 
-<<<<<<< Updated upstream
-=======
     def _save_muestras(self, request, pallet_id, operator_code):
         """
         Guarda muestras individuales de calidad enviadas desde el template.
         Cada muestra llega como muestra_N_<campo> en el POST.
 
-<<<<<<< Updated upstream
-        Persistencia: solo SQLite (ORM directo). No pasa por el repository
-        layer porque CalidadPalletMuestra no tiene repositorio Dataverse aun.
-        TODO (Dataverse): cuando se implemente la tabla crf21_calidad_pallet_muestras
-        en Dataverse, migrar esta logica a un use case con repositorio.
-        """
-=======
         Usa repos.calidad_pallet_muestras.create() — funciona tanto en modo
         SQLite como en modo Dataverse (crf21_calidad_pallet_muestras).
         """
         from infrastructure.repository_factory import get_repositories
         repos = get_repositories()
->>>>>>> Stashed changes
         saved = 0
         for i in range(1, 4):  # maximo 3 muestras por sesion
             prefix = f"muestra_{i}_"
@@ -623,7 +610,6 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
             saved += 1
         return saved
 
->>>>>>> Stashed changes
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "calidad")
         temporada = _temporada(request)
@@ -651,8 +637,6 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
                 }
                 result = registrar_calidad_pallet(payload)
                 _handle_result(request, result)
-<<<<<<< Updated upstream
-=======
 
                 # Guardar muestras individuales via repo (SQLite + Dataverse)
                 if result.ok and pallet_code:
@@ -671,7 +655,6 @@ class PaletizadoView(LoginRequiredMixin, TemplateView):
                                 )
                     except Exception:
                         pass
->>>>>>> Stashed changes
             else:
                 messages.error(request, "Formulario de calidad invalido.")
 
@@ -764,9 +747,15 @@ class CamarasView(LoginRequiredMixin, TemplateView):
 # Consulta jefatura
 # ---------------------------------------------------------------------------
 
-class ConsultaJefaturaView(LoginRequiredMixin, TemplateView):
+class ConsultaJefaturaView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "operaciones/consulta.html"
     login_url = reverse_lazy("usuarios:login")
+    raise_exception = True
+
+    def test_func(self):
+        """Solo jefatura y administradores (is_staff o is_superuser)."""
+        user = self.request.user
+        return user.is_active and (user.is_staff or user.is_superuser)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)

@@ -20,13 +20,18 @@ from operaciones.application.use_cases import (
     cerrar_lote_recepcion,
 )
 from infrastructure.repository_factory import get_repositories
+from operaciones.models import (
+    Bin,
+    BinLote,
+    Lote,
+    LotePlantaEstado,
+)
 
 User = get_user_model()
 
 TEMPORADA = str(datetime.date.today().year)
-<<<<<<< Updated upstream
 SESSION_LOTE_ACTIVO = "recepcion_lote_code"
-=======
+
 
 
 def _make_user():
@@ -60,7 +65,6 @@ def _make_bin(lote, **kwargs):
     b = Bin.objects.create(**defaults)
     BinLote.objects.create(bin=b, lote=lote)
     return b
->>>>>>> Stashed changes
 
 
 # ---------------------------------------------------------------------------
@@ -291,10 +295,7 @@ class RecepcionViewTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-<<<<<<< Updated upstream
-        self.user = User.objects.create_user(username="testop", password="pass1234")
-        self.client.login(username="testop", password="pass1234")
-=======
+
         self.user = _make_user()
         self.client.force_login(self.user)
 
@@ -367,7 +368,6 @@ class RecepcionFlowTest(TestCase):
         self.client = Client()
         self.user = _make_user()
         self.client.force_login(self.user)
->>>>>>> Stashed changes
         self.url = reverse("operaciones:recepcion")
 
     def _session_set_temporada(self):
@@ -435,7 +435,11 @@ class RecepcionFlowTest(TestCase):
             "action": "agregar_bin",
             "temporada": TEMPORADA,
             "operator_code": "OP-001",
+            "codigo_productor": "AG001",
+            "tipo_cultivo": "Uva",
             "variedad_fruta": "Thompson",
+            "numero_cuartel": "C01",
+            "fecha_cosecha": "2025-12-01",
             "kilos_neto_ingreso": "200",
             "kilos_bruto_ingreso": "210",
         }, follow=True)

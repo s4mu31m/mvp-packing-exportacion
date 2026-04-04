@@ -28,6 +28,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from domain.repositories.base import (
@@ -74,8 +75,6 @@ from infrastructure.dataverse.mapping import (
     ENTITY_SET_LOTE,
     ENTITY_SET_PALLET,
     ENTITY_SET_PALLET_LOTE,
-<<<<<<< Updated upstream
-=======
     ENTITY_SET_CAMARA_MANTENCION,
     ENTITY_SET_DESVERDIZADO,
     ENTITY_SET_CALIDAD_DESVERDIZADO,
@@ -86,15 +85,12 @@ from infrastructure.dataverse.mapping import (
     ENTITY_SET_CALIDAD_PALLET_MUESTRA,
     ENTITY_SET_CAMARA_FRIO,
     ENTITY_SET_MEDICION_TEMPERATURA,
->>>>>>> Stashed changes
     BIN_FIELDS,
     BIN_LOTE_FIELDS,
     LOTE_PLANTA_FIELDS,
     LOTE_FIELDS,
     PALLET_FIELDS,
     PALLET_LOTE_FIELDS,
-<<<<<<< Updated upstream
-=======
     CAMARA_MANTENCION_FIELDS,
     DESVERDIZADO_FIELDS,
     CALIDAD_DESVERDIZADO_FIELDS,
@@ -105,7 +101,6 @@ from infrastructure.dataverse.mapping import (
     CALIDAD_PALLET_MUESTRA_FIELDS,
     CAMARA_FRIO_FIELDS,
     MEDICION_TEMPERATURA_FIELDS,
->>>>>>> Stashed changes
     odata_bind,
 )
 
@@ -115,6 +110,35 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers: OData row → record type
 # ---------------------------------------------------------------------------
+
+def _parse_date(val: Any) -> Optional[datetime.date]:
+    """Convierte un string OData de fecha a datetime.date. Retorna None si falla."""
+    if not val:
+        return None
+    try:
+        s = str(val)
+        if "T" in s:
+            # ISO datetime con o sin timezone: "2026-03-29T00:00:00Z"
+            s = s.split("T")[0]
+        return datetime.date.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_decimal(val: Any) -> Optional[Decimal]:
+    """Convierte un numero OData a Decimal. Retorna None si falla."""
+    if val is None:
+        return None
+    try:
+        return Decimal(str(val))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _str(val: Any) -> str:
+    """Convierte a str, retorna '' si es None."""
+    return str(val) if val is not None else ""
+
 
 def _row_to_bin(row: dict) -> BinRecord:
     return BinRecord(
@@ -161,8 +185,6 @@ def _row_to_pallet(row: dict) -> PalletRecord:
     )
 
 
-<<<<<<< Updated upstream
-=======
 def _row_to_camara_mantencion(row: dict, lote_id: Any = None) -> CamaraMantencionRecord:
     return CamaraMantencionRecord(
         id=row.get(CAMARA_MANTENCION_FIELDS["id"]),
@@ -354,12 +376,11 @@ _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "id", "id_lote_planta", "lote_code", "operator_code", "source_system",
     "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
     "kilos_neto_conformacion", "requiere_desverdizado",
-    "disponibilidad_camara_desverdizado", "etapa_actual",
+    "disponibilidad_camara_desverdizado",
 )]
 _BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
 
 
->>>>>>> Stashed changes
 # ---------------------------------------------------------------------------
 # BinRepository
 # ---------------------------------------------------------------------------
@@ -957,82 +978,461 @@ class _DataverseStubMixin:
         )
 
 
-class DataverseCamaraMantencionRepository(_DataverseStubMixin, CamaraMantencionRepository):
-    _entity_name = "CamaraMantencion"
+# ---------------------------------------------------------------------------
+# CamaraMantencionRepository
+# ---------------------------------------------------------------------------
+
+class DataverseCamaraMantencionRepository(CamaraMantencionRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def find_by_lote(self, lote_id: Any): self._not_implemented("find_by_lote")
-    def create(self, lote_id, **kw): self._not_implemented("create")
-    def update(self, record_id, fields): self._not_implemented("update")
+    def find_by_lote(self, lote_id: Any) -> Optional[CamaraMantencionRecord]:
+        f = f"{CAMARA_MANTENCION_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_CAMARA_MANTENCION,
+            select=[CAMARA_MANTENCION_FIELDS[k] for k in (
+                "id", "lote_id_value", "camara_numero", "fecha_ingreso",
+                "hora_ingreso", "temperatura_camara", "humedad_relativa",
+                "observaciones", "operator_code",
+            )],
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        return _row_to_camara_mantencion(rows[0], lote_id) if rows else None
+
+    def create(
+        self,
+        lote_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> CamaraMantencionRecord:
+        body: dict = {
+            f"{CAMARA_MANTENCION_FIELDS['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            CAMARA_MANTENCION_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "camara_numero":      CAMARA_MANTENCION_FIELDS["camara_numero"],
+            "fecha_ingreso":      CAMARA_MANTENCION_FIELDS["fecha_ingreso"],
+            "hora_ingreso":       CAMARA_MANTENCION_FIELDS["hora_ingreso"],
+            "temperatura_camara": CAMARA_MANTENCION_FIELDS["temperatura_camara"],
+            "humedad_relativa":   CAMARA_MANTENCION_FIELDS["humedad_relativa"],
+            "observaciones":      CAMARA_MANTENCION_FIELDS["observaciones"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_CAMARA_MANTENCION, body) or {}
+        return CamaraMantencionRecord(
+            id=row.get(CAMARA_MANTENCION_FIELDS["id"]),
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def update(self, record_id: Any, fields: dict) -> CamaraMantencionRecord:
+        _updatable = {
+            "camara_numero":      CAMARA_MANTENCION_FIELDS["camara_numero"],
+            "fecha_salida":       CAMARA_MANTENCION_FIELDS["fecha_salida"],
+            "hora_salida":        CAMARA_MANTENCION_FIELDS["hora_salida"],
+            "temperatura_camara": CAMARA_MANTENCION_FIELDS["temperatura_camara"],
+            "humedad_relativa":   CAMARA_MANTENCION_FIELDS["humedad_relativa"],
+            "observaciones":      CAMARA_MANTENCION_FIELDS["observaciones"],
+        }
+        body = {dv_field: fields[k] for k, dv_field in _updatable.items() if k in fields}
+        if body:
+            self._client.update_row(ENTITY_SET_CAMARA_MANTENCION, str(record_id), body)
+        return CamaraMantencionRecord(id=record_id, lote_id=None)
 
 
-class DataverseDesverdizadoRepository(_DataverseStubMixin, DesverdizadoRepository):
-    _entity_name = "Desverdizado"
+# ---------------------------------------------------------------------------
+# DesverdizadoRepository
+# ---------------------------------------------------------------------------
+
+class DataverseDesverdizadoRepository(DesverdizadoRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def find_by_lote(self, lote_id: Any): self._not_implemented("find_by_lote")
-    def create(self, lote_id, **kw): self._not_implemented("create")
-    def update(self, record_id, fields): self._not_implemented("update")
+    def find_by_lote(self, lote_id: Any) -> Optional[DesverdizadoRecord]:
+        f = f"{DESVERDIZADO_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_DESVERDIZADO,
+            select=[DESVERDIZADO_FIELDS[k] for k in (
+                "id", "lote_id_value", "fecha_ingreso", "hora_ingreso",
+                "fecha_salida", "hora_salida", "kilos_enviados_terreno",
+                "kilos_recepcionados", "kilos_bruto_salida", "kilos_neto_salida",
+                "color_salida", "proceso", "operator_code",
+            )],
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        return _row_to_desverdizado(rows[0], lote_id) if rows else None
+
+    def create(
+        self,
+        lote_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> DesverdizadoRecord:
+        body: dict = {
+            f"{DESVERDIZADO_FIELDS['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            DESVERDIZADO_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "fecha_ingreso":          DESVERDIZADO_FIELDS["fecha_ingreso"],
+            "hora_ingreso":           DESVERDIZADO_FIELDS["hora_ingreso"],
+            "color_salida":           DESVERDIZADO_FIELDS["color_salida"],
+            "proceso":                DESVERDIZADO_FIELDS["proceso"],
+            "kilos_enviados_terreno": DESVERDIZADO_FIELDS["kilos_enviados_terreno"],
+            "kilos_recepcionados":    DESVERDIZADO_FIELDS["kilos_recepcionados"],
+            "kilos_procesados":       DESVERDIZADO_FIELDS["kilos_procesados"],
+            "kilos_bruto_salida":     DESVERDIZADO_FIELDS["kilos_bruto_salida"],
+            "kilos_neto_salida":      DESVERDIZADO_FIELDS["kilos_neto_salida"],
+            "fecha_proceso":          DESVERDIZADO_FIELDS["fecha_proceso"],
+            "sector":                 DESVERDIZADO_FIELDS["sector"],
+            "cuartel":                DESVERDIZADO_FIELDS["cuartel"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_DESVERDIZADO, body) or {}
+        return DesverdizadoRecord(
+            id=row.get(DESVERDIZADO_FIELDS["id"]),
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def update(self, record_id: Any, fields: dict) -> DesverdizadoRecord:
+        _updatable = {
+            "fecha_salida":       DESVERDIZADO_FIELDS["fecha_salida"],
+            "hora_salida":        DESVERDIZADO_FIELDS["hora_salida"],
+            "kilos_bruto_salida": DESVERDIZADO_FIELDS["kilos_bruto_salida"],
+            "kilos_neto_salida":  DESVERDIZADO_FIELDS["kilos_neto_salida"],
+            "color_salida":       DESVERDIZADO_FIELDS["color_salida"],
+        }
+        body = {dv_field: fields[k] for k, dv_field in _updatable.items() if k in fields}
+        if body:
+            self._client.update_row(ENTITY_SET_DESVERDIZADO, str(record_id), body)
+        return DesverdizadoRecord(id=record_id, lote_id=None)
 
 
-class DataverseCalidadDesverdizadoRepository(_DataverseStubMixin, CalidadDesverdizadoRepository):
-    _entity_name = "CalidadDesverdizado"
+# ---------------------------------------------------------------------------
+# CalidadDesverdizadoRepository
+# ---------------------------------------------------------------------------
+
+class DataverseCalidadDesverdizadoRepository(CalidadDesverdizadoRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def create(self, lote_id, **kw): self._not_implemented("create")
-    def list_by_lote(self, lote_id): self._not_implemented("list_by_lote")
+    def create(
+        self,
+        lote_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> CalidadDesverdizadoRecord:
+        body: dict = {
+            f"{CALIDAD_DESVERDIZADO_FIELDS['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            CALIDAD_DESVERDIZADO_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "fecha":                CALIDAD_DESVERDIZADO_FIELDS["fecha"],
+            "hora":                 CALIDAD_DESVERDIZADO_FIELDS["hora"],
+            "temperatura_fruta":    CALIDAD_DESVERDIZADO_FIELDS["temperatura_fruta"],
+            "color_evaluado":       CALIDAD_DESVERDIZADO_FIELDS["color_evaluado"],
+            "estado_visual":        CALIDAD_DESVERDIZADO_FIELDS["estado_visual"],
+            "presencia_defectos":   CALIDAD_DESVERDIZADO_FIELDS["presencia_defectos"],
+            "descripcion_defectos": CALIDAD_DESVERDIZADO_FIELDS["descripcion_defectos"],
+            "aprobado":             CALIDAD_DESVERDIZADO_FIELDS["aprobado"],
+            "observaciones":        CALIDAD_DESVERDIZADO_FIELDS["observaciones"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_CALIDAD_DESVERDIZADO, body) or {}
+        aprobado = (extra or {}).get("aprobado")
+        return CalidadDesverdizadoRecord(
+            id=row.get(CALIDAD_DESVERDIZADO_FIELDS["id"]),
+            lote_id=lote_id,
+            aprobado=aprobado,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_lote(self, lote_id: Any) -> list[CalidadDesverdizadoRecord]:
+        f = f"{CALIDAD_DESVERDIZADO_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_CALIDAD_DESVERDIZADO,
+            select=[CALIDAD_DESVERDIZADO_FIELDS[k] for k in (
+                "id", "lote_id_value", "fecha", "hora", "temperatura_fruta",
+                "color_evaluado", "aprobado", "observaciones", "operator_code",
+            )],
+            filter_expr=f,
+            orderby="createdon desc",
+            top=100,
+        )
+        return [_row_to_calidad_desverdizado(r, lote_id) for r in (result or {}).get("value", [])]
 
 
-class DataverseIngresoAPackingRepository(_DataverseStubMixin, IngresoAPackingRepository):
-    _entity_name = "IngresoAPacking"
+# ---------------------------------------------------------------------------
+# IngresoAPackingRepository
+# ---------------------------------------------------------------------------
+
+class DataverseIngresoAPackingRepository(IngresoAPackingRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def find_by_lote(self, lote_id: Any): self._not_implemented("find_by_lote")
-    def create(self, lote_id, **kw): self._not_implemented("create")
+    def find_by_lote(self, lote_id: Any) -> Optional[IngresoAPackingRecord]:
+        f = f"{INGRESO_PACKING_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_INGRESO_PACKING,
+            select=[INGRESO_PACKING_FIELDS[k] for k in (
+                "id", "lote_id_value", "fecha_ingreso", "hora_ingreso",
+                "kilos_bruto_ingreso_packing", "kilos_neto_ingreso_packing",
+                "via_desverdizado", "observaciones", "operator_code",
+            )],
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        return _row_to_ingreso_packing(rows[0], lote_id) if rows else None
+
+    def create(
+        self,
+        lote_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> IngresoAPackingRecord:
+        body: dict = {
+            f"{INGRESO_PACKING_FIELDS['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            INGRESO_PACKING_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "fecha_ingreso":              INGRESO_PACKING_FIELDS["fecha_ingreso"],
+            "hora_ingreso":               INGRESO_PACKING_FIELDS["hora_ingreso"],
+            "kilos_bruto_ingreso_packing":INGRESO_PACKING_FIELDS["kilos_bruto_ingreso_packing"],
+            "kilos_neto_ingreso_packing": INGRESO_PACKING_FIELDS["kilos_neto_ingreso_packing"],
+            "via_desverdizado":           INGRESO_PACKING_FIELDS["via_desverdizado"],
+            "observaciones":              INGRESO_PACKING_FIELDS["observaciones"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_INGRESO_PACKING, body) or {}
+        via_desv = (extra or {}).get("via_desverdizado", False)
+        return IngresoAPackingRecord(
+            id=row.get(INGRESO_PACKING_FIELDS["id"]),
+            lote_id=lote_id,
+            via_desverdizado=bool(via_desv),
+            operator_code=operator_code,
+            source_system=source_system,
+        )
 
 
-class DataverseRegistroPackingRepository(_DataverseStubMixin, RegistroPackingRepository):
-    _entity_name = "RegistroPacking"
+# ---------------------------------------------------------------------------
+# RegistroPackingRepository
+# ---------------------------------------------------------------------------
+
+class DataverseRegistroPackingRepository(RegistroPackingRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def create(self, lote_id, **kw): self._not_implemented("create")
-    def list_by_lote(self, lote_id): self._not_implemented("list_by_lote")
+    def create(
+        self,
+        lote_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> RegistroPackingRecord:
+        body: dict = {
+            f"{REGISTRO_PACKING_FIELDS['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            REGISTRO_PACKING_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "fecha":                  REGISTRO_PACKING_FIELDS["fecha"],
+            "hora_inicio":            REGISTRO_PACKING_FIELDS["hora_inicio"],
+            "linea_proceso":          REGISTRO_PACKING_FIELDS["linea_proceso"],
+            "categoria_calidad":      REGISTRO_PACKING_FIELDS["categoria_calidad"],
+            "calibre":                REGISTRO_PACKING_FIELDS["calibre"],
+            "tipo_envase":            REGISTRO_PACKING_FIELDS["tipo_envase"],
+            "cantidad_cajas_producidas": REGISTRO_PACKING_FIELDS["cantidad_cajas_producidas"],
+            "peso_promedio_caja_kg":  REGISTRO_PACKING_FIELDS["peso_promedio_caja_kg"],
+            "merma_seleccion_pct":    REGISTRO_PACKING_FIELDS["merma_seleccion_pct"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_REGISTRO_PACKING, body) or {}
+        return RegistroPackingRecord(
+            id=row.get(REGISTRO_PACKING_FIELDS["id"]),
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_lote(self, lote_id: Any) -> list[RegistroPackingRecord]:
+        f = f"{REGISTRO_PACKING_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_REGISTRO_PACKING,
+            select=[REGISTRO_PACKING_FIELDS[k] for k in (
+                "id", "lote_id_value", "fecha", "hora_inicio",
+                "linea_proceso", "categoria_calidad", "calibre",
+                "cantidad_cajas_producidas", "operator_code",
+            )],
+            filter_expr=f,
+            orderby="createdon desc",
+            top=200,
+        )
+        return [_row_to_registro_packing(r, lote_id) for r in (result or {}).get("value", [])]
 
 
-class DataverseControlProcesoPackingRepository(_DataverseStubMixin, ControlProcesoPackingRepository):
-    _entity_name = "ControlProcesoPacking"
+# ---------------------------------------------------------------------------
+# ControlProcesoPackingRepository
+# ---------------------------------------------------------------------------
+
+class DataverseControlProcesoPackingRepository(ControlProcesoPackingRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def create(self, lote_id, **kw): self._not_implemented("create")
-    def list_by_lote(self, lote_id): self._not_implemented("list_by_lote")
+    def create(
+        self,
+        lote_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> ControlProcesoPackingRecord:
+        body: dict = {
+            f"{CONTROL_PROCESO_PACKING_FIELDS['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            CONTROL_PROCESO_PACKING_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "fecha":                  CONTROL_PROCESO_PACKING_FIELDS["fecha"],
+            "hora":                   CONTROL_PROCESO_PACKING_FIELDS["hora"],
+            "n_bins_procesados":      CONTROL_PROCESO_PACKING_FIELDS["n_bins_procesados"],
+            "temp_agua_tina":         CONTROL_PROCESO_PACKING_FIELDS["temp_agua_tina"],
+            "ph_agua":                CONTROL_PROCESO_PACKING_FIELDS["ph_agua"],
+            "recambio_agua":          CONTROL_PROCESO_PACKING_FIELDS["recambio_agua"],
+            "rendimiento_lote_pct":   CONTROL_PROCESO_PACKING_FIELDS["rendimiento_lote_pct"],
+            "observaciones_generales":CONTROL_PROCESO_PACKING_FIELDS["observaciones_generales"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_CONTROL_PROCESO_PACKING, body) or {}
+        return ControlProcesoPackingRecord(
+            id=row.get(CONTROL_PROCESO_PACKING_FIELDS["id"]),
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_lote(self, lote_id: Any) -> list[ControlProcesoPackingRecord]:
+        f = f"{CONTROL_PROCESO_PACKING_FIELDS['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_CONTROL_PROCESO_PACKING,
+            select=[CONTROL_PROCESO_PACKING_FIELDS[k] for k in (
+                "id", "lote_id_value", "fecha", "hora",
+                "n_bins_procesados", "temp_agua_tina", "ph_agua", "operator_code",
+            )],
+            filter_expr=f,
+            orderby="createdon desc",
+            top=200,
+        )
+        return [_row_to_control_proceso(r, lote_id) for r in (result or {}).get("value", [])]
 
 
-class DataverseCalidadPalletRepository(_DataverseStubMixin, CalidadPalletRepository):
-    _entity_name = "CalidadPallet"
+# ---------------------------------------------------------------------------
+# CalidadPalletRepository
+# ---------------------------------------------------------------------------
+
+class DataverseCalidadPalletRepository(CalidadPalletRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def create(self, pallet_id, **kw): self._not_implemented("create")
-    def list_by_pallet(self, pallet_id): self._not_implemented("list_by_pallet")
+    def create(
+        self,
+        pallet_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> CalidadPalletRecord:
+        body: dict = {
+            f"{CALIDAD_PALLET_FIELDS['pallet_id']}@odata.bind": odata_bind(ENTITY_SET_PALLET, str(pallet_id)),
+            CALIDAD_PALLET_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "fecha":                CALIDAD_PALLET_FIELDS["fecha"],
+            "hora":                 CALIDAD_PALLET_FIELDS["hora"],
+            "temperatura_fruta":    CALIDAD_PALLET_FIELDS["temperatura_fruta"],
+            "peso_caja_muestra":    CALIDAD_PALLET_FIELDS["peso_caja_muestra"],
+            "estado_embalaje":      CALIDAD_PALLET_FIELDS["estado_embalaje"],
+            "estado_visual_fruta":  CALIDAD_PALLET_FIELDS["estado_visual_fruta"],
+            "presencia_defectos":   CALIDAD_PALLET_FIELDS["presencia_defectos"],
+            "descripcion_defectos": CALIDAD_PALLET_FIELDS["descripcion_defectos"],
+            "aprobado":             CALIDAD_PALLET_FIELDS["aprobado"],
+            "observaciones":        CALIDAD_PALLET_FIELDS["observaciones"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_CALIDAD_PALLET, body) or {}
+        aprobado = (extra or {}).get("aprobado")
+        return CalidadPalletRecord(
+            id=row.get(CALIDAD_PALLET_FIELDS["id"]),
+            pallet_id=pallet_id,
+            aprobado=aprobado,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_pallet(self, pallet_id: Any) -> list[CalidadPalletRecord]:
+        f = f"{CALIDAD_PALLET_FIELDS['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_CALIDAD_PALLET,
+            select=[CALIDAD_PALLET_FIELDS[k] for k in (
+                "id", "pallet_id_value", "fecha", "hora",
+                "temperatura_fruta", "aprobado", "observaciones", "operator_code",
+            )],
+            filter_expr=f,
+            orderby="createdon desc",
+            top=100,
+        )
+        return [_row_to_calidad_pallet(r, pallet_id) for r in (result or {}).get("value", [])]
 
 
-<<<<<<< Updated upstream
-class DataverseCamaraFrioRepository(_DataverseStubMixin, CamaraFrioRepository):
-    _entity_name = "CamaraFrio"
-=======
 # ---------------------------------------------------------------------------
 # CalidadPalletMuestraRepository
 # ---------------------------------------------------------------------------
@@ -1100,24 +1500,130 @@ class DataverseCalidadPalletMuestraRepository(CalidadPalletMuestraRepository):
 # ---------------------------------------------------------------------------
 
 class DataverseCamaraFrioRepository(CamaraFrioRepository):
->>>>>>> Stashed changes
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def find_by_pallet(self, pallet_id: Any): self._not_implemented("find_by_pallet")
-    def create(self, pallet_id, **kw): self._not_implemented("create")
-    def update(self, record_id, fields): self._not_implemented("update")
+    def find_by_pallet(self, pallet_id: Any) -> Optional[CamaraFrioRecord]:
+        f = f"{CAMARA_FRIO_FIELDS['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_CAMARA_FRIO,
+            select=[CAMARA_FRIO_FIELDS[k] for k in (
+                "id", "pallet_id_value", "camara_numero", "temperatura_camara",
+                "humedad_relativa", "fecha_ingreso", "hora_ingreso",
+                "fecha_salida", "hora_salida", "destino_despacho", "operator_code",
+            )],
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        return _row_to_camara_frio(rows[0], pallet_id) if rows else None
+
+    def create(
+        self,
+        pallet_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> CamaraFrioRecord:
+        body: dict = {
+            f"{CAMARA_FRIO_FIELDS['pallet_id']}@odata.bind": odata_bind(ENTITY_SET_PALLET, str(pallet_id)),
+            CAMARA_FRIO_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "camara_numero":      CAMARA_FRIO_FIELDS["camara_numero"],
+            "temperatura_camara": CAMARA_FRIO_FIELDS["temperatura_camara"],
+            "humedad_relativa":   CAMARA_FRIO_FIELDS["humedad_relativa"],
+            "fecha_ingreso":      CAMARA_FRIO_FIELDS["fecha_ingreso"],
+            "hora_ingreso":       CAMARA_FRIO_FIELDS["hora_ingreso"],
+            "destino_despacho":   CAMARA_FRIO_FIELDS["destino_despacho"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_CAMARA_FRIO, body) or {}
+        return CamaraFrioRecord(
+            id=row.get(CAMARA_FRIO_FIELDS["id"]),
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def update(self, record_id: Any, fields: dict) -> CamaraFrioRecord:
+        _updatable = {
+            "fecha_salida":       CAMARA_FRIO_FIELDS["fecha_salida"],
+            "hora_salida":        CAMARA_FRIO_FIELDS["hora_salida"],
+            "temperatura_camara": CAMARA_FRIO_FIELDS["temperatura_camara"],
+            "humedad_relativa":   CAMARA_FRIO_FIELDS["humedad_relativa"],
+            "destino_despacho":   CAMARA_FRIO_FIELDS["destino_despacho"],
+        }
+        body = {dv_field: fields[k] for k, dv_field in _updatable.items() if k in fields}
+        if body:
+            self._client.update_row(ENTITY_SET_CAMARA_FRIO, str(record_id), body)
+        return CamaraFrioRecord(id=record_id, pallet_id=None)
 
 
-class DataverseMedicionTemperaturaSalidaRepository(_DataverseStubMixin, MedicionTemperaturaSalidaRepository):
-    _entity_name = "MedicionTemperaturaSalida"
+# ---------------------------------------------------------------------------
+# MedicionTemperaturaSalidaRepository
+# ---------------------------------------------------------------------------
+
+class DataverseMedicionTemperaturaSalidaRepository(MedicionTemperaturaSalidaRepository):
 
     def __init__(self, client) -> None:
         self._client = client
 
-    def create(self, pallet_id, **kw): self._not_implemented("create")
-    def list_by_pallet(self, pallet_id): self._not_implemented("list_by_pallet")
+    def create(
+        self,
+        pallet_id: Any,
+        *,
+        operator_code: str = "",
+        source_system: str = "dataverse",
+        extra: Optional[dict] = None,
+    ) -> MedicionTemperaturaSalidaRecord:
+        body: dict = {
+            f"{MEDICION_TEMPERATURA_FIELDS['pallet_id']}@odata.bind": odata_bind(ENTITY_SET_PALLET, str(pallet_id)),
+            MEDICION_TEMPERATURA_FIELDS["operator_code"]: operator_code,
+        }
+        _extra_map = {
+            "fecha":              MEDICION_TEMPERATURA_FIELDS["fecha"],
+            "hora":               MEDICION_TEMPERATURA_FIELDS["hora"],
+            "temperatura_pallet": MEDICION_TEMPERATURA_FIELDS["temperatura_pallet"],
+            "punto_medicion":     MEDICION_TEMPERATURA_FIELDS["punto_medicion"],
+            "dentro_rango":       MEDICION_TEMPERATURA_FIELDS["dentro_rango"],
+            "observaciones":      MEDICION_TEMPERATURA_FIELDS["observaciones"],
+        }
+        for domain_key, dv_field in _extra_map.items():
+            v = (extra or {}).get(domain_key)
+            if v not in (None, ""):
+                body[dv_field] = v
+
+        row = self._client.create_row(ENTITY_SET_MEDICION_TEMPERATURA, body) or {}
+        dentro_rango = (extra or {}).get("dentro_rango")
+        return MedicionTemperaturaSalidaRecord(
+            id=row.get(MEDICION_TEMPERATURA_FIELDS["id"]),
+            pallet_id=pallet_id,
+            dentro_rango=dentro_rango,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_pallet(self, pallet_id: Any) -> list[MedicionTemperaturaSalidaRecord]:
+        f = f"{MEDICION_TEMPERATURA_FIELDS['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_MEDICION_TEMPERATURA,
+            select=[MEDICION_TEMPERATURA_FIELDS[k] for k in (
+                "id", "pallet_id_value", "fecha", "hora",
+                "temperatura_pallet", "punto_medicion", "dentro_rango",
+                "observaciones", "operator_code",
+            )],
+            filter_expr=f,
+            orderby="createdon desc",
+            top=100,
+        )
+        return [_row_to_medicion_temperatura(r, pallet_id) for r in (result or {}).get("value", [])]
 
 
 # ---------------------------------------------------------------------------

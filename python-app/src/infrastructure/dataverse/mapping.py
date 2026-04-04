@@ -40,11 +40,8 @@ ENTITY_SET_CONTROL_PROCESO_PACKING = "crf21_control_proceso_packings"
 ENTITY_SET_CALIDAD_PALLET          = "crf21_calidad_pallets"
 ENTITY_SET_CAMARA_FRIO             = "crf21_camara_frios"
 ENTITY_SET_MEDICION_TEMPERATURA    = "crf21_medicion_temperatura_salidas"
-<<<<<<< Updated upstream
-=======
 ENTITY_SET_USUARIO_OPERATIVO       = "crf21_usuariooperativos"
 ENTITY_SET_CALIDAD_PALLET_MUESTRA  = "crf21_calidad_pallet_muestras"
->>>>>>> Stashed changes
 
 # Aliases para compatibilidad con codigo que usa nombres genéricos
 ENTITY_SET_LOTE        = ENTITY_SET_LOTE_PLANTA
@@ -73,11 +70,8 @@ LOGICAL_NAME_CONTROL_PROCESO_PACKING = "crf21_control_proceso_packing"
 LOGICAL_NAME_CALIDAD_PALLET          = "crf21_calidad_pallet"
 LOGICAL_NAME_CAMARA_FRIO             = "crf21_camara_frio"
 LOGICAL_NAME_MEDICION_TEMPERATURA    = "crf21_medicion_temperatura_salida"
-<<<<<<< Updated upstream
-=======
 LOGICAL_NAME_USUARIO_OPERATIVO       = "crf21_usuariooperativo"
 LOGICAL_NAME_CALIDAD_PALLET_MUESTRA  = "crf21_calidad_pallet_muestra"
->>>>>>> Stashed changes
 
 LOGICAL_NAME_LOTE        = LOGICAL_NAME_LOTE_PLANTA
 LOGICAL_NAME_BIN_LOTE    = LOGICAL_NAME_BIN_LOTE_PLANTA
