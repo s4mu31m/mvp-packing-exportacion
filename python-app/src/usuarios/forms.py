@@ -10,7 +10,6 @@ from django.contrib.auth.hashers import make_password
 # Roles operativos del sistema — orden de presentación en el formulario
 ROLES_CHOICES = [
     ("Recepcion",       "Recepcion"),
-    ("Pesaje",          "Pesaje"),
     ("Desverdizado",    "Desverdizado"),
     ("Ingreso Packing", "Ingreso Packing"),
     ("Proceso",         "Proceso"),

@@ -42,7 +42,6 @@ def _nav_sections(request):
     _all_op_items = [
         {"name": "Dashboard",       "icon": "T", "url": _safe_reverse("operaciones:dashboard"),       "url_name": "dashboard",       "modulo": "dashboard"},
         {"name": "Recepcion",       "icon": "R", "url": _safe_reverse("operaciones:recepcion"),       "url_name": "recepcion",       "modulo": "recepcion"},
-        {"name": "Conformar Lote",  "icon": "L", "url": _safe_reverse("operaciones:pesaje"),          "url_name": "pesaje",          "modulo": "pesaje"},
         {"name": "Desverdizado",    "icon": "D", "url": _safe_reverse("operaciones:desverdizado"),    "url_name": "desverdizado",    "modulo": "desverdizado"},
         {"name": "Ingreso Packing", "icon": "I", "url": _safe_reverse("operaciones:ingreso_packing"), "url_name": "ingreso_packing", "modulo": "ingreso_packing"},
         {"name": "Proceso Packing", "icon": "P", "url": _safe_reverse("operaciones:proceso"),         "url_name": "proceso",         "modulo": "proceso"},
@@ -78,7 +77,6 @@ def _mobile_nav():
     return [
         {"name": "Dashboard", "icon": "T", "url": _safe_reverse("operaciones:dashboard"), "url_name": "dashboard"},
         {"name": "Recepcion", "icon": "R", "url": _safe_reverse("operaciones:recepcion"), "url_name": "recepcion"},
-        {"name": "Lote",      "icon": "L", "url": _safe_reverse("operaciones:pesaje"),    "url_name": "pesaje"},
         {"name": "Packing",   "icon": "P", "url": _safe_reverse("operaciones:proceso"),   "url_name": "proceso"},
         {"name": "Consulta",  "icon": "J", "url": _safe_reverse("operaciones:consulta"),  "url_name": "consulta"},
     ]

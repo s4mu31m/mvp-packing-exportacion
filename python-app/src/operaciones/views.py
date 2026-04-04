@@ -6,9 +6,6 @@ Flujo de recepcion (preferido del MVP):
   RecepcionView — tres acciones: iniciar_lote / agregar_bin / cerrar_lote
   El lote activo se persiste en sesion como 'recepcion_lote_code'.
 
-Flujo legacy (solo compatibilidad):
-  PesajeView — conformacion de lote desde lista manual de bin_codes.
-  Marcado como legacy; no es el flujo principal del MVP.
 """
 import csv
 import datetime
@@ -37,8 +34,6 @@ from operaciones.forms import (
     IniciarLoteForm,
     CerrarLoteForm,
     BinForm,
-    PesajeLoteForm,
-    LoteForm,
     CamaraMantencionForm,
     DesverdizadoForm,
     IngresoPackingForm,
@@ -53,8 +48,6 @@ from operaciones.application.use_cases import (
     iniciar_lote_recepcion,
     agregar_bin_a_lote_abierto,
     cerrar_lote_recepcion,
-    crear_lote_recepcion,
-    registrar_pesaje_lote,
     registrar_camara_mantencion,
     registrar_desverdizado,
     registrar_ingreso_packing,
@@ -71,10 +64,6 @@ from operaciones.models import (
     LotePlantaEstado,
     Pallet,
 )
-
-# Clave de sesion para el flujo de pesaje (RecepcionView usa "lote_activo_code" como literal)
-SESSION_PESAJE_LOTE = "pesaje_lote_code"
-
 
 def _temporada(request) -> str:
     """Devuelve la temporada activa: del POST, sesion o año actual."""
@@ -495,84 +484,6 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             for err in result.errors:
                 messages.error(request, err)
         return redirect("operaciones:recepcion")
-
-
-# ---------------------------------------------------------------------------
-# Conformar lote (pesaje) — flujo legacy via lista de bin_codes
-# ---------------------------------------------------------------------------
-
-class PesajeView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
-    roles_requeridos = ["Pesaje"]
-    template_name = "operaciones/pesaje.html"
-    login_url = reverse_lazy("usuarios:login")
-
-    def _get_lote_y_bins(self, request):
-        """Retorna (lote_record, bins) del lote pendiente de pesaje, o (None, [])."""
-        lote_code = request.session.get(SESSION_PESAJE_LOTE)
-        if not lote_code:
-            return None, []
-        temporada = _temporada(request)
-        try:
-            from infrastructure.repository_factory import get_repositories
-            repos = get_repositories()
-            lote = repos.lotes.find_by_code(temporada, lote_code)
-            if lote is None:
-                del request.session[SESSION_PESAJE_LOTE]
-                return None, []
-            bins = repos.bins.list_by_lote(lote.id)
-        except Exception:
-            return None, []
-        return lote, bins
-
-    def _build_context(self, request, form=None):
-        lote, bins = self._get_lote_y_bins(request)
-        primer_bin = bins[0] if bins else None
-        return {
-            "page_title": "Pesaje de Lote",
-            "lote": lote,
-            "bins": bins,
-            "fecha_cosecha": primer_bin.fecha_cosecha if primer_bin else None,
-            "color": primer_bin.color if primer_bin else "",
-            "form": form or PesajeLoteForm(),
-        }
-
-    def get(self, request, *args, **kwargs):
-        ctx = self._build_context(request)
-        if not ctx["lote"]:
-            messages.info(request, "No hay lote pendiente de pesaje. Cierre un lote desde Recepcion.")
-        return render(request, self.template_name, ctx)
-
-    def post(self, request, *args, **kwargs):
-        lote_code = request.session.get(SESSION_PESAJE_LOTE)
-        if not lote_code:
-            messages.error(request, "No hay lote pendiente de pesaje.")
-            return redirect("operaciones:recepcion")
-
-        form = PesajeLoteForm(request.POST)
-        if not form.is_valid():
-            messages.error(request, "Formulario invalido. Revise los campos.")
-            ctx = self._build_context(request, form=form)
-            return render(request, self.template_name, ctx)
-
-        cd = form.cleaned_data
-        payload = {
-            "temporada": _temporada(request),
-            "lote_code": lote_code,
-            "kilos_bruto_conformacion": str(cd["kilos_bruto_conformacion"]),
-            "kilos_neto_conformacion":  str(cd["kilos_neto_conformacion"]),
-            "requiere_desverdizado":    cd.get("requiere_desverdizado", False),
-            "operator_code": request.session.get("crf21_codigooperador", ""),
-            "source_system": "web",
-        }
-        result = registrar_pesaje_lote(payload)
-        if result.ok:
-            del request.session[SESSION_PESAJE_LOTE]
-            messages.success(request, result.message)
-            return redirect("operaciones:desverdizado")
-        for err in result.errors:
-            messages.error(request, err)
-        ctx = self._build_context(request, form=form)
-        return render(request, self.template_name, ctx)
 
 
 # ---------------------------------------------------------------------------

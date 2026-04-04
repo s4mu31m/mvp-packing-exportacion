@@ -10,7 +10,6 @@ from __future__ import annotations
 # Roles válidos del sistema
 ROLES_VALIDOS = [
     "Recepcion",
-    "Pesaje",
     "Desverdizado",
     "Ingreso Packing",
     "Proceso",
@@ -32,7 +31,6 @@ SESSION_KEY_BLOQUEADO        = "crf21_bloqueado"
 MODULO_ROL_MAP: dict[str, list[str]] = {
     "dashboard":        [],               # cualquier usuario autenticado
     "recepcion":        ["Recepcion"],
-    "pesaje":           ["Pesaje"],
     "desverdizado":     ["Desverdizado"],
     "ingreso_packing":  ["Ingreso Packing"],
     "proceso":          ["Proceso"],
