@@ -64,8 +64,8 @@ class CaliProAuthBackend:
         except DataverseAPIError as exc:
             logger.error("Error de API Dataverse para '%s': %s", username, exc)
             return None
-        except Exception:
-            logger.exception("Error inesperado en CaliProAuthBackend.authenticate para '%s'", username)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Error inesperado en CaliProAuthBackend.authenticate para '%s': %s", username, exc)
             return None
 
     def get_user(self, user_id):

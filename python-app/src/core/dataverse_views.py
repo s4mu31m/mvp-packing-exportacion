@@ -2,6 +2,7 @@
 """
 Vistas de prueba para la conexión con Dataverse.
 """
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from infrastructure.dataverse.client import DataverseClient, DataverseAPIError
@@ -10,10 +11,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+@login_required
 @require_http_methods(["GET"])
 def check_tables_available(request):
     """
-    Endpoint para verificar si las 14 tablas del modelo están accesibles y obtener un sample_count de cada una.
+    Endpoint para verificar si las 16 tablas del modelo están accesibles y obtener un sample_count de cada una.
     GET /api/dataverse/check_tables/
     """
     try:
@@ -25,6 +27,7 @@ def check_tables_available(request):
             "crf21_lote_plantas",
             "crf21_bin_lote_plantas",
             "crf21_calidad_pallets",
+            "crf21_calidad_pallet_muestras",
             "crf21_camara_frios",
             "crf21_control_proceso_packings",
             "crf21_desverdizados",
@@ -46,18 +49,19 @@ def check_tables_available(request):
                     logical_name = table[:-1] if table.endswith('s') else table
                     pk_field = f"{logical_name}id"
                     pk_value = data["value"][0].get(pk_field)
-                    if table in ["crf21_bins", "crf21_bin_lote_plantas", 
-                                "crf21_lote_plantas", 
-                                "crf21_camara_mantencions", 
-                                "crf21_desverdizados" , 
-                                "crf21_calidad_desverdizados" , 
-                                "crf21_ingreso_packings" , 
-                                "crf21_registro_packings" , 
-                                "crf21_control_proceso_packings" ,
-                                "crf21_pallets", 
-                                "crf21_lote_planta_pallets" , 
-                                "crf21_calidad_pallets" , 
-                                "crf21_camara_frios" , 
+                    if table in ["crf21_bins", "crf21_bin_lote_plantas",
+                                "crf21_lote_plantas",
+                                "crf21_camara_mantencions",
+                                "crf21_desverdizados",
+                                "crf21_calidad_desverdizados",
+                                "crf21_ingreso_packings",
+                                "crf21_registro_packings",
+                                "crf21_control_proceso_packings",
+                                "crf21_pallets",
+                                "crf21_lote_planta_pallets",
+                                "crf21_calidad_pallets",
+                                "crf21_calidad_pallet_muestras",
+                                "crf21_camara_frios",
                                 "crf21_medicion_temperatura_salidas",
                                 "crf21_usuariooperativos"]:
                         sample_record = data["value"][0]
@@ -66,19 +70,20 @@ def check_tables_available(request):
                     "sample_count": sample_count,
                     "pk": pk_value
                 }
-                if table in ["crf21_bins", 
-                            "crf21_bin_lote_plantas", 
-                            "crf21_lote_plantas", 
-                            "crf21_camara_mantencions" , 
-                            "crf21_desverdizados" , 
-                            "crf21_calidad_desverdizados" , 
-                            "crf21_ingreso_packings" , 
-                            "crf21_registro_packings" , 
-                            "crf21_control_proceso_packings" , 
-                            "crf21_pallets" , 
-                            "crf21_lote_planta_pallets" , 
-                            "crf21_calidad_pallets" , 
-                            "crf21_camara_frios" , 
+                if table in ["crf21_bins",
+                            "crf21_bin_lote_plantas",
+                            "crf21_lote_plantas",
+                            "crf21_camara_mantencions",
+                            "crf21_desverdizados",
+                            "crf21_calidad_desverdizados",
+                            "crf21_ingreso_packings",
+                            "crf21_registro_packings",
+                            "crf21_control_proceso_packings",
+                            "crf21_pallets",
+                            "crf21_lote_planta_pallets",
+                            "crf21_calidad_pallets",
+                            "crf21_calidad_pallet_muestras",
+                            "crf21_camara_frios",
                             "crf21_medicion_temperatura_salidas",
                             "crf21_usuariooperativos"]:
                     result["sample_record"] = sample_record
@@ -101,19 +106,20 @@ def check_tables_available(request):
         }, status=500)
 
 
+@login_required
 @require_http_methods(["GET"])
 def ping_dataverse(request):
     """
     Endpoint para probar la conexión básica con Dataverse.
-    
+
     GET /api/dataverse/ping/
     """
     try:
         client = DataverseClient()
-        
+
         # Prueba simple: obtener información del usuario actual
         user_info = client.whoami()
-        
+
         return JsonResponse({
             "status": "success",
             "message": "Conexión exitosa a Dataverse",
@@ -121,7 +127,7 @@ def ping_dataverse(request):
             "organization_id": user_info.get("OrganizationId"),
             "business_unit_id": user_info.get("BusinessUnitId")
         })
-        
+
     except DataverseAuthError as e:
         logger.error(f"Error de autenticación Dataverse: {e}")
         return JsonResponse({
@@ -129,7 +135,7 @@ def ping_dataverse(request):
             "message": "Error de autenticación con Dataverse",
             "details": str(e)
         }, status=401)
-        
+
     except DataverseAPIError as e:
         logger.error(f"Error de API Dataverse: {e}")
         return JsonResponse({
@@ -137,7 +143,7 @@ def ping_dataverse(request):
             "message": "Error en la API de Dataverse",
             "details": str(e)
         }, status=500)
-        
+
     except Exception as e:
         logger.error(f"Error inesperado: {e}")
         return JsonResponse({
@@ -145,7 +151,8 @@ def ping_dataverse(request):
             "message": "Error inesperado",
             "details": str(e)
         }, status=500)
-    
+
+@login_required
 @require_http_methods(["POST"])
 def save_first_bin_code(request):
     """
@@ -167,7 +174,8 @@ def save_first_bin_code(request):
     except Exception as e:
         logger.error(f"Error en save_first_bin_code: {e}")
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
-    
+
+@login_required
 @require_http_methods(["GET"])
 def get_first_bin_code(request):
     """
@@ -188,4 +196,3 @@ def get_first_bin_code(request):
     except Exception as e:
         logger.error(f"Error en get_first_bin_code: {e}")
         return JsonResponse({"error": str(e)}, status=500)
-

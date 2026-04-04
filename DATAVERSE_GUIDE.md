@@ -538,7 +538,42 @@ python scripts/dataverse/09_create_calidad_pallet_muestras.py  # Crear tabla CPM
 
 ---
 
-## 17. Ultima actualizacion
+## 17. Límites aceptados del MVP
+
+Los siguientes gaps son conocidos y aceptados para la escala del MVP.
+No son bugs — son compromisos de diseño documentados.
+
+### RegistroEtapa es no-op en Dataverse
+La tabla `crf21_registro_etapas` no existe en Dataverse.
+`DataverseRegistroEtapaRepository` escribe únicamente en log local sin persistir en Dataverse.
+La trazabilidad de etapas queda disponible en SQLite local únicamente.
+
+### Campo `estado` del lote no existe en Dataverse
+`crf21_lote_plantas` no tiene campo `estado`.
+Al leer un lote desde Dataverse se retorna `estado="abierto"` por defecto.
+`repos.lotes.update(..., {"estado": "cerrado"})` es ignorado silenciosamente.
+El cierre efectivo del lote se controla por session pop en `RecepcionView`.
+
+El progreso operativo del lote **sí** se persiste en Dataverse a través del campo
+`etapa_actual` (`crf21_etapa_actual`), que se actualiza en cada etapa del flujo
+(p.ej. `"Calidad Pallet"`, `"Cámara Frío"`). `etapa_actual` está incluido en
+`_updatable` de `DataverseLoteRepository.update()` y se sincroniza normalmente.
+
+### `SequenceCounterRepository` no es atómico en Dataverse
+`DataverseSequenceCounterRepository` genera correlativos contando registros existentes
+via OData (sin tabla de secuencias dedicada). Bajo alta concurrencia puede haber
+race conditions que generen correlativos duplicados.
+Aceptable para operación secuencial del MVP (un operador por flujo).
+
+### CalidadPalletMuestra sincroniza a Dataverse desde 2026-04-04
+La tabla `crf21_calidad_pallet_muestras` fue creada el 2026-04-04.
+Registros de muestras creados antes de esa fecha existen solo en SQLite local.
+A partir de esa fecha, la persistencia opera via `repos.calidad_pallet_muestras`
+según `PERSISTENCE_BACKEND`.
+
+---
+
+## 18. Ultima actualizacion
 
 Abril 2026
 Alineado al estado del repositorio validado el 2026-04-04:

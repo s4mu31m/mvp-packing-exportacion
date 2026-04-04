@@ -54,9 +54,6 @@ from operaciones.application.use_cases import (
     agregar_bin_a_lote_abierto,
     cerrar_lote_recepcion,
     crear_lote_recepcion,
-    iniciar_lote_recepcion,
-    agregar_bin_a_lote_abierto,
-    cerrar_lote_recepcion,
     registrar_pesaje_lote,
     registrar_camara_mantencion,
     registrar_desverdizado,
@@ -67,9 +64,9 @@ from operaciones.application.use_cases import (
     cerrar_pallet,
     registrar_camara_frio,
     registrar_medicion_temperatura,
+    guardar_muestra_calidad_pallet,
 )
 from operaciones.models import (
-    CalidadPalletMuestra,
     Lote,
     LotePlantaEstado,
     Pallet,
@@ -1057,21 +1054,11 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         """
         Guarda muestras individuales de calidad enviadas desde el template.
         Cada muestra llega como muestra_N_<campo> en el POST.
-
-        Persistencia: solo SQLite (ORM directo). No pasa por el repository
-        layer porque CalidadPalletMuestra no tiene repositorio Dataverse aun.
-        En modo PERSISTENCE_BACKEND=dataverse las muestras se guardan en la
-        BD SQLite local — NO se sincronizan a Dataverse.
-        TODO (Dataverse): cuando se implemente la tabla crf21_calidad_pallet_muestras
-        en Dataverse, migrar esta logica a un use case con repositorio.
+        Persiste via repositorio (SQLite o Dataverse segun PERSISTENCE_BACKEND).
+        Retorna el numero de muestras guardadas exitosamente.
         """
-        from django.conf import settings
         import logging
-        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower() == "dataverse":
-            logging.getLogger(__name__).warning(
-                "CalidadPalletMuestra: guardando en SQLite local (tabla Dataverse no implementada). "
-                "Los datos de muestras NO se sincronizan a Dataverse."
-            )
+        logger = logging.getLogger(__name__)
         saved = 0
         for i in range(1, 4):  # maximo 3 muestras por sesion
             prefix = f"muestra_{i}_"
@@ -1091,18 +1078,27 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             elif aprobado_raw == "false":
                 aprobado = False
 
-            CalidadPalletMuestra.objects.create(
-                pallet=pallet,
-                numero_muestra=i,
-                temperatura_fruta=temp or None,
-                peso_caja_muestra=peso or None,
-                n_frutos=int(n_frutos) if n_frutos else None,
-                aprobado=aprobado,
-                observaciones=obs,
-                operator_code=operator_code,
-                source_system="web",
-            )
-            saved += 1
+            result = guardar_muestra_calidad_pallet({
+                "pallet_id": pallet.id,
+                "operator_code": operator_code,
+                "source_system": "web",
+                "extra": {
+                    "numero_muestra":    i,
+                    "temperatura_fruta": temp or None,
+                    "peso_caja_muestra": peso or None,
+                    "n_frutos":          int(n_frutos) if n_frutos else None,
+                    "aprobado":          aprobado,
+                    "observaciones":     obs,
+                    "rol": request.session.get("crf21_rol", ""),
+                },
+            })
+            if result.ok:
+                saved += 1
+            else:
+                logger.warning(
+                    "Muestra %s no guardada para pallet %s: [%s] %s",
+                    i, pallet.id, result.code, result.message,
+                )
         return saved
 
     def post(self, request, *args, **kwargs):

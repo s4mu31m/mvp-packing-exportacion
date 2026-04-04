@@ -1,5 +1,6 @@
 # operaciones/api/views.py
 
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 import json
@@ -12,6 +13,7 @@ from operaciones.application.use_cases import (
 from operaciones.models import Bin, Lote, Pallet, RegistroEtapa
 
 
+@login_required
 @require_http_methods(["POST"])
 def api_registrar_bin(request):
     payload = json.loads(request.body)
@@ -23,6 +25,7 @@ def api_registrar_bin(request):
     )
 
 
+@login_required
 @require_http_methods(["POST"])
 def api_crear_lote(request):
     payload = json.loads(request.body)
@@ -34,6 +37,7 @@ def api_crear_lote(request):
     )
 
 
+@login_required
 @require_http_methods(["POST"])
 def api_cerrar_pallet(request):
     payload = json.loads(request.body)
@@ -45,6 +49,7 @@ def api_cerrar_pallet(request):
     )
 
 
+@login_required
 @require_http_methods(["POST"])
 def api_registrar_evento(request):
     payload = json.loads(request.body)
@@ -56,6 +61,7 @@ def api_registrar_evento(request):
     )
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_trazabilidad(request):
     temporada = request.GET.get("temporada", "")

@@ -15,3 +15,4 @@ from .registrar_control_proceso_packing import registrar_control_proceso_packing
 from .registrar_calidad_pallet import registrar_calidad_pallet
 from .registrar_camara_frio import registrar_camara_frio
 from .registrar_medicion_temperatura import registrar_medicion_temperatura
+from .guardar_muestra_calidad_pallet import guardar_muestra_calidad_pallet
