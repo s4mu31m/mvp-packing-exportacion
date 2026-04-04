@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: mvp-packing-exportacion
+    runtime: python
+    rootDir: python-app
+    # Build: instala dependencias y recolecta archivos estáticos (whitenoise).
+    buildCommand: pip install -r requirements.txt && cd src && python manage.py collectstatic --noinput
+    # Start: migra la BD SQLite de sesiones/admin y levanta gunicorn.
+    # --timeout 120: Dataverse puede tardar hasta 30 s por request; gunicorn
+    #   necesita tiempo suficiente para no matar workers durante llamadas API lentas.
+    # --workers 2: seguro para Dataverse (no hay escrituras concurrentes en SQLite
+    #   de sesiones bajo carga de piloto).
+    startCommand: cd src && python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      # Settings de Django — valores fijos para producción
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: PERSISTENCE_BACKEND
+        value: dataverse
+
+      # SECRET_KEY: Render genera un valor aleatorio seguro al crear el servicio.
+      # Si el servicio ya existe y no tiene esta variable, configurarla manualmente
+      # en el panel de Render (Settings → Environment → Secret Files).
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+
+      # Dominio Render — completar con el nombre real del servicio una vez creado.
+      # Ejemplo: DJANGO_ALLOWED_HOSTS=mvp-packing-exportacion.onrender.com
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+
+      # Ejemplo: DJANGO_CSRF_TRUSTED_ORIGINS=https://mvp-packing-exportacion.onrender.com
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        sync: false
+
+      # Credenciales Dataverse — configurar en el panel de Render (nunca en este archivo)
+      - key: DATAVERSE_URL
+        sync: false
+      - key: DATAVERSE_TENANT_ID
+        sync: false
+      - key: DATAVERSE_CLIENT_ID
+        sync: false
+      - key: DATAVERSE_CLIENT_SECRET
+        sync: false
+      - key: DATAVERSE_API_VERSION
+        value: v9.2
+      - key: DATAVERSE_TIMEOUT
+        value: "30"

@@ -1007,9 +1007,18 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
 
         Persistencia: solo SQLite (ORM directo). No pasa por el repository
         layer porque CalidadPalletMuestra no tiene repositorio Dataverse aun.
+        En modo PERSISTENCE_BACKEND=dataverse las muestras se guardan en la
+        BD SQLite local — NO se sincronizan a Dataverse.
         TODO (Dataverse): cuando se implemente la tabla crf21_calidad_pallet_muestras
         en Dataverse, migrar esta logica a un use case con repositorio.
         """
+        from django.conf import settings
+        import logging
+        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower() == "dataverse":
+            logging.getLogger(__name__).warning(
+                "CalidadPalletMuestra: guardando en SQLite local (tabla Dataverse no implementada). "
+                "Los datos de muestras NO se sincronizan a Dataverse."
+            )
         saved = 0
         for i in range(1, 4):  # maximo 3 muestras por sesion
             prefix = f"muestra_{i}_"
