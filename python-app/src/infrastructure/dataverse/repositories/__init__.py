@@ -167,6 +167,7 @@ def _row_to_bin(row: dict) -> BinRecord:
         variedad_fruta=_str(row.get(BIN_FIELDS["variedad_fruta"])),
         kilos_bruto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_bruto_ingreso"])),
         kilos_neto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_neto_ingreso"])),
+        codigo_productor=_str(row.get(BIN_FIELDS["codigo_productor"])),
     )
 
 
@@ -195,6 +196,8 @@ def _row_to_lote(row: dict) -> LoteRecord:
         temporada_codigo="",
         correlativo_temporada=None,
         etapa_actual=_str(row.get(LOTE_FIELDS["etapa_actual"])) or None,
+        # codigo_productor disponible si el campo crf21_codigo_productor existe en Dataverse.
+        codigo_productor=_str(row.get(LOTE_FIELDS["codigo_productor"])),
     )
 
 
@@ -208,6 +211,11 @@ def _row_to_pallet(row: dict) -> PalletRecord:
         source_event_id="",
         is_active=row.get("statecode", 0) == 0,
         id_pallet=_str(row.get(PALLET_FIELDS["id_pallet"])),
+        fecha=_parse_date(row.get(PALLET_FIELDS["fecha"])),
+        tipo_caja=_str(row.get(PALLET_FIELDS["tipo_caja"])),
+        cajas_por_pallet=int(row.get(PALLET_FIELDS["cajas_por_pallet"]) or 0) or None,
+        peso_total_kg=_parse_decimal(row.get(PALLET_FIELDS["peso_total_kg"])),
+        destino_mercado=_str(row.get(PALLET_FIELDS["destino_mercado"])),
     )
 
 
@@ -397,14 +405,19 @@ def _row_to_medicion_temperatura(row: dict, pallet_id: Any = None) -> MedicionTe
 _BIN_SELECT = [BIN_FIELDS[k] for k in (
     "id", "id_bin", "bin_code", "operator_code", "source_system",
     "source_event_id", "variedad_fruta", "kilos_bruto_ingreso", "kilos_neto_ingreso",
+    "codigo_productor",
 )]
 _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "id", "id_lote_planta", "lote_code", "operator_code", "source_system",
     "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
     "kilos_neto_conformacion", "requiere_desverdizado",
-    "disponibilidad_camara_desverdizado", "etapa_actual",
+    "disponibilidad_camara_desverdizado", "etapa_actual", "codigo_productor",
 )]
 _BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
+_PALLET_SELECT = [PALLET_FIELDS[k] for k in (
+    "id", "id_pallet", "pallet_code", "operator_code",
+    "fecha", "tipo_caja", "cajas_por_pallet", "peso_total_kg", "destino_mercado",
+)]
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +640,8 @@ class DataverseLoteRepository(LoteRepository):
             "operator_code":                        LOTE_FIELDS["operator_code"],
             # etapa_actual: campo disponible desde 2026-03-31
             "etapa_actual":                         LOTE_FIELDS["etapa_actual"],
+            # codigo_productor: campo crf21_codigo_productor agregado 2026-04-04
+            "codigo_productor":                     LOTE_FIELDS["codigo_productor"],
         }
         body = {}
         for domain_key, dv_field in _updatable.items():
@@ -681,7 +696,7 @@ class DataversePalletRepository(PalletRepository):
         f = f"{PALLET_FIELDS['pallet_code']} eq '{pallet_code}'"
         result = self._client.list_rows(
             ENTITY_SET_PALLET,
-            select=[PALLET_FIELDS[k] for k in ("id", "id_pallet", "pallet_code", "operator_code", "fecha")],
+            select=_PALLET_SELECT,
             filter_expr=f,
             top=1,
         )
@@ -691,6 +706,16 @@ class DataversePalletRepository(PalletRepository):
         record = _row_to_pallet(rows[0])
         record.temporada = temporada
         return record
+
+    def list_recent(self, limit: int = 30) -> list[PalletRecord]:
+        """Retorna los pallets mas recientes ordenados por fecha de creacion descendente."""
+        result = self._client.list_rows(
+            ENTITY_SET_PALLET,
+            select=_PALLET_SELECT,
+            orderby="createdon desc",
+            top=limit,
+        )
+        return [_row_to_pallet(r) for r in (result or {}).get("value", [])]
 
     def get_or_create(
         self,

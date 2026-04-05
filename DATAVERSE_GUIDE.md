@@ -26,7 +26,7 @@ Esta guía **no** cubre todavía:
 - sincronización completa entre modelo Django y Dataverse,
 - capa funcional final del dominio apoyada totalmente en Dataverse.
  
-> Importante: la integración Dataverse está **operativa para el flujo MVP completo**. Las 16 tablas del modelo tienen repositorios implementados (SQLite + Dataverse). Los límites conocidos y el único gap bloqueante pendiente están documentados en la sección 17 y en [`docs/cierre-mvp/limites-aceptados-mvp.md`](docs/cierre-mvp/limites-aceptados-mvp.md).
+> Importante: la **capa de repositorios Dataverse está completa** — las 16 tablas del modelo tienen repositorios implementados (SQLite + Dataverse). Las vistas web son compatibles con ambos backends. Los límites conocidos están documentados en la sección 17 y en [`docs/cierre-mvp/limites-aceptados-mvp.md`](docs/cierre-mvp/limites-aceptados-mvp.md).
  
 ---
  
@@ -535,6 +535,7 @@ python scripts/dataverse/09_create_calidad_pallet_muestras.py  # Crear tabla CPM
 | `06_query_usuarios.py` | Lista operadores (sin password hash) |
 | `07_validate_mapping.py` | Valida campos del mapping.py vs esquema Dataverse |
 | `09_create_calidad_pallet_muestras.py` | Crea/verifica tabla crf21_calidad_pallet_muestras |
+| `11_validate_e2e.py` | Validación E2E del layer de repositorios (opcional, no bloqueante) |
 
 ---
 

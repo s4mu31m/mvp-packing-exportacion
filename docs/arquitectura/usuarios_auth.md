@@ -103,7 +103,7 @@ El sufijo es un contador zero-padded a 3 dígitos por prefijo. No es global — 
 | Portal / Dashboard       | Cualquier autenticado      | `LoginRequiredMixin`                |
 | Dashboard operativo      | Cualquier autenticado      | `LoginRequiredMixin`                |
 | Recepcion                | Recepcion                  | `RolRequiredMixin`                  |
-| Conformar Lote (Pesaje)  | Pesaje                     | `RolRequiredMixin`                  |
+| Conformar/Cerrar Lote (captura de pesaje en Recepción) | Recepcion, Pesaje | `RolRequiredMixin` |
 | Desverdizado             | Desverdizado               | `RolRequiredMixin`                  |
 | Ingreso Packing          | Ingreso Packing            | `RolRequiredMixin`                  |
 | Proceso Packing          | Proceso                    | `RolRequiredMixin`                  |
@@ -127,6 +127,8 @@ Control | Paletizado | Camaras | Jefatura | Administrador
 ```
 
 Los roles se almacenan en `crf21_rol` como string canónico separado por coma con espacio: `"Recepcion, Pesaje"`.
+
+> **Nota sobre `Pesaje`:** el rol `Pesaje` autoriza al operador a cerrar lotes con captura de kg bruto/neto de conformación. **No existe una vista operativa separada `/operaciones/pesaje/`** — el flujo de pesaje ocurre dentro de `RecepcionView` (formulario de cierre de lote).
 
 ---
 

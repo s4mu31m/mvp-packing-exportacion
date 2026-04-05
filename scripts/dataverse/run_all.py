@@ -25,6 +25,11 @@ SCRIPTS = [
     ("07_validate_mapping.py","Validar field mapping vs schema"),
 ]
 
+# Scripts opcionales: se ejecutan al final, no bloquean si fallan
+OPTIONAL_SCRIPTS = [
+    ("11_validate_e2e.py",    "Validación E2E repositorios Dataverse"),
+]
+
 # Scripts cuyo fallo detiene la ejecución de los siguientes
 BLOCKING = {"00_check_env.py", "01_whoami.py"}
 
@@ -47,7 +52,7 @@ def main():
     summary = []
     blocked = False
 
-    for script_file, description in SCRIPTS:
+    for script_file, description in SCRIPTS + OPTIONAL_SCRIPTS:
         if blocked:
             print(f"  [SKIP] {description} — bloqueado por fallo anterior")
             summary.append((script_file, description, "SKIP"))

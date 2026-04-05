@@ -157,6 +157,9 @@ LOTE_PLANTA_FIELDS = {
     # Registros anteriores al 2026-03-31 tienen este campo en null;
     # el backend aplica derive_etapa_lote() como fallback.
     "etapa_actual":                         "crf21_etapa_actual",
+    # codigo_productor: copiado desde el primer bin al cerrar el lote (cerrar_lote_recepcion).
+    # Campo crf21_codigo_productor agregado a crf21_lote_plantas en Power Apps el 2026-04-04.
+    "codigo_productor":                     "crf21_codigo_productor",
     # Nota: temporada, estado, temporada_codigo, correlativo_temporada NO existen
     # en Dataverse. Se gestionan solo en SQLite.
 }

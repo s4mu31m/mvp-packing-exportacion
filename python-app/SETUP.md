@@ -85,8 +85,12 @@ python manage.py runserver
 
 Visita estos endpoints para verificar que la conexión funciona:
 - http://127.0.0.1:8000/api/dataverse/ping/
-- http://127.0.0.1:8000/api/dataverse/accounts/
-- http://127.0.0.1:8000/api/dataverse/entities/
+- http://127.0.0.1:8000/api/dataverse/check_tables/
+- http://127.0.0.1:8000/api/dataverse/save_first_bin_code/  (POST)
+- http://127.0.0.1:8000/api/dataverse/get_first_bin_code/
+
+Las vistas operativas (`/operaciones/...`) requieren autenticación.
+Usa http://127.0.0.1:8000/usuarios/login/ para iniciar sesión antes de acceder a ellas.
 
 ## Notas de Seguridad
 

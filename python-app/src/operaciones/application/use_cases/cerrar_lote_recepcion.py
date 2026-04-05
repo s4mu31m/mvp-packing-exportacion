@@ -90,6 +90,16 @@ def cerrar_lote_recepcion(payload: dict, *, repos: Repositories | None = None) -
         if payload.get(campo) not in [None, ""]:
             campos_update[campo] = payload[campo]
 
+    # Poblar codigo_productor desde el primer bin del lote (para filtro jefatura en Dataverse)
+    try:
+        bins = repos.bins.list_by_lote(lote_record.id)
+        if bins:
+            codigo_productor = bins[0].codigo_productor
+            if codigo_productor:
+                campos_update["codigo_productor"] = codigo_productor
+    except Exception:
+        pass
+
     repos.lotes.update(lote_record.id, campos_update)
 
     event_key = build_event_key(temporada, "LOTE", lote_code, "RECEPCION", "CERRADO")

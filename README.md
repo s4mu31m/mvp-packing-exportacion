@@ -21,7 +21,7 @@ Digitalizar el flujo operativo de recepción, trazabilidad y packing de fruta en
 | Paso 3 — Lógica de negocio (casos de uso) | ✅ Completado | Capa de aplicación con casos de uso, validados con tests |
 | Paso 4 — Interfaz operativa web | ✅ Completado | Vistas HTML operativas para cada etapa del flujo |
 | Paso 4b — API REST | ✅ Completado | Endpoints DRF expuestos para bins, lotes, pallets, eventos y trazabilidad |
-| Paso 5 — Integración con Dataverse | ✅ Completado | Backend Dataverse funcional para el flujo MVP completo; límites conocidos documentados en `docs/cierre-mvp/` |
+| Paso 5 — Integración con Dataverse | ✅ Completado | Capa de repositorios Dataverse implementada para todas las entidades del flujo; vistas web compatibles con ambos backends; límites conocidos documentados en `docs/cierre-mvp/` |
 
 ---
 
@@ -133,7 +133,7 @@ mvp-packing-exportacion/
 
 - **Python + Django** — backend, lógica de negocio, casos de uso
 - **Django REST Framework** — API REST
-- **Microsoft Dataverse / Power Platform** — backend de producción; flujo MVP completo operativo
+- **Microsoft Dataverse / Power Platform** — backend de producción; capa de repositorios completa; vistas web compatibles con ambos backends
 - **SQLite** — base de datos local de desarrollo
 - **GitHub** — gestión del proyecto
 

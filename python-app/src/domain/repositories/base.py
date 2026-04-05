@@ -36,6 +36,7 @@ class BinRecord:
     color: str = ""
     kilos_bruto_ingreso: Optional[Decimal] = None
     kilos_neto_ingreso: Optional[Decimal] = None
+    codigo_productor: str = ""
 
 
 @dataclass
@@ -65,6 +66,11 @@ class LoteRecord:
     # En Dataverse se lee desde crf21_etapa_actual; puede ser None para
     # registros anteriores al 2026-03-31 (usar derive_etapa_lote() como fallback).
     etapa_actual: Optional[str] = None
+    # codigo_productor: derivado del primer bin del lote.
+    # En SQLite se puebla al leer el lote (via bin_lotes relation).
+    # En Dataverse se lee desde crf21_codigo_productor (campo agregado 2026-04-04).
+    # Vacio si el lote no tiene bins o fue creado antes de la migracion.
+    codigo_productor: str = ""
 
 
 @dataclass
@@ -400,6 +406,14 @@ class PalletRepository(ABC):
         extra: Optional[dict] = None,
     ) -> tuple[PalletRecord, bool]:
         """Obtiene o crea un pallet. Retorna (record, created)."""
+
+    def list_recent(self, limit: int = 30) -> list[PalletRecord]:
+        """
+        Retorna los pallets mas recientes ordenados por fecha de creacion descendente.
+        Implementacion por defecto: lista vacia. SQLite y Dataverse sobreescriben.
+        Usado por vistas de paletizado y camaras en modo Dataverse.
+        """
+        return []
 
 
 class BinLoteRepository(ABC):

@@ -10,7 +10,7 @@ Backend Django con lógica de negocio, modelos de dominio, casos de uso y capa d
 
 ## Estado actual (2026-04-04)
 
-El flujo MVP completo está implementado y funcional en ambos backends.
+El backend Dataverse está implementado para todas las entidades del flujo. Las vistas web son compatibles con ambos backends.
 
 | Componente | SQLite | Dataverse |
 |---|---|---|

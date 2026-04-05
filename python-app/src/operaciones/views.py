@@ -495,6 +495,19 @@ def _lotes_pendientes_desverdizado(temporada: str):
     Retorna lotes cerrados que requieren desverdizado y aun no tienen
     registro de desverdizado. Se muestran en el selector de la vista.
     """
+    from django.conf import settings
+    if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+        try:
+            from infrastructure.repository_factory import get_repositories
+            repos = get_repositories()
+            lotes = repos.lotes.list_recent(limit=200)
+            return [
+                l for l in lotes
+                if l.is_active and l.requiere_desverdizado
+                and l.etapa_actual in ("Pesaje", "Mantencion")
+            ]
+        except Exception:
+            return []
     from operaciones.models import Desverdizado
     lotes_con_desv = set(
         Desverdizado.objects.values_list("lote_id", flat=True)
@@ -524,7 +537,11 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         )
         lotes = _lotes_pendientes_desverdizado(temporada)
         ctx["lotes_pendientes"] = lotes
-        ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
+        from django.conf import settings
+        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+        else:
+            ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         return ctx
 
     def _lote_context(self, temporada: str, lote_code: str) -> dict:
@@ -612,6 +629,16 @@ def _lotes_pendientes_ingreso_packing(temporada: str):
     """
     Retorna lotes cerrados que aun no tienen registro de ingreso a packing.
     """
+    from django.conf import settings
+    if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+        try:
+            from infrastructure.repository_factory import get_repositories
+            repos = get_repositories()
+            lotes = repos.lotes.list_recent(limit=200)
+            _ANTES_INGRESO = ("Pesaje", "Mantencion", "Desverdizado")
+            return [l for l in lotes if l.is_active and l.etapa_actual in _ANTES_INGRESO]
+        except Exception:
+            return []
     from operaciones.models import IngresoAPacking
     lotes_con_ingreso = set(
         IngresoAPacking.objects.values_list("lote_id", flat=True)
@@ -630,6 +657,43 @@ def _lote_info(temporada: str, lote_code: str) -> dict:
     Datos base de un lote para autocompletar formularios.
     Todos los valores son JSON-serializables (str, int, bool, None).
     """
+    from django.conf import settings
+    if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+        try:
+            from infrastructure.repository_factory import get_repositories
+            repos = get_repositories()
+            lote = repos.lotes.find_by_code(temporada, lote_code)
+            if not lote:
+                return {}
+            kilos_bruto = float(lote.kilos_bruto_conformacion) if lote.kilos_bruto_conformacion else None
+            kilos_neto = float(lote.kilos_neto_conformacion) if lote.kilos_neto_conformacion else None
+            via_desv = lote.etapa_actual in ("Desverdizado", "Mantencion") if lote.etapa_actual else False
+            try:
+                desv = repos.desverdizados.find_by_lote(lote.id)
+                if desv:
+                    if desv.kilos_bruto_salida is not None:
+                        kilos_bruto = float(desv.kilos_bruto_salida)
+                    if desv.kilos_neto_salida is not None:
+                        kilos_neto = float(desv.kilos_neto_salida)
+                    via_desv = True
+            except Exception:
+                pass
+            return {
+                "lote_code": lote.lote_code,
+                "estado": lote.etapa_actual or lote.estado,
+                "cantidad_bins": lote.cantidad_bins,
+                "kilos_bruto": kilos_bruto,
+                "kilos_neto": kilos_neto,
+                "via_desverdizado": via_desv,
+                "requiere_desverdizado": lote.requiere_desverdizado,
+                "productor": getattr(lote, "codigo_productor", ""),
+                "variedad": "",
+                "color": "",
+                "fecha_cosecha": str(lote.fecha_conformacion) if lote.fecha_conformacion else "",
+                "tipo_cultivo": "",
+            }
+        except Exception:
+            return {}
     try:
         lote = Lote.objects.get(temporada=temporada, lote_code=lote_code)
         bin_lotes = list(lote.bin_lotes.select_related("bin").order_by("created_at"))
@@ -713,6 +777,57 @@ def _lotes_data_json(temporada: str, lotes: list) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _lotes_json_from_records(lotes) -> str:
+    """
+    Serializa LoteRecord objects como JSON para autocomplete del template.
+    Usado en modo Dataverse donde los lotes ya fueron cargados via repos.
+    Los campos de bin (productor, variedad, color) se devuelven vacios
+    para evitar N llamadas adicionales a Dataverse.
+    """
+    data = {}
+    for lote in lotes:
+        via_desv = (
+            lote.etapa_actual in ("Desverdizado", "Mantencion")
+            if lote.etapa_actual else False
+        )
+        data[lote.lote_code] = {
+            "lote_code": lote.lote_code,
+            "estado": lote.etapa_actual or lote.estado,
+            "cantidad_bins": lote.cantidad_bins,
+            "kilos_bruto": float(lote.kilos_bruto_conformacion) if lote.kilos_bruto_conformacion else None,
+            "kilos_neto": float(lote.kilos_neto_conformacion) if lote.kilos_neto_conformacion else None,
+            "via_desverdizado": via_desv,
+            "requiere_desverdizado": lote.requiere_desverdizado,
+            "productor": getattr(lote, "codigo_productor", ""),
+            "variedad": "",
+            "color": "",
+            "fecha_cosecha": str(lote.fecha_conformacion) if lote.fecha_conformacion else "",
+            "tipo_cultivo": "",
+        }
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _pallets_json_from_records(pallets) -> str:
+    """
+    Serializa PalletRecord objects como JSON para autocomplete del template.
+    Usado en modo Dataverse. Los campos de lote/bin se devuelven vacios.
+    """
+    data = {}
+    for p in pallets:
+        data[p.pallet_code] = {
+            "pallet_code": p.pallet_code,
+            "lote_code": "",
+            "tipo_caja": p.tipo_caja or "",
+            "peso_total": float(p.peso_total_kg) if p.peso_total_kg else None,
+            "productor": "",
+            "tipo_cultivo": "",
+            "variedad": "",
+            "color": "",
+            "fecha_cosecha": "",
+        }
+    return json.dumps(data, ensure_ascii=False)
+
+
 def _campos_base_lote(lote: Lote) -> dict:
     """
     Deriva los campos base del lote (productor, tipo_cultivo, variedad, color,
@@ -731,6 +846,15 @@ def _campos_base_lote(lote: Lote) -> dict:
 
 def _pallets_pendientes_calidad(temporada: str) -> list:
     """Pallets activos que aun no tienen registro de CalidadPallet."""
+    from django.conf import settings
+    if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+        try:
+            from infrastructure.repository_factory import get_repositories
+            # En Dataverse retornamos los pallets recientes sin filtrar por calidad;
+            # la logica de negocio en el use case previene registros duplicados.
+            return get_repositories().pallets.list_recent(limit=30)
+        except Exception:
+            return []
     from operaciones.models import CalidadPallet
     pallets_con_calidad = set(CalidadPallet.objects.values_list("pallet_id", flat=True))
     return list(
@@ -743,6 +867,13 @@ def _pallets_pendientes_calidad(temporada: str) -> list:
 
 def _pallets_pendientes_camara_frio(temporada: str) -> list:
     """Pallets activos que aun no tienen registro de CamaraFrio."""
+    from django.conf import settings
+    if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+        try:
+            from infrastructure.repository_factory import get_repositories
+            return get_repositories().pallets.list_recent(limit=30)
+        except Exception:
+            return []
     from operaciones.models import CamaraFrio
     pallets_con_camara = set(CamaraFrio.objects.values_list("pallet_id", flat=True))
     return list(
@@ -755,6 +886,27 @@ def _pallets_pendientes_camara_frio(temporada: str) -> list:
 
 def _pallet_info(temporada: str, pallet_code: str) -> dict:
     """Datos base de un pallet para autocompletar formularios."""
+    from django.conf import settings
+    if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+        try:
+            from infrastructure.repository_factory import get_repositories
+            repos = get_repositories()
+            pallet = repos.pallets.find_by_code(temporada, pallet_code)
+            if not pallet:
+                return {}
+            return {
+                "pallet_code": pallet.pallet_code,
+                "lote_code":   "",
+                "tipo_caja":   pallet.tipo_caja or "",
+                "peso_total":  float(pallet.peso_total_kg) if pallet.peso_total_kg else None,
+                "productor":   "",
+                "tipo_cultivo": "",
+                "variedad":    "",
+                "color":       "",
+                "fecha_cosecha": "",
+            }
+        except Exception:
+            return {}
     try:
         pallet = Pallet.objects.get(temporada=temporada, pallet_code=pallet_code)
         lote_code = ""
@@ -798,7 +950,11 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         )
         lotes = _lotes_pendientes_ingreso_packing(temporada)
         ctx["lotes_pendientes"] = lotes
-        ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
+        from django.conf import settings
+        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+        else:
+            ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         ctx["lote_info"] = {}
         return ctx
 
@@ -858,18 +1014,33 @@ class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             self.request.session.get("temporada_activa")
             or str(datetime.date.today().year)
         )
-        # Lotes que ya tienen ingreso packing (aptos para proceso)
-        from operaciones.models import IngresoAPacking
-        lotes_con_ingreso = set(
-            IngresoAPacking.objects.values_list("lote_id", flat=True)
-        )
-        lotes = list(
-            Lote.objects
-            .filter(temporada=temporada, is_active=True, id__in=lotes_con_ingreso)
-            .order_by("-created_at")[:30]
-        )
-        ctx["lotes_pendientes"] = lotes
-        ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
+        from django.conf import settings
+        backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
+        if backend == "dataverse":
+            try:
+                from infrastructure.repository_factory import get_repositories
+                repos = get_repositories()
+                todos = repos.lotes.list_recent(limit=200)
+                _CON_INGRESO = ("Ingreso Packing", "Packing / Proceso", "Paletizado",
+                                "Calidad Pallet", "Camara Frio", "Temperatura Salida")
+                lotes = [l for l in todos if l.is_active and l.etapa_actual in _CON_INGRESO][:30]
+            except Exception:
+                lotes = []
+            ctx["lotes_pendientes"] = lotes
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+        else:
+            # Lotes que ya tienen ingreso packing (aptos para proceso)
+            from operaciones.models import IngresoAPacking
+            lotes_con_ingreso = set(
+                IngresoAPacking.objects.values_list("lote_id", flat=True)
+            )
+            lotes = list(
+                Lote.objects
+                .filter(temporada=temporada, is_active=True, id__in=lotes_con_ingreso)
+                .order_by("-created_at")[:30]
+            )
+            ctx["lotes_pendientes"] = lotes
+            ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -920,15 +1091,30 @@ class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             self.request.session.get("temporada_activa")
             or str(datetime.date.today().year)
         )
-        from operaciones.models import IngresoAPacking
-        lotes_con_ingreso = set(IngresoAPacking.objects.values_list("lote_id", flat=True))
-        lotes = list(
-            Lote.objects
-            .filter(temporada=temporada, is_active=True, id__in=lotes_con_ingreso)
-            .order_by("-created_at")[:30]
-        )
-        ctx["lotes_pendientes"] = lotes
-        ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
+        from django.conf import settings
+        backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
+        if backend == "dataverse":
+            try:
+                from infrastructure.repository_factory import get_repositories
+                repos = get_repositories()
+                todos = repos.lotes.list_recent(limit=200)
+                _CON_INGRESO = ("Ingreso Packing", "Packing / Proceso", "Paletizado",
+                                "Calidad Pallet", "Camara Frio", "Temperatura Salida")
+                lotes = [l for l in todos if l.is_active and l.etapa_actual in _CON_INGRESO][:30]
+            except Exception:
+                lotes = []
+            ctx["lotes_pendientes"] = lotes
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+        else:
+            from operaciones.models import IngresoAPacking
+            lotes_con_ingreso = set(IngresoAPacking.objects.values_list("lote_id", flat=True))
+            lotes = list(
+                Lote.objects
+                .filter(temporada=temporada, is_active=True, id__in=lotes_con_ingreso)
+                .order_by("-created_at")[:30]
+            )
+            ctx["lotes_pendientes"] = lotes
+            ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -982,7 +1168,11 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         )
         pallets = _pallets_pendientes_calidad(temporada)
         ctx["pallets_pendientes"] = pallets
-        ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
+        from django.conf import settings
+        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+            ctx["pallets_data_json"] = _pallets_json_from_records(pallets)
+        else:
+            ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
 
     def _save_muestras(self, request, pallet, operator_code):
@@ -1064,20 +1254,20 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 result = registrar_calidad_pallet(payload)
                 _handle_result(request, result)
 
-                # Guardar muestras individuales (local SQLite)
+                # Guardar muestras individuales
                 if result.ok and pallet_code:
                     try:
-                        pallet = Pallet.objects.get(
-                            temporada=temporada, pallet_code=pallet_code,
-                        )
-                        n = self._save_muestras(
-                            request, pallet, request.session.get("crf21_codigooperador", ""),
-                        )
-                        if n:
-                            messages.info(
-                                request, f"{n} muestra(s) de calidad registrada(s).",
+                        from infrastructure.repository_factory import get_repositories
+                        pallet = get_repositories().pallets.find_by_code(temporada, pallet_code)
+                        if pallet:
+                            n = self._save_muestras(
+                                request, pallet, request.session.get("crf21_codigooperador", ""),
                             )
-                    except Pallet.DoesNotExist:
+                            if n:
+                                messages.info(
+                                    request, f"{n} muestra(s) de calidad registrada(s).",
+                                )
+                    except Exception:
                         pass
             else:
                 messages.error(request, "Formulario de calidad invalido.")
@@ -1117,7 +1307,11 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         )
         pallets = _pallets_pendientes_camara_frio(temporada)
         ctx["pallets_pendientes"] = pallets
-        ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
+        from django.conf import settings
+        if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
+            ctx["pallets_data_json"] = _pallets_json_from_records(pallets)
+        else:
+            ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -1194,9 +1388,9 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
     En SQLite usa ORM. En Dataverse usa repos.lotes.list_recent() con
     etapa_actual desde crf21_etapa_actual (disponible desde 2026-03-31).
 
-    Limitaciones Dataverse:
-    - filtro_productor no se puede aplicar sin cargar los bins de cada lote (N+1 API calls).
-      Se ignora para evitar degradacion de rendimiento.
+    En Dataverse:
+    - filtro_productor se aplica via lote.codigo_productor (campo crf21_codigo_productor
+      poblado al cerrar el lote). Lotes anteriores a P0-C tendran codigo_productor vacio.
     - filtro_estado se mapea a etapa: si filtro_estado == 'cerrado', se filtran
       lotes con etapa != 'Recepcion'; si filtro_estado == 'abierto', etapa == 'Recepcion'.
     """
@@ -1243,7 +1437,9 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
     """
     Versión Dataverse de _lotes_enriquecidos_qs.
     Usa etapa_actual persistida en crf21_etapa_actual como fuente principal.
-    filtro_productor se ignora (requeriría carga de bins — N+1 inaceptable).
+    filtro_productor se aplica via lote.codigo_productor (campo crf21_codigo_productor
+    en Dataverse, poblado al cerrar el lote desde el primer bin). Vacio para lotes
+    anteriores a la implementacion de P0-C.
     filtro_estado se mapea a etapa: 'abierto' → Recepcion, 'cerrado' → otras etapas.
     """
     try:
@@ -1254,20 +1450,22 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
         resultado = []
         for lote in lotes:
             etapa = resolve_etapa_lote(lote)
-            # Aplicar filtro por estado si se indica
             if filtro_estado == "abierto" and etapa != "Recepcion":
                 continue
             if filtro_estado == "cerrado" and etapa == "Recepcion":
                 continue
+            productor = lote.codigo_productor or ""
+            if filtro_productor and filtro_productor.lower() not in productor.lower():
+                continue
             resultado.append({
                 "lote": lote,
                 "lote_code": lote.lote_code,
-                "estado": etapa,               # en DV: etapa como proxy de estado
+                "estado": etapa,
                 "estado_display": etapa,
                 "etapa": etapa,
                 "cantidad_bins": lote.cantidad_bins,
                 "kilos_neto": lote.kilos_neto_conformacion,
-                "productor": "",               # no disponible sin bin lookup
+                "productor": productor,
                 "variedad": "",
                 "tipo_cultivo": "",
                 "fecha": lote.fecha_conformacion,

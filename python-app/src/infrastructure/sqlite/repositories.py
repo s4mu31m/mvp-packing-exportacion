@@ -69,6 +69,7 @@ def _bin_to_record(obj) -> BinRecord:
         color=obj.color or "",
         kilos_bruto_ingreso=obj.kilos_bruto_ingreso,
         kilos_neto_ingreso=obj.kilos_neto_ingreso,
+        codigo_productor=obj.codigo_productor or "",
     )
 
 
@@ -438,6 +439,11 @@ class SqlitePalletRepository(PalletRepository):
         from operaciones.models import Pallet
         obj = Pallet.objects.filter(temporada=temporada, pallet_code=pallet_code).first()
         return _pallet_to_record(obj) if obj else None
+
+    def list_recent(self, limit: int = 30) -> list[PalletRecord]:
+        from operaciones.models import Pallet
+        qs = Pallet.objects.filter(is_active=True).order_by("-created_at")[:limit]
+        return [_pallet_to_record(obj) for obj in qs]
 
     def get_or_create(
         self,
