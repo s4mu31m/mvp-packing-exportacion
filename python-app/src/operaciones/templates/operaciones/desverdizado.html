@@ -239,6 +239,9 @@ function poblarContexto(code) {
   document.getElementById('ctx-cosecha').textContent   = fmt(d.fecha_cosecha);
   document.getElementById('ctx-bins').textContent      = fmt(d.cantidad_bins);
   document.getElementById('ctx-kg').textContent        = d.kilos_neto != null ? d.kilos_neto.toFixed(0) + ' kg' : '—';
+  // Pre-llenar color objetivo con el color del lote
+  const colorInput = document.getElementById('id_color');
+  if (colorInput && d.color) colorInput.value = d.color;
 }
 
 function seleccionarLote(code) {

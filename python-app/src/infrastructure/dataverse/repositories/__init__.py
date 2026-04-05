@@ -168,6 +168,8 @@ def _row_to_bin(row: dict) -> BinRecord:
         kilos_bruto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_bruto_ingreso"])),
         kilos_neto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_neto_ingreso"])),
         codigo_productor=_str(row.get(BIN_FIELDS["codigo_productor"])),
+        color=_str(row.get(BIN_FIELDS["color"])),
+        fecha_cosecha=_parse_date(row.get(BIN_FIELDS["fecha_cosecha"])),
     )
 
 
@@ -405,7 +407,7 @@ def _row_to_medicion_temperatura(row: dict, pallet_id: Any = None) -> MedicionTe
 _BIN_SELECT = [BIN_FIELDS[k] for k in (
     "id", "id_bin", "bin_code", "operator_code", "source_system",
     "source_event_id", "variedad_fruta", "kilos_bruto_ingreso", "kilos_neto_ingreso",
-    "codigo_productor",
+    "codigo_productor", "color", "fecha_cosecha",
 )]
 _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "id", "id_lote_planta", "lote_code", "operator_code", "source_system",
@@ -467,6 +469,7 @@ class DataverseBinRepository(BinRepository):
             "predio":             BIN_FIELDS["predio"],
             "sector":             BIN_FIELDS["sector"],
             "lote_productor":     BIN_FIELDS["lote_productor"],
+            "fecha_cosecha":      BIN_FIELDS["fecha_cosecha"],
             "color":              BIN_FIELDS["color"],
             "estado_fisico":      BIN_FIELDS["estado_fisico"],
             "a_o_r":              BIN_FIELDS["a_o_r"],
@@ -521,11 +524,11 @@ class DataverseBinRepository(BinRepository):
           1. crf21_bin_lote_plantas filtrado por _crf21_lote_planta_id_value = lote_id
           2. crf21_bins filtrado por los bin_ids obtenidos
         """
-        # Paso 1: obtener bin_ids asociados al lote
+        # Paso 1: obtener bin_ids asociados al lote.
+        # SIN $select para que Dataverse incluya siempre los campos _*_value.
         f = f"{BIN_LOTE_FIELDS['lote_id_value']} eq {lote_id}"
         result = self._client.list_rows(
             ENTITY_SET_BIN_LOTE,
-            select=[BIN_LOTE_FIELDS["bin_id_value"]],
             filter_expr=f,
             top=9999,
         )
@@ -548,6 +551,79 @@ class DataverseBinRepository(BinRepository):
             top=len(bin_ids) + 10,
         )
         return [_row_to_bin(r) for r in (result2 or {}).get("value", [])]
+
+    def first_bin_by_lotes(self, lote_ids: list) -> dict:
+        """
+        Retorna {lote_id: BinRecord} con el primer bin de cada lote indicado.
+        Hace dos queries (BIN_LOTE + BIN) independientemente del numero de lotes.
+
+        Nota: NO se usa $select en la query al join table porque Dataverse no garantiza
+        devolver campos _*_value cuando solo esos se piden en $select.
+        Sin $select, Dataverse devuelve todas las columnas incluyendo los _*_value.
+        """
+        if not lote_ids:
+            return {}
+
+        _log = logging.getLogger(__name__)
+        _log.debug("first_bin_by_lotes: buscando primer bin para %d lotes: %s",
+                   len(lote_ids), lote_ids)
+
+        # Paso 1: obtener todas las asociaciones bin-lote para los lotes dados.
+        # SIN $select para que Dataverse incluya siempre los campos _*_value.
+        ids_filter = " or ".join(
+            f"{BIN_LOTE_FIELDS['lote_id_value']} eq {lid}" for lid in lote_ids
+        )
+        result = self._client.list_rows(
+            ENTITY_SET_BIN_LOTE,
+            filter_expr=f"({ids_filter})",
+            top=len(lote_ids) * 500,
+        )
+        rows = (result or {}).get("value", [])
+        _log.debug("first_bin_by_lotes: paso1 encontro %d filas en join table", len(rows))
+
+        if rows:
+            _log.debug("first_bin_by_lotes: sample row keys: %s", list(rows[0].keys())[:15])
+
+        # Para cada lote, tomar solo el primer bin_id encontrado
+        lote_to_bin: dict = {}
+        for r in rows:
+            lid = r.get(BIN_LOTE_FIELDS["lote_id_value"])
+            bid = r.get(BIN_LOTE_FIELDS["bin_id_value"])
+            if lid and bid and lid not in lote_to_bin:
+                lote_to_bin[lid] = bid
+
+        _log.debug("first_bin_by_lotes: lote_to_bin tiene %d entradas", len(lote_to_bin))
+        if not lote_to_bin:
+            _log.warning(
+                "first_bin_by_lotes: no se encontraron join records para lotes %s. "
+                "Revisar que la tabla %s tenga registros y que los lote_ids sean correctos.",
+                lote_ids, ENTITY_SET_BIN_LOTE,
+            )
+            return {}
+
+        # Paso 2: obtener los bins en batch
+        bin_ids = list(lote_to_bin.values())
+        bins_filter = " or ".join(f"{BIN_FIELDS['id']} eq {bid}" for bid in bin_ids)
+        result2 = self._client.list_rows(
+            ENTITY_SET_BIN,
+            select=_BIN_SELECT,
+            filter_expr=f"({bins_filter})",
+            top=len(bin_ids) + 10,
+        )
+        bin_by_id = {
+            r.get(BIN_FIELDS["id"]): _row_to_bin(r)
+            for r in (result2 or {}).get("value", [])
+            if r.get(BIN_FIELDS["id"])
+        }
+        _log.debug("first_bin_by_lotes: paso2 encontro %d bins", len(bin_by_id))
+
+        resultado = {
+            lid: bin_by_id[bid]
+            for lid, bid in lote_to_bin.items()
+            if bid in bin_by_id
+        }
+        _log.debug("first_bin_by_lotes: resultado final tiene %d entradas", len(resultado))
+        return resultado
 
 
 # ---------------------------------------------------------------------------

@@ -37,7 +37,7 @@ class BinForm(forms.Form):
     """Registro de bin en recepcion. El bin_code se genera automaticamente en backend."""
     # --- Campos base del lote (se bloquean tras el primer bin) ---
     codigo_productor = forms.CharField(
-        max_length=50, required=False, label="Codigo productor / agricultor",
+        max_length=50, required=True, label="Codigo productor / agricultor",
         widget=forms.TextInput(attrs={"autocomplete": "off"}),
     )
     tipo_cultivo = forms.CharField(
@@ -49,7 +49,7 @@ class BinForm(forms.Form):
         widget=forms.TextInput(attrs={"placeholder": "Ej: Thompson Seedless"}),
     )
     color = forms.CharField(
-        max_length=30, required=False, label="Color (numero)",
+        max_length=30, required=True, label="Color (numero)",
         help_text="Numero de color segun tabla interna. Ej: 1, 2, 5",
         widget=forms.TextInput(attrs={"placeholder": "1", "inputmode": "numeric", "autocomplete": "off"}),
     )

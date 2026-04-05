@@ -426,7 +426,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "tipo_cultivo": cd.get("tipo_cultivo") or "",
             "numero_cuartel": cd.get("numero_cuartel") or "",
             "color": cd.get("color") or "",
-            "hora_recepcion": cd.get("hora_recepcion") or "",
+            "hora_recepcion": str(cd["hora_recepcion"]) if cd.get("hora_recepcion") else "",
             "kilos_bruto_ingreso": float(cd["kilos_bruto_ingreso"]) if cd.get("kilos_bruto_ingreso") else None,
             "kilos_neto_ingreso": float(cd["kilos_neto_ingreso"]) if cd.get("kilos_neto_ingreso") else None,
             "a_o_r": cd.get("a_o_r") or None,
@@ -435,15 +435,14 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
 
         result = agregar_bin_a_lote_abierto(payload)
         if result.ok:
-            # Guardar campos base desde el primer bin
-            if not campos_base:
-                request.session["lote_activo_campos_base"] = {
-                    "codigo_productor": cd.get("codigo_productor", ""),
-                    "tipo_cultivo": cd.get("tipo_cultivo", ""),
-                    "variedad_fruta": cd.get("variedad_fruta", ""),
-                    "color": cd.get("color", ""),
-                    "fecha_cosecha": str(cd["fecha_cosecha"]) if cd.get("fecha_cosecha") else "",
-                }
+            # Actualizar campos_base con los valores del bin — solo rellena campos vacios
+            current = dict(campos_base)
+            for campo in ("codigo_productor", "tipo_cultivo", "variedad_fruta", "color"):
+                if not current.get(campo) and cd.get(campo):
+                    current[campo] = cd[campo]
+            if not current.get("fecha_cosecha") and cd.get("fecha_cosecha"):
+                current["fecha_cosecha"] = str(cd["fecha_cosecha"])
+            request.session["lote_activo_campos_base"] = current
             messages.success(
                 request,
                 f"Bin {result.data['bin_code']} agregado al lote {lote_code}.",
@@ -539,7 +538,8 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         ctx["lotes_pendientes"] = lotes
         from django.conf import settings
         if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
-            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+            from infrastructure.repository_factory import get_repositories
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes, get_repositories())
         else:
             ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         return ctx
@@ -584,7 +584,7 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "extra": {
                         "camara_numero": cd.get("camara_numero"),
                         "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                        "hora_ingreso": cd.get("hora_ingreso"),
+                        "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                         "temperatura_camara": float(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
                         "humedad_relativa": float(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
                         "observaciones": cd.get("observaciones"),
@@ -606,7 +606,7 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "source_system": "web",
                     "extra": {
                         "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                        "hora_ingreso": cd.get("hora_ingreso"),
+                        "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                         "color_salida": cd.get("color") or "",
                         "horas_desverdizado": cd.get("horas_desverdizado"),
                         "kilos_enviados_terreno": float(cd["kilos_enviados_terreno"]) if cd.get("kilos_enviados_terreno") else None,
@@ -777,19 +777,34 @@ def _lotes_data_json(temporada: str, lotes: list) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
-def _lotes_json_from_records(lotes) -> str:
+def _lotes_json_from_records(lotes, repos=None) -> str:
     """
     Serializa LoteRecord objects como JSON para autocomplete del template.
     Usado en modo Dataverse donde los lotes ya fueron cargados via repos.
-    Los campos de bin (productor, variedad, color) se devuelven vacios
-    para evitar N llamadas adicionales a Dataverse.
+    Si se pasa repos, obtiene el primer bin de cada lote en batch (2 queries)
+    para poblar productor, variedad, color y fecha_cosecha.
     """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    # Batch: primer bin por lote en 2 queries (no N×2)
+    primer_bin_por_lote: dict = {}
+    if repos is not None and lotes:
+        try:
+            lote_ids = [l.id for l in lotes if l.id]
+            _log.debug("_lotes_json_from_records: llamando first_bin_by_lotes con %d lote_ids", len(lote_ids))
+            primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids)
+            _log.debug("_lotes_json_from_records: primer_bin_por_lote tiene %d entradas", len(primer_bin_por_lote))
+        except Exception as exc:
+            _log.warning("_lotes_json_from_records: error al obtener bins en batch: %s", exc, exc_info=True)
+
     data = {}
     for lote in lotes:
         via_desv = (
             lote.etapa_actual in ("Desverdizado", "Mantencion")
             if lote.etapa_actual else False
         )
+        primer_bin = primer_bin_por_lote.get(lote.id)
         data[lote.lote_code] = {
             "lote_code": lote.lote_code,
             "estado": lote.etapa_actual or lote.estado,
@@ -798,10 +813,10 @@ def _lotes_json_from_records(lotes) -> str:
             "kilos_neto": float(lote.kilos_neto_conformacion) if lote.kilos_neto_conformacion else None,
             "via_desverdizado": via_desv,
             "requiere_desverdizado": lote.requiere_desverdizado,
-            "productor": getattr(lote, "codigo_productor", ""),
-            "variedad": "",
-            "color": "",
-            "fecha_cosecha": str(lote.fecha_conformacion) if lote.fecha_conformacion else "",
+            "productor": (primer_bin.codigo_productor if primer_bin else None) or getattr(lote, "codigo_productor", ""),
+            "variedad": primer_bin.variedad_fruta if primer_bin else "",
+            "color": primer_bin.color if primer_bin else "",
+            "fecha_cosecha": str(primer_bin.fecha_cosecha) if primer_bin and primer_bin.fecha_cosecha else "",
             "tipo_cultivo": "",
         }
     return json.dumps(data, ensure_ascii=False)
@@ -952,7 +967,8 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         ctx["lotes_pendientes"] = lotes
         from django.conf import settings
         if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
-            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+            from infrastructure.repository_factory import get_repositories
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes, get_repositories())
         else:
             ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
         ctx["lote_info"] = {}
@@ -979,7 +995,7 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "via_desverdizado": cd.get("via_desverdizado") or info.get("via_desverdizado", False),
             "extra": {
                 "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                "hora_ingreso": cd.get("hora_ingreso"),
+                "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                 "kilos_bruto_ingreso_packing": float(cd["kilos_bruto_ingreso_packing"]) if cd.get("kilos_bruto_ingreso_packing") else None,
                 "kilos_neto_ingreso_packing": float(cd["kilos_neto_ingreso_packing"]) if cd.get("kilos_neto_ingreso_packing") else None,
                 "observaciones": cd.get("observaciones"),
@@ -1027,7 +1043,7 @@ class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             except Exception:
                 lotes = []
             ctx["lotes_pendientes"] = lotes
-            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes, repos)
         else:
             # Lotes que ya tienen ingreso packing (aptos para proceso)
             from operaciones.models import IngresoAPacking
@@ -1060,7 +1076,7 @@ class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "source_system": "web",
             "extra": {
                 "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                "hora_inicio": cd.get("hora_inicio"),
+                "hora_inicio": str(cd["hora_inicio"]) if cd.get("hora_inicio") else None,
                 "linea_proceso": cd.get("linea_proceso"),
                 "categoria_calidad": cd.get("categoria_calidad"),
                 "calibre": cd.get("calibre"),
@@ -1104,7 +1120,7 @@ class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             except Exception:
                 lotes = []
             ctx["lotes_pendientes"] = lotes
-            ctx["lotes_data_json"] = _lotes_json_from_records(lotes)
+            ctx["lotes_data_json"] = _lotes_json_from_records(lotes, repos)
         else:
             from operaciones.models import IngresoAPacking
             lotes_con_ingreso = set(IngresoAPacking.objects.values_list("lote_id", flat=True))
@@ -1134,7 +1150,7 @@ class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "source_system": "web",
             "extra": {
                 "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                "hora": cd.get("hora"),
+                "hora": str(cd["hora"]) if cd.get("hora") else None,
                 "n_bins_procesados": cd.get("n_bins_procesados"),
                 "temp_agua_tina": float(cd["temp_agua_tina"]) if cd.get("temp_agua_tina") else None,
                 "ph_agua": float(cd["ph_agua"]) if cd.get("ph_agua") else None,
@@ -1242,7 +1258,7 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "source_system": "web",
                     "extra": {
                         "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                        "hora": cd.get("hora"),
+                        "hora": str(cd["hora"]) if cd.get("hora") else None,
                         "temperatura_fruta": float(cd["temperatura_fruta"]) if cd.get("temperatura_fruta") else None,
                         "peso_caja_muestra": float(cd["peso_caja_muestra"]) if cd.get("peso_caja_muestra") else None,
                         "estado_visual_fruta": cd.get("estado_visual_fruta"),
@@ -1333,7 +1349,7 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                         "temperatura_camara": float(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
                         "humedad_relativa": float(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
                         "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                        "hora_ingreso": cd.get("hora_ingreso"),
+                        "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                         "destino_despacho": cd.get("destino_despacho"),
                     },
                 }
@@ -1353,7 +1369,7 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "source_system": "web",
                     "extra": {
                         "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                        "hora": cd.get("hora"),
+                        "hora": str(cd["hora"]) if cd.get("hora") else None,
                         "temperatura_pallet": float(cd["temperatura_pallet"]) if cd.get("temperatura_pallet") else None,
                         "punto_medicion": cd.get("punto_medicion"),
                         "dentro_rango": cd.get("dentro_rango"),

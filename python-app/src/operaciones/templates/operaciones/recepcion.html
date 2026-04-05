@@ -78,7 +78,7 @@
                       <span style="font-size:.7rem;color:var(--text-muted)">(fijo)</span>
                     {% endif %}
                   </label>
-                  {% if campos_base %}
+                  {% if campos_base and field.value %}
                     {# Campo bloqueado: mostrar como readonly #}
                     <input type="text"
                            class="form-control"
