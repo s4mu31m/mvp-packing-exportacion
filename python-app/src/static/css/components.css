@@ -111,16 +111,22 @@
 }
 
 /* Input con icono */
-.input-with-icon          { position: relative; }
-.input-with-icon .form-input { padding-left: 42px; }
+.input-with-icon              { position: relative; }
+.input-with-icon .form-input  { padding-left: 46px; }
 .input-with-icon .input-icon {
   position: absolute;
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 1rem;
+  width: 18px;
+  height: 18px;
   color: var(--text-dim);
   pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .input-toggle-pass {
   position: absolute;
@@ -546,16 +552,154 @@ tbody td              { padding: 11px 14px; color: var(--text-primary); }
   .stats-grid { grid-template-columns: 1fr 1fr; }
 }
 
+/* ============ TOGGLE SWITCH (reemplaza checkboxes nativos) ============ */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 42px;
+  height: 24px;
+  background: var(--bg-raised);
+  border: 1.5px solid var(--border);
+  border-radius: 99px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+  vertical-align: middle;
+  display: inline-block;
+}
+input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+input[type="checkbox"]:checked {
+  background: var(--teal-600);
+  border-color: var(--teal-500);
+}
+input[type="checkbox"]:checked::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--teal-glow);
+}
+
+/* form-group con toggle — layout horizontal */
+.form-group:has(> input[type="checkbox"]),
+.form-group:has(> label > input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.form-group:has(> input[type="checkbox"]) .form-label {
+  text-transform: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-primary);
+  margin-bottom: 0;
+}
+
+/* Role chips — checkboxes como pills seleccionables */
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  user-select: none;
+}
+.role-chip:has(input:checked) {
+  border-color: var(--teal-500);
+  background: var(--teal-glow);
+  color: var(--teal-400);
+}
+.role-chip:hover {
+  border-color: var(--teal-600);
+  color: var(--text-primary);
+}
+.role-chip input[type="checkbox"] {
+  display: none;
+}
+
+/* Toggle inline label (activo/bloqueado) */
+.toggle-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+/* ============ LAYOUT UTILITIES ============ */
+.flex-row  { display: flex; align-items: center; gap: 12px; }
+.flex-col  { display: flex; flex-direction: column; gap: 12px; }
+.mt-4      { margin-top: 16px; }
+.ml-auto   { margin-left: auto; }
+.grid-2    { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid-3    { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+/* ============ FORM HELPERS ============ */
+.form-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.form-error {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--danger);
+  margin-top: 4px;
+}
+/* Alias .form-control → .form-input (compatibilidad) */
+.form-control {
+  background: var(--bg-base);
+  border: 1.5px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+  width: 100%;
+}
+.form-control:focus {
+  border-color: var(--teal-500);
+  box-shadow: 0 0 0 3px var(--teal-glow);
+}
+
 /* ============ DJANGO FORM HELPERS ============ */
 /* Hace que los campos generados por Django con as_div se vean con el estilo del proyecto */
 div[class^="form-group"],
 p.form-group { margin-bottom: 0; }
 
 /* Aplica estilos a inputs generados automáticamente */
-input[type="text"]:not(.form-input),
-input[type="number"]:not(.form-input),
-input[type="email"]:not(.form-input),
-input[type="password"]:not(.form-input),
+input[type="text"]:not(.form-input):not(.form-control),
+input[type="number"]:not(.form-input):not(.form-control),
+input[type="email"]:not(.form-input):not(.form-control),
+input[type="password"]:not(.form-input):not(.form-control),
+input[type="date"],
+input[type="time"],
 select:not(.form-select),
 textarea {
   background: var(--bg-base);
@@ -568,14 +712,28 @@ textarea {
   transition: border-color 0.2s, box-shadow 0.2s;
   outline: none;
   width: 100%;
+  color-scheme: dark;
 }
-input[type="text"]:not(.form-input):focus,
-input[type="number"]:not(.form-input):focus,
+input[type="text"]:not(.form-input):not(.form-control):focus,
+input[type="number"]:not(.form-input):not(.form-control):focus,
+input[type="date"]:focus,
+input[type="time"]:focus,
 select:not(.form-select):focus,
 textarea:focus {
   border-color: var(--teal-500);
   box-shadow: 0 0 0 3px var(--teal-glow);
 }
+
+/* Fix autofill de browser (Chrome/Edge) — evita fondo amarillo/blanco */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0px 1000px var(--bg-base) inset;
+  transition: background-color 5000s ease-in-out 0s;
+  caret-color: var(--text-primary);
+}
+
 label {
   font-size: 0.82rem;
   font-weight: 600;

@@ -21,7 +21,7 @@
       {% if lotes_pendientes %}
         <div class="form-group">
           <label class="form-label">Lotes con ingreso a packing</label>
-          <select id="lote-selector" class="form-control">
+          <select id="lote-selector" class="form-input">
             <option value="">— Seleccione un lote —</option>
             {% for lote in lotes_pendientes %}
               <option value="{{ lote.lote_code }}">
@@ -35,14 +35,14 @@
       {% endif %}
       <div class="form-group" style="margin-top:.5rem">
         <label class="form-label">Codigo de lote</label>
-        <input type="text" class="form-control" id="lote-code-input"
+        <input type="text" class="form-input" id="lote-code-input"
                placeholder="Ej: LP-2026-001" style="font-family:monospace">
       </div>
     </div>
 
     <!-- Panel contexto -->
     <div class="card" id="lote-context-panel" style="margin-bottom:1rem;display:none;
-         background:var(--surface-0);border:1px solid var(--teal-400,#2dd4bf)">
+         background:var(--bg-card);border:1px solid var(--teal-400)">
       <div class="card-title" style="font-size:.85rem;margin-bottom:.8rem;color:var(--teal-400,#2dd4bf)">
         Contexto del lote
       </div>
