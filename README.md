@@ -21,7 +21,8 @@ Digitalizar el flujo operativo de recepción, trazabilidad y packing de fruta en
 | Paso 3 — Lógica de negocio (casos de uso) | ✅ Completado | Capa de aplicación con casos de uso, validados con tests |
 | Paso 4 — Interfaz operativa web | ✅ Completado | Vistas HTML operativas para cada etapa del flujo |
 | Paso 4b — API REST | ✅ Completado | Endpoints DRF expuestos para bins, lotes, pallets, eventos y trazabilidad |
-| Paso 5 — Integración con Dataverse | ✅ Completado | Capa de repositorios Dataverse implementada para todas las entidades del flujo; vistas web compatibles con ambos backends; límites conocidos documentados en `docs/cierre-mvp/` |
+| Paso 5 — Integración con Dataverse | ✅ Completado | Capa de repositorios Dataverse implementada para todas las entidades del flujo; vistas web compatibles con ambos backends; límites aceptados documentados en `docs/cierre-mvp/` y en `DATAVERSE_GUIDE.md §17` |
+| Paso 6 — Control de acceso por rol | ✅ Completado | Sistema de 3 niveles (Operador/Jefatura/Administrador) con 9 roles operativos; enforcement vía `RolRequiredMixin` y `JefaturaRequiredMixin`; evidencia automatizada con tests negativos por módulo |
 
 ---
 
@@ -33,7 +34,21 @@ Recepción → Desverdizado → Ingreso Packing → Proceso → Control → Pale
 
 Cada etapa tiene su propia vista web. La recepción implementa el flujo completo: apertura de lote, registro de bins con código generado automáticamente y cierre de lote con pesaje (kg bruto/neto).
 
-> **Nota backend:** En SQLite el avance del lote se representa con el campo `estado` (abierto/cerrado/finalizado). En Dataverse se usa el campo `crf21_etapa_actual` (Recepcion, Pesaje, Desverdizado, …) como fuente de verdad operativa.
+> **Nota backend:** En SQLite el avance del lote se representa con el campo `estado` (abierto/cerrado/finalizado). En Dataverse se usa el campo `crf21_etapa_actual` (Recepcion, Pesaje, Desverdizado, …) como fuente de verdad operativa. Límites aceptados del backend Dataverse documentados en `DATAVERSE_GUIDE.md §17`.
+
+---
+
+## Control de acceso por rol
+
+El sistema implementa tres niveles de acceso:
+
+| Nivel | Criterio Django | Roles de negocio |
+|-------|-----------------|-----------------|
+| Operador | `is_active=True` | Recepcion, Desverdizado, Ingreso Packing, Proceso, Control, Paletizado, Camaras |
+| Jefatura | `is_staff=True` | Jefatura — acceso a consulta y exportación CSV |
+| Administrador | `is_superuser=True` | Administrador — acceso total (bypass de todos los módulos) |
+
+El enforcement se implementa mediante `RolRequiredMixin` (lee `SESSION_KEY_ROL` de sesión) y `JefaturaRequiredMixin` en `python-app/src/operaciones/views.py`. Evidencia automatizada en `RoleAccessControlTest` (tests negativos por módulo y admin bypass).
 
 ---
 
@@ -57,16 +72,18 @@ Los correlativos se gestionan mediante `SequenceCounter` con `select_for_update(
 mvp-packing-exportacion/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
-│   │   ├── blocker.md
-│   │   └── tarea.md
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── docs/
+│   ├── cierre-mvp/              # estado-actual-mvp.md, limites-aceptados-mvp.md
+│   ├── technical-changes/       # TC-001 (roles/export), TC-002 (calidad/desverdizado)
 │   ├── actas/
 │   ├── alcance/
 │   ├── arquitectura/
 │   ├── levantamiento/
 │   └── planning/
-├── power-platform/
+├── power-platform/              # Especificación del modelo, ERD, mapeo a Dataverse
+├── scripts/
+│   └── dataverse/               # Suite de diagnóstico (scripts 00-11, run_all.py)
 ├── python-app/
 │   ├── requirements.txt
 │   └── src/
@@ -75,17 +92,18 @@ mvp-packing-exportacion/
 │       ├── core/                # Modelos base, context processors, endpoints Dataverse
 │       ├── operaciones/
 │       │   ├── models.py        # Bin, Lote, Pallet, BinLote, PalletLote, RegistroEtapa, SequenceCounter
-│       │   ├── application/     # Casos de uso, DTOs, resultados, excepciones
+│       │   ├── application/     # 18 casos de uso, DTOs, resultados, excepciones
 │       │   ├── api/             # Serializers y vistas DRF (REST)
 │       │   ├── services/        # Generadores de código, secuencias, validadores, temporada
 │       │   ├── templates/       # Vistas HTML por etapa operativa
 │       │   ├── urls.py          # Rutas API REST
 │       │   └── web_urls.py      # Rutas vistas web
-│       ├── usuarios/            # Autenticación y portal de acceso
+│       ├── usuarios/            # Autenticación, portal de acceso, gestión de usuarios
 │       ├── domain/              # Interfaces de repositorios (abstracciones)
 │       └── infrastructure/
 │           ├── dataverse/       # Cliente OData, autenticación, mapping de campos
 │           └── sqlite/          # Implementación de repositorios en SQLite
+├── DATAVERSE_GUIDE.md           # Guía completa de integración Dataverse (§17: límites aceptados)
 └── README.md
 ```
 
@@ -126,6 +144,18 @@ mvp-packing-exportacion/
 | `/api/dataverse/check_tables/` | Lista tablas disponibles |
 | `/api/dataverse/save_first_bin_code/` | Escribe un registro de prueba |
 | `/api/dataverse/get_first_bin_code/` | Lee el registro de prueba |
+
+---
+
+## Tests
+
+```bash
+cd python-app/src
+python manage.py test operaciones   # 204 tests — OK
+python manage.py test usuarios      # 43 tests — 1 error pre-existente no bloqueante
+```
+
+Los tests corren siempre en SQLite. Para validación contra Dataverse real, usar los scripts en `scripts/dataverse/`.
 
 ---
 

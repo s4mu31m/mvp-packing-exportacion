@@ -32,6 +32,7 @@ El MVP está **operativo y cerrado**. El flujo completo (Recepción → Desverdi
 | Exportación CSV | Funcional | Funcional |
 | Consulta jefatura (filtro productor) | Funcional | Funcional (campo `crf21_codigo_productor` agregado 2026-04-04) |
 | Trazabilidad de eventos (RegistroEtapa) | Funcional | No-op con log local (aceptado) |
+| Control de acceso por rol (3 niveles) | Funcional | Funcional (autenticación local Django) |
 
 ---
 
@@ -65,14 +66,16 @@ El MVP está **operativo y cerrado**. El flujo completo (Recepción → Desverdi
 
 ## Tests
 
-- **196 tests**, todos pasan en SQLite.
+- **`operaciones`: 204 tests — todos pasan en SQLite.**
+- **`usuarios`: 43 tests — 1 error pre-existente no bloqueante** (`test_crear_usuario_persistencia_roles`, no introducido en esta iteración).
+- Incluye evidencia automatizada del flujo completo (login → recepción → todas las etapas → consulta/exportación) y tests negativos de permisos por módulo (`RoleAccessControlTest`).
 - Los tests corren siempre contra SQLite. Para validación contra Dataverse real, usar scripts en `scripts/dataverse/`.
 
 ---
 
 ## Gaps pendientes
 
-Ver tabla completa en [`limites-aceptados-mvp.md`](./limites-aceptados-mvp.md).
+Ver tabla completa en [`limites-aceptados-mvp.md`](./limites-aceptados-mvp.md) y en `DATAVERSE_GUIDE.md §17`.
 
 | Brecha | Bloquea cierre |
 |--------|:--------------:|

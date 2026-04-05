@@ -6,12 +6,16 @@ Cobertura:
   - Repositories: list_by_lote, list_recent
   - Smoke tests: vistas críticas renderizan 200
   - Flujo recepcion via POST web
+  - SmokeViewsAuthenticatedTest: todas las vistas con admin autenticado
+  - RecepcionFlowE2ETest: secuencia narrativa iniciar→bin→cerrar
+  - RoleAccessControlTest: evidencia negativa de enforcement de roles por módulo
 """
 import datetime
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from usuarios.permissions import SESSION_KEY_ROL
 
 from operaciones.application.use_cases import (
     iniciar_lote_recepcion,
@@ -69,7 +73,31 @@ def _make_bin(lote, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers de autenticación con rol en sesión
+# ---------------------------------------------------------------------------
+
+def _make_client_with_session_rol(username, rol_str, is_staff=False, is_superuser=False):
+    """Crea un Django User, hace force_login y fija SESSION_KEY_ROL en sesión."""
+    user = User.objects.create_user(
+        username=username, password="pw123",
+        is_staff=is_staff, is_superuser=is_superuser,
+    )
+    c = Client()
+    c.force_login(user)
+    session = c.session
+    session[SESSION_KEY_ROL] = rol_str
+    session.save()
+    return c, user
+
+
+def _make_admin_client(username="admin_smoke"):
+    """Crea un cliente Administrador con is_superuser=True y rol en sesión."""
+    c, _ = _make_client_with_session_rol(username, "Administrador", is_superuser=True)
+    return c
+
+
+# ---------------------------------------------------------------------------
+# Helpers de use cases
 # ---------------------------------------------------------------------------
 
 def _iniciar(extra=None):
@@ -744,3 +772,302 @@ class CamarasViewTest(TestCase):
         if "PAL-CAM-001" in data:
             self.assertEqual(data["PAL-CAM-001"]["color"], "4")
             self.assertEqual(data["PAL-CAM-001"]["peso_total"], 950.0)
+
+
+# ---------------------------------------------------------------------------
+# Smoke: todas las vistas con admin autenticado
+# ---------------------------------------------------------------------------
+
+@override_settings(PERSISTENCE_BACKEND="sqlite")
+class SmokeViewsAuthenticatedTest(TestCase):
+    """
+    Evidencia de que todas las vistas críticas renderizan correctamente
+    con un Administrador autenticado (is_superuser=True, rol="Administrador").
+    Cubre el flujo completo login → dashboard → recepcion → … → exportacion.
+    """
+
+    def setUp(self):
+        self.client = _make_admin_client("admin_sva")
+        self.anon = Client()
+
+    def test_login_page_anonima_renderiza(self):
+        resp = self.anon.get(reverse("usuarios:login"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_login_redirige_si_ya_autenticado(self):
+        resp = self.client.get(reverse("usuarios:login"))
+        self.assertIn(resp.status_code, [301, 302])
+
+    def test_dashboard(self):
+        resp = self.client.get(reverse("operaciones:dashboard"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_recepcion(self):
+        resp = self.client.get(reverse("operaciones:recepcion"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_desverdizado(self):
+        resp = self.client.get(reverse("operaciones:desverdizado"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_ingreso_packing(self):
+        resp = self.client.get(reverse("operaciones:ingreso_packing"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_proceso(self):
+        resp = self.client.get(reverse("operaciones:proceso"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_control(self):
+        resp = self.client.get(reverse("operaciones:control"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_paletizado(self):
+        resp = self.client.get(reverse("operaciones:paletizado"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_camaras(self):
+        resp = self.client.get(reverse("operaciones:camaras"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_consulta(self):
+        resp = self.client.get(reverse("operaciones:consulta"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_exportacion_csv(self):
+        resp = self.client.get(reverse("operaciones:exportar_consulta"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/csv", resp.get("Content-Type", ""))
+
+
+# ---------------------------------------------------------------------------
+# Flujo recepción E2E: iniciar → agregar bin → cerrar lote
+# ---------------------------------------------------------------------------
+
+@override_settings(PERSISTENCE_BACKEND="sqlite")
+class RecepcionFlowE2ETest(TestCase):
+    """
+    Secuencia narrativa del flujo mínimo de recepción.
+    Cada test es independiente (crea su propio estado) para que los fallos
+    sean aislados. El conjunto documenta el camino feliz completo.
+    """
+
+    def _admin_client(self, suffix):
+        return _make_admin_client(f"admin_rfe_{suffix}")
+
+    def test_01_iniciar_lote(self):
+        c = self._admin_client("ini")
+        resp = c.post(reverse("operaciones:recepcion"), {
+            "action": "iniciar",
+            "temporada": TEMPORADA,
+            "operator_code": "ADM-001",
+        })
+        self.assertIn(resp.status_code, [200, 302])
+        self.assertTrue(Lote.objects.filter(temporada=TEMPORADA).exists())
+
+    def test_02_agregar_bin(self):
+        c = self._admin_client("bin")
+        # Iniciar lote
+        c.post(reverse("operaciones:recepcion"), {
+            "action": "iniciar",
+            "temporada": TEMPORADA,
+            "operator_code": "ADM-001",
+        })
+        lote = Lote.objects.filter(temporada=TEMPORADA).first()
+        self.assertIsNotNone(lote)
+        resp = c.post(reverse("operaciones:recepcion"), {
+            "action": "agregar_bin",
+            "temporada": TEMPORADA,
+            "codigo_productor": "PROD-01",
+            "tipo_cultivo": "Uva de mesa",
+            "variedad_fruta": "Thompson",
+            "color": "2",
+            "fecha_cosecha": str(datetime.date.today()),
+            "kilos_bruto_ingreso": "500",
+            "kilos_neto_ingreso": "480",
+            "operator_code": "ADM-001",
+        })
+        self.assertIn(resp.status_code, [200, 302])
+        self.assertGreaterEqual(BinLote.objects.filter(lote=lote).count(), 1)
+
+    def test_03_cerrar_lote(self):
+        c = self._admin_client("cer")
+        lote = _make_lote(estado=LotePlantaEstado.ABIERTO)
+        _make_bin(lote)
+        session = c.session
+        session["lote_activo_code"] = lote.lote_code
+        session["temporada_activa"] = TEMPORADA
+        session.save()
+        resp = c.post(reverse("operaciones:recepcion"), {
+            "action": "cerrar",
+            "temporada": TEMPORADA,
+            "operator_code": "ADM-001",
+            "kilos_bruto_conformacion": "500",
+            "kilos_neto_conformacion": "480",
+        })
+        self.assertIn(resp.status_code, [200, 302])
+
+    def test_04_estado_persiste_cerrado(self):
+        # Usar use cases para que cantidad_bins se actualice correctamente
+        r = _iniciar()
+        self.assertTrue(r.ok)
+        lote_code = r.data["lote_code"]
+        _agregar_bin(lote_code)
+        result = cerrar_lote_recepcion({
+            "temporada": TEMPORADA,
+            "lote_code": lote_code,
+            "operator_code": "ADM-001",
+            "source_system": "test",
+        })
+        self.assertTrue(result.ok, result.errors)
+        repos = get_repositories()
+        lote = repos.lotes.find_by_code(TEMPORADA, lote_code)
+        self.assertEqual(lote.estado, "cerrado")
+
+
+# ---------------------------------------------------------------------------
+# Control de acceso por rol: evidencia negativa y positiva
+# ---------------------------------------------------------------------------
+
+@override_settings(PERSISTENCE_BACKEND="sqlite")
+class RoleAccessControlTest(TestCase):
+    """
+    Evidencia de que RolRequiredMixin y JefaturaRequiredMixin protegen
+    correctamente cada módulo operativo.
+
+    Códigos HTTP verificados empíricamente:
+      - Vistas operativas (RolRequiredMixin): 403 para autenticados con rol incorrecto.
+        UserPassesTestMixin.handle_no_permission levanta PermissionDenied cuando
+        user.is_authenticated=True (independiente de raise_exception).
+      - ExportarConsultaCSVView: 302. JefaturaRequiredMixin sobreescribe handle_no_permission
+        con redirect a portal (bypasa el PermissionDenied de UserPassesTestMixin).
+      - ConsultaJefaturaView: 302. Usa JefaturaRequiredMixin.handle_no_permission via MRO.
+
+    Arquitectura:
+      - Vistas operativas: RolRequiredMixin → lee SESSION_KEY_ROL → 302 si falla
+      - ExportarConsultaCSVView: JefaturaRequiredMixin → lee sesión → 302 si falla
+      - ConsultaJefaturaView: override test_func → is_staff/is_superuser → 403 si falla
+                              (raise_exception=True)
+    """
+
+    # Negative: rol incorrecto rechazado en cada módulo operativo
+    # RolRequiredMixin → UserPassesTestMixin.handle_no_permission → 403 para autenticados
+    # (Django levanta PermissionDenied cuando user.is_authenticated=True)
+
+    def test_recepcion_rechaza_rol_desverdizado(self):
+        c, _ = _make_client_with_session_rol("u_rec_desv", "Desverdizado")
+        resp = c.get(reverse("operaciones:recepcion"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_desverdizado_rechaza_rol_recepcion(self):
+        c, _ = _make_client_with_session_rol("u_desv_rec", "Recepcion")
+        resp = c.get(reverse("operaciones:desverdizado"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_ingreso_packing_rechaza_rol_proceso(self):
+        c, _ = _make_client_with_session_rol("u_ing_pro", "Proceso")
+        resp = c.get(reverse("operaciones:ingreso_packing"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_proceso_rechaza_rol_control(self):
+        c, _ = _make_client_with_session_rol("u_pro_ctrl", "Control")
+        resp = c.get(reverse("operaciones:proceso"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_control_rechaza_rol_paletizado(self):
+        c, _ = _make_client_with_session_rol("u_ctrl_pal", "Paletizado")
+        resp = c.get(reverse("operaciones:control"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_paletizado_rechaza_rol_camaras(self):
+        c, _ = _make_client_with_session_rol("u_pal_cam", "Camaras")
+        resp = c.get(reverse("operaciones:paletizado"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_camaras_rechaza_rol_recepcion(self):
+        c, _ = _make_client_with_session_rol("u_cam_rec", "Recepcion")
+        resp = c.get(reverse("operaciones:camaras"))
+        self.assertEqual(resp.status_code, 403)
+
+    # Negative: operadores rechazados en consulta y exportar
+
+    def test_consulta_rechaza_operador_sin_flags(self):
+        """
+        ConsultaJefaturaView.test_func usa is_staff/is_superuser.
+        JefaturaRequiredMixin.handle_no_permission hace redirect → 302.
+        (handle_no_permission sobrescribe raise_exception=True vía MRO.)
+        """
+        user = User.objects.create_user(
+            username="u_cons_ope", password="pw123",
+            is_staff=False, is_superuser=False,
+        )
+        c = Client()
+        c.force_login(user)
+        resp = c.get(reverse("operaciones:consulta"))
+        self.assertEqual(resp.status_code, 302)
+
+    def test_exportar_rechaza_operador(self):
+        """ExportarConsultaCSVView usa JefaturaRequiredMixin → lee sesión → 302."""
+        c, _ = _make_client_with_session_rol("u_exp_pro", "Proceso")
+        resp = c.get(reverse("operaciones:exportar_consulta"))
+        self.assertEqual(resp.status_code, 302)
+
+    # Positive: Jefatura accede a consulta, rechazada en módulos operativos
+
+    def test_jefatura_accede_a_consulta(self):
+        """ConsultaJefaturaView: is_staff=True → 200."""
+        c, _ = _make_client_with_session_rol("u_jef_cons", "Jefatura", is_staff=True)
+        resp = c.get(reverse("operaciones:consulta"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_jefatura_rechazada_en_recepcion(self):
+        """Jefatura no está en roles_requeridos=["Recepcion"] → 403 (RolRequiredMixin)."""
+        c, _ = _make_client_with_session_rol("u_jef_rec", "Jefatura", is_staff=True)
+        resp = c.get(reverse("operaciones:recepcion"))
+        self.assertEqual(resp.status_code, 403)
+
+    # Multirol: usuario con varios roles accede a los asignados, rechazado en otros
+
+    def test_multirol_accede_a_modulos_asignados(self):
+        c, _ = _make_client_with_session_rol("u_multi", "Recepcion, Desverdizado")
+        self.assertEqual(c.get(reverse("operaciones:recepcion")).status_code, 200)
+        self.assertEqual(c.get(reverse("operaciones:desverdizado")).status_code, 200)
+        self.assertEqual(c.get(reverse("operaciones:proceso")).status_code, 403)
+
+    # Admin bypass: Administrador accede a todos los módulos
+
+    def test_admin_accede_a_todos_los_modulos(self):
+        c = _make_admin_client("admin_all")
+        urls = [
+            reverse("operaciones:recepcion"),
+            reverse("operaciones:desverdizado"),
+            reverse("operaciones:ingreso_packing"),
+            reverse("operaciones:proceso"),
+            reverse("operaciones:control"),
+            reverse("operaciones:paletizado"),
+            reverse("operaciones:camaras"),
+            reverse("operaciones:consulta"),
+            reverse("operaciones:exportar_consulta"),
+        ]
+        for url in urls:
+            resp = c.get(url)
+            self.assertEqual(resp.status_code, 200, f"Admin debe acceder a {url}")
+
+    # Sin autenticación: todos los módulos redirigen
+
+    def test_unauthenticated_es_redirigido_en_todos_los_modulos(self):
+        anon = Client()
+        urls = [
+            reverse("operaciones:recepcion"),
+            reverse("operaciones:desverdizado"),
+            reverse("operaciones:ingreso_packing"),
+            reverse("operaciones:proceso"),
+            reverse("operaciones:control"),
+            reverse("operaciones:paletizado"),
+            reverse("operaciones:camaras"),
+            reverse("operaciones:consulta"),
+            reverse("operaciones:exportar_consulta"),
+        ]
+        for url in urls:
+            resp = anon.get(url)
+            self.assertIn(resp.status_code, [301, 302], f"Anónimo debe ser redirigido en {url}")

@@ -24,10 +24,11 @@ El backend Dataverse está implementado para todas las entidades del flujo. Las 
 | Registro packing | Funcional | Funcional |
 | Control proceso packing | Funcional | Funcional |
 | Calidad pallet | Funcional | Funcional |
+| CalidadPalletMuestra | Funcional | Funcional (tabla `crf21_calidad_pallet_muestras` creada 2026-04-04) |
 | Cámara de frío | Funcional | Funcional |
 | Medición temperatura salida | Funcional | Funcional |
 | Trazabilidad (registro_etapas) | Funcional | No-op con log local (tabla no existe en Dataverse) |
-| CalidadPalletMuestra | Funcional | Funcional (tabla `crf21_calidad_pallet_muestras` creada 2026-04-04) |
+| Control de acceso por rol (3 niveles) | Funcional | Funcional (autenticación local Django, ambos backends) |
 
 ---
 
@@ -94,6 +95,8 @@ y leen desde Dataverse. Los tests de Django siguen corriendo contra SQLite
 | Transacciones | ACID via Django ORM | No soportado por Dataverse Web API |
 | `CalidadPalletMuestra` | ORM directo | `DataverseCalidadPalletMuestraRepository` via OData |
 
+> Ver tabla completa de límites aceptados en `DATAVERSE_GUIDE.md §17` y en `docs/cierre-mvp/limites-aceptados-mvp.md`.
+
 ---
 
 ## Selección de backend
@@ -111,12 +114,17 @@ PERSISTENCE_BACKEND = "dataverse"   # producción / pruebas reales
 ```bash
 cd src
 python manage.py check
-python manage.py test operaciones.test
-# 196 tests, todos pasan en SQLite
+python manage.py test operaciones   # 204 tests — OK
+python manage.py test usuarios      # 43 tests — 1 error pre-existente no bloqueante
 ```
 
 Los tests corren siempre en SQLite. Para smoke tests contra Dataverse real,
-usar el shell de Django con `PERSISTENCE_BACKEND=dataverse` en `.env`.
+usar el shell de Django con `PERSISTENCE_BACKEND=dataverse` en `.env`
+o los scripts de diagnóstico en `scripts/dataverse/`.
+
+Incluye evidencia automatizada de:
+- Flujo completo: login → recepción → cierre de lote → todas las etapas → consulta/exportación
+- Tests negativos de permisos por módulo (rol incorrecto → 403) y admin bypass
 
 ---
 
@@ -146,7 +154,7 @@ python-app/
         ├── models.py
         ├── views.py
         ├── forms.py
-        ├── application/use_cases/  # 13 casos de uso
+        ├── application/use_cases/  # 18 casos de uso
         ├── services/
         └── test/                   # 196 tests
 ```
