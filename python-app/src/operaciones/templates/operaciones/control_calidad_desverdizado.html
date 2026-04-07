@@ -1,0 +1,294 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Calidad Desverdizado — CaliPro{% endblock %}
+{% block page_title %}Control Calidad Desverdizado{% endblock %}
+{% block page_subtitle %}Planilla calibres y planilla semillas{% endblock %}
+
+{% block page_body %}
+{% if messages %}
+  {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
+  {% endfor %}
+{% endif %}
+
+<div style="margin-bottom:1rem">
+  <a href="{% url 'operaciones:control' %}" style="font-size:.85rem;color:var(--text-muted)">
+    ← Control de Calidad
+  </a>
+</div>
+
+<!-- Selector de lote -->
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-title" style="margin-bottom:.8rem">Seleccionar lote</div>
+  {% if lotes_pendientes %}
+    <div class="form-group">
+      <select id="lote-selector" class="form-input" onchange="seleccionarLote(this.value)">
+        <option value="">— Seleccione un lote —</option>
+        {% for lote in lotes_pendientes %}
+          <option value="{{ lote.lote_code|default:lote.id }}">
+            {{ lote.lote_code|default:lote.id }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:.85rem">Sin lotes activos disponibles.</p>
+  {% endif %}
+  <div class="form-group" style="margin-top:.5rem">
+    <input type="text" class="form-input" id="lote-code-input"
+           placeholder="Codigo de lote (Ej: LP-2026-001)" style="font-family:monospace"
+           oninput="sincronizarLote(this.value)">
+  </div>
+
+  <!-- Contexto del lote seleccionado -->
+  <div id="lote-context-panel" style="display:none;margin-top:.8rem;padding:.6rem .8rem;
+       background:var(--bg-card);border:1px solid var(--teal-400,#2dd4bf);border-radius:6px">
+    <div style="font-size:.78rem;color:var(--teal-400,#2dd4bf);font-weight:600;margin-bottom:.4rem">
+      Datos del lote
+    </div>
+    <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:.25rem .8rem;font-size:.82rem">
+      <span style="color:var(--text-muted)">Productor</span> <span id="ctx-productor">—</span>
+      <span style="color:var(--text-muted)">Variedad</span>  <span id="ctx-variedad">—</span>
+      <span style="color:var(--text-muted)">Color</span>     <span id="ctx-color">—</span>
+      <span style="color:var(--text-muted)">Cuartel</span>   <span id="ctx-cuartel">—</span>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+{% with tab=tab_activo|default:"calibres" %}
+<div style="display:flex;gap:.5rem;margin-bottom:1rem;border-bottom:2px solid var(--border)">
+  <button id="tab-btn-calibres" onclick="switchTab('calibres')" type="button"
+          class="btn {% if tab == 'calibres' %}btn-primary{% else %}btn-ghost{% endif %}"
+          style="border-radius:4px 4px 0 0;border-bottom:none">
+    Planilla 1 — Calibres
+  </button>
+  <button id="tab-btn-semillas" onclick="switchTab('semillas')" type="button"
+          class="btn {% if tab == 'semillas' %}btn-primary{% else %}btn-ghost{% endif %}"
+          style="border-radius:4px 4px 0 0;border-bottom:none">
+    Planilla 2 — Semillas
+  </button>
+</div>
+
+<!-- TAB CALIBRES -->
+<div id="tab-calibres" {% if tab != 'calibres' %}style="display:none"{% endif %}>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="calibres">
+    <input type="hidden" name="lote_code" id="lote-hidden-calibres" value="">
+
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:1rem">Identificación</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+
+        <div class="form-group">
+          <label class="form-label">Supervisor</label>
+          <input type="text" name="supervisor" class="form-input"
+                 id="cal-supervisor" value="{{ supervisor_default }}">
+        </div>
+
+        {% for field in form_calibres %}
+          {% if field.name != "supervisor" %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+
+      </div>
+    </div>
+
+    <!-- Defectos -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:1rem">Defectos (50 frutos)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem">
+        {% for nombre, etiqueta in defectos_nombres %}
+          <div class="form-group">
+            <label class="form-label">{{ etiqueta }}</label>
+            <input type="number" name="{{ nombre }}" min="0" max="50" class="form-input" value="0">
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 3 Grupos de calibres -->
+    {% for g in grupos_calibre %}
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:1rem">Grupo {{ g }}</div>
+      <div class="form-group">
+        <label class="form-label">Color</label>
+        <input type="text" name="grupo_{{ g }}_color" class="form-input" placeholder="Ej: Verde, Pintón">
+      </div>
+      <div style="overflow-x:auto;margin-bottom:.8rem">
+        <table class="table" style="font-size:.83rem;min-width:520px">
+          <thead>
+            <tr>
+              {% for cal in calibres_nombres %}
+                <th style="text-align:center">{{ cal }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {% for cal in calibres_nombres %}
+                <td>
+                  <input type="number" name="grupo_{{ g }}_cal_{{ cal }}"
+                         min="0" class="form-input" style="width:60px;text-align:center" value="">
+                </td>
+              {% endfor %}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observación</label>
+        <input type="text" name="grupo_{{ g }}_obs" class="form-input">
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="flex-row mt-4">
+      <button type="reset" class="btn btn-ghost">Limpiar</button>
+      <button type="submit" class="btn btn-primary ml-auto">Guardar Planilla Calibres</button>
+    </div>
+  </form>
+</div>
+
+<!-- TAB SEMILLAS -->
+<div id="tab-semillas" {% if tab != 'semillas' %}style="display:none"{% endif %}>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="semillas">
+    <input type="hidden" name="lote_code" id="lote-hidden-semillas" value="">
+
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:1rem">Identificación</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+
+        <div class="form-group">
+          <label class="form-label">Supervisor</label>
+          <input type="text" name="supervisor" class="form-input"
+                 id="sem-supervisor" value="{{ supervisor_default }}">
+        </div>
+
+        {% for field in form_semillas %}
+          {% if field.name != "supervisor" %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+
+      </div>
+    </div>
+
+    <!-- 50 frutas: 5 grupos × 10 frutos -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:1rem">Conteo de semillas (50 frutos)</div>
+      {% for g in grupos_semillas %}
+      <div style="margin-bottom:1rem">
+        <div style="font-size:.82rem;font-weight:600;color:var(--text-muted);margin-bottom:.4rem">
+          Grupo {{ g }}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:.4rem">
+          {% for f in frutas_range %}
+          <div style="text-align:center">
+            <div style="font-size:.72rem;color:var(--text-muted)">F{{ f }}</div>
+            <input type="number" name="g{{ g }}_f{{ f }}_semillas"
+                   min="0" max="20" class="form-input" value="0"
+                   style="width:100%;text-align:center;padding:.3rem .2rem;font-size:.85rem">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="flex-row mt-4">
+      <button type="reset" class="btn btn-ghost">Limpiar</button>
+      <button type="submit" class="btn btn-primary ml-auto">Guardar Planilla Semillas</button>
+    </div>
+  </form>
+</div>
+{% endwith %}
+
+<script>
+const LOTES_DATA = {{ lotes_data_json|safe }};
+const supervisorDefault = "{{ supervisor_default|escapejs }}";
+
+// Rellena un campo dentro de un contenedor por name
+function setVal(containerId, name, value) {
+  const el = document.getElementById(containerId).querySelector('[name="' + name + '"]');
+  if (el && value) el.value = value;
+}
+
+function poblarFormularios(code) {
+  const d = LOTES_DATA[code];
+  const panel = document.getElementById('lote-context-panel');
+  if (!d) { panel.style.display = 'none'; return; }
+
+  // Contexto visible
+  panel.style.display = '';
+  document.getElementById('ctx-productor').textContent = d.productor || '—';
+  document.getElementById('ctx-variedad').textContent  = d.variedad  || '—';
+  document.getElementById('ctx-color').textContent     = d.color     || '—';
+  document.getElementById('ctx-cuartel').textContent   = d.cuartel   || '—';
+
+  // Planilla calibres
+  setVal('tab-calibres', 'productor',     d.productor    || '');
+  setVal('tab-calibres', 'variedad',      d.variedad     || '');
+  setVal('tab-calibres', 'trazabilidad',  d.trazabilidad || code);
+  setVal('tab-calibres', 'fecha_cosecha', d.fecha_cosecha || '');
+  setVal('tab-calibres', 'cuartel',       d.cuartel      || '');
+  setVal('tab-calibres', 'sector',        d.sector       || '');
+
+  // Planilla semillas
+  setVal('tab-semillas', 'productor',    d.productor    || '');
+  setVal('tab-semillas', 'variedad',     d.variedad     || '');
+  setVal('tab-semillas', 'trazabilidad', d.trazabilidad || code);
+  setVal('tab-semillas', 'cuartel',      d.cuartel      || '');
+  setVal('tab-semillas', 'sector',       d.sector       || '');
+  setVal('tab-semillas', 'color',        d.color        || '');
+}
+
+function seleccionarLote(code) {
+  document.getElementById('lote-code-input').value      = code;
+  document.getElementById('lote-hidden-calibres').value = code;
+  document.getElementById('lote-hidden-semillas').value = code;
+  poblarFormularios(code);
+}
+
+function sincronizarLote(code) {
+  document.getElementById('lote-hidden-calibres').value = code;
+  document.getElementById('lote-hidden-semillas').value = code;
+  const sel = document.getElementById('lote-selector');
+  if (sel) sel.value = code;
+  poblarFormularios(code);
+}
+
+function switchTab(tab) {
+  ['calibres','semillas'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t === tab ? '' : 'none';
+    const btn = document.getElementById('tab-btn-'+t);
+    btn.classList.toggle('btn-primary', t === tab);
+    btn.classList.toggle('btn-ghost', t !== tab);
+  });
+}
+
+// Pre-rellenar supervisor al cargar
+document.addEventListener('DOMContentLoaded', function() {
+  if (supervisorDefault) {
+    document.getElementById('cal-supervisor').value = supervisorDefault;
+    document.getElementById('sem-supervisor').value = supervisorDefault;
+  }
+  // Fecha de hoy en planilla semillas (campo fecha)
+  const today = new Date().toISOString().split('T')[0];
+  const fechaSem = document.getElementById('tab-semillas').querySelector('[name="fecha"]');
+  if (fechaSem && !fechaSem.value) fechaSem.value = today;
+});
+</script>
+{% endblock %}

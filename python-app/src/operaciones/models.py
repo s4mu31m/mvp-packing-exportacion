@@ -849,6 +849,247 @@ class MedicionTemperaturaSalida(AuditSourceModel):
 
 
 # ---------------------------------------------------------------------------
+# Planillas de Control de Calidad
+# ---------------------------------------------------------------------------
+
+class PlanillaDesverdizadoCalibre(AuditSourceModel):
+    """
+    Planilla CALIDAD DESVERDIZADO — medicion de calibres en terreno.
+    Digitaliza la hoja Excel 'CALIDAD DESVERDIZADO'.
+    Tabla Dataverse: crf21_planilla_desv_calibres.
+    """
+    lote = models.ForeignKey(
+        Lote,
+        on_delete=models.PROTECT,
+        related_name="planillas_desv_calibre",
+    )
+    supervisor = models.CharField(max_length=100, blank=True, default="")
+    productor = models.CharField(max_length=100, blank=True, default="")
+    variedad = models.CharField(max_length=100, blank=True, default="")
+    trazabilidad = models.CharField(max_length=100, blank=True, default="")
+    cod_sdp = models.CharField(max_length=50, blank=True, default="")
+    fecha_cosecha = models.DateField(null=True, blank=True)
+    fecha_despacho = models.DateField(null=True, blank=True)
+    cuartel = models.CharField(max_length=100, blank=True, default="")
+    sector = models.CharField(max_length=100, blank=True, default="")
+    # Defectos (columna derecha, 50 frutos)
+    oleocelosis = models.IntegerField(null=True, blank=True)
+    heridas_abiertas = models.IntegerField(null=True, blank=True)
+    rugoso = models.IntegerField(null=True, blank=True)
+    deforme = models.IntegerField(null=True, blank=True)
+    golpe_sol = models.IntegerField(null=True, blank=True)
+    verdes = models.IntegerField(null=True, blank=True)
+    pre_calibre_defecto = models.IntegerField(null=True, blank=True,
+        help_text="Pre calibre (defecto)")
+    palo_largo = models.IntegerField(null=True, blank=True)
+    # Grupos de calibres (3 grupos de color) — JSON
+    # Estructura: [{"color": str, "calibres": {"1xx":N,"1x":N,"1":N,"2":N,"3":N,"4":N,"5":N,"Precalibre":N}, "observacion": str}]
+    calibres_grupos = models.JSONField(default=list, blank=True)
+    observaciones = models.TextField(blank=True, default="")
+    rol = models.CharField(max_length=50, blank=True, default="")
+
+    class Meta:
+        db_table = "operaciones_planilla_desv_calibre"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"PlanCalibres - {self.lote} ({self.fecha_despacho})"
+
+
+class PlanillaDesverdizadoSemillas(AuditSourceModel):
+    """
+    Planilla CALIDAD DESVERDIZADO_2 — medicion de semillas en cosecha citricos.
+    Digitaliza la hoja Excel 'CALIDAD DESVERDIZADO_2'.
+    Tabla Dataverse: crf21_planilla_desv_semillas.
+    """
+    lote = models.ForeignKey(
+        Lote,
+        on_delete=models.PROTECT,
+        related_name="planillas_desv_semillas",
+    )
+    fecha = models.DateField(null=True, blank=True)
+    supervisor = models.CharField(max_length=100, blank=True, default="")
+    productor = models.CharField(max_length=100, blank=True, default="")
+    variedad = models.CharField(max_length=100, blank=True, default="")
+    cuartel = models.CharField(max_length=100, blank=True, default="")
+    sector = models.CharField(max_length=100, blank=True, default="")
+    trazabilidad = models.CharField(max_length=100, blank=True, default="")
+    cod_sdp = models.CharField(max_length=50, blank=True, default="")
+    color = models.CharField(max_length=30, blank=True, default="")
+    # Datos de frutas — JSON
+    # Estructura: [{"n_fruto": int, "n_semillas": int}] x50 (5 grupos x 10)
+    frutas_data = models.JSONField(default=list, blank=True)
+    # Resumen calculado
+    total_frutos_muestra = models.IntegerField(null=True, blank=True)
+    total_frutos_con_semillas = models.IntegerField(null=True, blank=True)
+    total_semillas = models.IntegerField(null=True, blank=True)
+    pct_frutos_con_semillas = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True)
+    promedio_semillas = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True)
+    rol = models.CharField(max_length=50, blank=True, default="")
+
+    class Meta:
+        db_table = "operaciones_planilla_desv_semillas"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"PlanSemillas - {self.lote} ({self.fecha})"
+
+
+class PlanillaCalidadPacking(AuditSourceModel):
+    """
+    Planilla CALIDAD PACKING CITRICOS — control de calidad para exportacion.
+    Digitaliza la hoja Excel 'CALIDAD PACKING CITRICOS'.
+    Tabla Dataverse: crf21_planilla_calidad_packings.
+    """
+    pallet = models.ForeignKey(
+        Pallet,
+        on_delete=models.PROTECT,
+        related_name="planillas_calidad_packing",
+    )
+    # Identificacion
+    productor = models.CharField(max_length=100, blank=True, default="")
+    trazabilidad = models.CharField(max_length=100, blank=True, default="")
+    cod_sdp = models.CharField(max_length=50, blank=True, default="")
+    cuartel = models.CharField(max_length=100, blank=True, default="")
+    sector = models.CharField(max_length=100, blank=True, default="")
+    nombre_control = models.CharField(max_length=100, blank=True, default="")
+    n_cuadrilla = models.CharField(max_length=50, blank=True, default="")
+    supervisor = models.CharField(max_length=100, blank=True, default="")
+    fecha_despacho = models.DateField(null=True, blank=True)
+    fecha_cosecha = models.DateField(null=True, blank=True)
+    numero_hoja = models.IntegerField(default=1, help_text="Numero de hoja de la planilla (1 o 2)")
+    tipo_fruta = models.CharField(max_length=50, blank=True, default="",
+        help_text="clementina o mandarina")
+    variedad = models.CharField(max_length=100, blank=True, default="",
+        help_text="orogrande, oronules, clemenule, tango")
+    # Condiciones ambientales
+    temperatura = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    humedad = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    horas_cosecha = models.CharField(max_length=20, blank=True, default="")
+    color = models.CharField(max_length=20, blank=True, default="")
+    n_frutos_muestreados = models.IntegerField(null=True, blank=True)
+    brix = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    # Calibre
+    pre_calibre = models.IntegerField(null=True, blank=True)
+    sobre_calibre = models.IntegerField(null=True, blank=True)
+    # CALIDAD
+    color_contrario_evaluado = models.IntegerField(null=True, blank=True)
+    cantidad_frutos = models.IntegerField(null=True, blank=True)
+    ausencia_roseta = models.IntegerField(null=True, blank=True)
+    deformes = models.IntegerField(null=True, blank=True)
+    frutos_con_semilla = models.IntegerField(null=True, blank=True)
+    n_semillas = models.IntegerField(null=True, blank=True)
+    fumagina = models.IntegerField(null=True, blank=True)
+    h_cicatrizadas = models.IntegerField(null=True, blank=True)
+    manchas = models.IntegerField(null=True, blank=True)
+    peduculo_largo = models.IntegerField(null=True, blank=True)
+    residuos = models.IntegerField(null=True, blank=True)
+    rugosos = models.IntegerField(null=True, blank=True)
+    # Russet
+    russet_leve_claros = models.IntegerField(null=True, blank=True)
+    russet_moderados_claros = models.IntegerField(null=True, blank=True)
+    russet_severos_oscuros = models.IntegerField(null=True, blank=True)
+    # CONDICION
+    creasing_leve = models.IntegerField(null=True, blank=True)
+    creasing_mod_sev = models.IntegerField(null=True, blank=True)
+    dano_frio_granulados = models.IntegerField(null=True, blank=True)
+    bufado = models.IntegerField(null=True, blank=True)
+    deshidratacion_roseta = models.IntegerField(null=True, blank=True)
+    golpe_sol = models.IntegerField(null=True, blank=True)
+    h_abiertas_superior = models.IntegerField(null=True, blank=True)
+    h_abiertas_inferior = models.IntegerField(null=True, blank=True)
+    acostillado = models.IntegerField(null=True, blank=True)
+    machucon = models.IntegerField(null=True, blank=True)
+    blandos = models.IntegerField(null=True, blank=True)
+    oleocelosis = models.IntegerField(null=True, blank=True)
+    ombligo_rasgado = models.IntegerField(null=True, blank=True)
+    colapso_corteza = models.IntegerField(null=True, blank=True)
+    pudricion = models.IntegerField(null=True, blank=True)
+    # Dano Arana
+    dano_arana_leve = models.IntegerField(null=True, blank=True)
+    dano_arana_moderado = models.IntegerField(null=True, blank=True)
+    dano_arana_severo = models.IntegerField(null=True, blank=True)
+    # Otros
+    dano_mecanico = models.IntegerField(null=True, blank=True)
+    otros_condicion = models.CharField(max_length=200, blank=True, default="")
+    total_defectos_pct = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True,
+        help_text="Total defectos %")
+    rol = models.CharField(max_length=50, blank=True, default="")
+
+    class Meta:
+        db_table = "operaciones_planilla_calidad_packing"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"PlanCalidadPacking - {self.pallet} (Hoja {self.numero_hoja})"
+
+
+class PlanillaCalidadCamara(AuditSourceModel):
+    """
+    Planilla CALIDAD CAMARAS — control de proceso y temperatura en camara.
+    Digitaliza la hoja Excel 'CALIDAD CAMARAS'.
+    Tabla Dataverse: crf21_planilla_calidad_camaras.
+    """
+    pallet = models.ForeignKey(
+        Pallet,
+        on_delete=models.PROTECT,
+        related_name="planillas_calidad_camara",
+        null=True, blank=True,
+    )
+    # Encabezado
+    fecha_control = models.DateField(null=True, blank=True)
+    tipo_proceso = models.CharField(max_length=100, blank=True, default="")
+    zona_planta = models.CharField(max_length=100, blank=True, default="")
+    tunel_camara = models.CharField(max_length=50, blank=True, default="")
+    capacidad_maxima = models.CharField(max_length=50, blank=True, default="")
+    temperatura_equipos = models.CharField(max_length=50, blank=True, default="")
+    codigo_envases = models.CharField(max_length=100, blank=True, default="")
+    cantidad_pallets = models.IntegerField(null=True, blank=True)
+    especie = models.CharField(max_length=100, blank=True, default="")
+    variedad = models.CharField(max_length=100, blank=True, default="")
+    fecha_embalaje = models.DateField(null=True, blank=True)
+    estiba = models.CharField(max_length=100, blank=True, default="")
+    tipo_inversion = models.CharField(max_length=100, blank=True, default="")
+    # Mediciones por hora — JSON
+    # Estructura: [{hora, ambiente, pulpa_ext_entrada, pulpa_ext_medio, pulpa_ext_salida,
+    #               pulpa_int_entrada, pulpa_int_media, pulpa_int_salida}]
+    mediciones = models.JSONField(default=list, blank=True)
+    # Promedios
+    temp_pulpa_ext_inicio = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    temp_pulpa_ext_termino = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    temp_pulpa_int_inicio = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    temp_pulpa_int_termino = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    temp_ambiente_inicio = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    temp_ambiente_termino = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True)
+    # Tiempos
+    tiempo_carga_inicio = models.CharField(max_length=10, blank=True, default="")
+    tiempo_carga_termino = models.CharField(max_length=10, blank=True, default="")
+    tiempo_descarga_inicio = models.CharField(max_length=10, blank=True, default="")
+    tiempo_descarga_termino = models.CharField(max_length=10, blank=True, default="")
+    tiempo_enfriado_inicio = models.CharField(max_length=10, blank=True, default="")
+    tiempo_enfriado_termino = models.CharField(max_length=10, blank=True, default="")
+    observaciones = models.TextField(blank=True, default="")
+    nombre_control = models.CharField(max_length=100, blank=True, default="")
+    rol = models.CharField(max_length=50, blank=True, default="")
+
+    class Meta:
+        db_table = "operaciones_planilla_calidad_camara"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"PlanCalidadCamara - {self.tunel_camara} ({self.fecha_control})"
+
+
+# ---------------------------------------------------------------------------
 # RegistroEtapa  (evento de trazabilidad — no reemplaza las entidades anteriores)
 # ---------------------------------------------------------------------------
 

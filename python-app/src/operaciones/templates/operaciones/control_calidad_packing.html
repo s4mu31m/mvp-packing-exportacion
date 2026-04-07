@@ -1,0 +1,157 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Calidad Packing Cítricos — CaliPro{% endblock %}
+{% block page_title %}Control Calidad Packing Cítricos{% endblock %}
+{% block page_subtitle %}Defectos, condición y calibre por pallet{% endblock %}
+
+{% block page_body %}
+{% if messages %}
+  {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags }}" style="margin-bottom:1rem">{{ msg }}</div>
+  {% endfor %}
+{% endif %}
+
+<div style="margin-bottom:1rem">
+  <a href="{% url 'operaciones:control' %}" style="font-size:.85rem;color:var(--text-muted)">
+    ← Control de Calidad
+  </a>
+</div>
+
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="pallet_id" id="pallet-id-hidden" value="">
+
+<div class="op-layout">
+
+  <div class="flex-col" style="min-width:0">
+
+    <!-- Selector pallet -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:.8rem">Seleccionar pallet</div>
+      {% if pallets %}
+        <select class="form-input" onchange="document.getElementById('pallet-id-hidden').value=this.value">
+          <option value="">— Seleccione un pallet —</option>
+          {% for p in pallets %}
+            <option value="{{ p.id }}">{{ p.pallet_code|default:p.id }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <p style="font-size:.85rem;color:var(--text-muted)">Sin pallets disponibles.</p>
+      {% endif %}
+    </div>
+
+    <!-- Encabezado -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:1rem">Identificación</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+        {% for field in form %}
+          {% if field.name in "productor,trazabilidad,cod_sdp,cuartel,sector,nombre_control,n_cuadrilla,supervisor,fecha_despacho,fecha_cosecha,numero_hoja,tipo_fruta,variedad,temperatura,humedad,horas_cosecha,color,n_frutos_muestreados,brix,pre_calibre,sobre_calibre" %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- CALIDAD -->
+    <div class="card" style="margin-bottom:1rem">
+      <details open>
+        <summary class="card-title" style="cursor:pointer;list-style:none;margin-bottom:.5rem">
+          ▸ Calidad
+        </summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem;margin-top:1rem">
+          {% for field in form %}
+            {% if field.name in "color_contrario_evaluado,cantidad_frutos,ausencia_roseta,deformes,frutos_con_semilla,n_semillas,fumagina,h_cicatrizadas,manchas,peduculo_largo,residuos,rugosos" %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+
+    <!-- Russet -->
+    <div class="card" style="margin-bottom:1rem">
+      <details>
+        <summary class="card-title" style="cursor:pointer;list-style:none;margin-bottom:.5rem">
+          ▸ Russet
+        </summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.8rem;margin-top:1rem">
+          {% for field in form %}
+            {% if field.name in "russet_leve_claros,russet_moderados_claros,russet_severos_oscuros" %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+
+    <!-- CONDICION -->
+    <div class="card" style="margin-bottom:1rem">
+      <details>
+        <summary class="card-title" style="cursor:pointer;list-style:none;margin-bottom:.5rem">
+          ▸ Condición
+        </summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem;margin-top:1rem">
+          {% for field in form %}
+            {% if field.name in "creasing_leve,creasing_mod_sev,dano_frio_granulados,bufado,deshidratacion_roseta,golpe_sol,h_abiertas_superior,h_abiertas_inferior,acostillado,machucon,blandos,oleocelosis,ombligo_rasgado,colapso_corteza,pudricion" %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+
+    <!-- Daño Araña + Totales -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-title" style="margin-bottom:1rem">Daño Araña / Totales</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.8rem">
+        {% for field in form %}
+          {% if field.name in "dano_arana_leve,dano_arana_moderado,dano_arana_severo,dano_mecanico,otros_condicion,total_defectos_pct,rol" %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="flex-row mt-4" style="margin-bottom:2rem">
+      <button type="reset" class="btn btn-ghost">Limpiar</button>
+      <button type="submit" class="btn btn-primary ml-auto">Guardar Planilla Packing</button>
+    </div>
+
+  </div>
+
+  <!-- Sidebar pallets -->
+  <div class="op-sidebar-panel">
+    <div class="op-sidebar-title">Pallets</div>
+    {% for p in pallets %}
+      <div style="padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.82rem;cursor:pointer"
+           onclick="document.getElementById('pallet-id-hidden').value='{{ p.id }}'">
+        <div style="font-weight:600;font-family:monospace">{{ p.pallet_code|default:p.id }}</div>
+      </div>
+    {% empty %}
+      <div class="empty-state"><div class="empty-state-desc">Sin pallets</div></div>
+    {% endfor %}
+  </div>
+
+</div>
+</form>
+{% endblock %}

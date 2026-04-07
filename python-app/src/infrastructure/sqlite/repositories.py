@@ -46,6 +46,14 @@ from domain.repositories.base import (
     MedicionTemperaturaSalidaRepository,
     SequenceCounterRecord,
     SequenceCounterRepository,
+    PlanillaDesverdizadoCalibreRecord,
+    PlanillaDesverdizadoCalibreRepository,
+    PlanillaDesverdizadoSemillasRecord,
+    PlanillaDesverdizadoSemillasRepository,
+    PlanillaCalidadPackingRecord,
+    PlanillaCalidadPackingRepository,
+    PlanillaCalidadCamaraRecord,
+    PlanillaCalidadCamaraRepository,
 )
 
 
@@ -862,6 +870,266 @@ class SqliteSequenceCounterRepository(SequenceCounterRepository):
 
 
 # ---------------------------------------------------------------------------
+# Helpers: model instance → record type — Planillas de Control de Calidad
+# ---------------------------------------------------------------------------
+
+def _planilla_desv_calibre_to_record(obj) -> PlanillaDesverdizadoCalibreRecord:
+    import json
+    grupos = obj.calibres_grupos
+    calibres_json = json.dumps(grupos, ensure_ascii=False) if isinstance(grupos, list) else (grupos or "[]")
+    return PlanillaDesverdizadoCalibreRecord(
+        id=obj.pk,
+        lote_id=obj.lote_id,
+        supervisor=obj.supervisor or "",
+        productor=obj.productor or "",
+        variedad=obj.variedad or "",
+        trazabilidad=obj.trazabilidad or "",
+        cod_sdp=obj.cod_sdp or "",
+        fecha_cosecha=obj.fecha_cosecha,
+        fecha_despacho=obj.fecha_despacho,
+        cuartel=obj.cuartel or "",
+        sector=obj.sector or "",
+        oleocelosis=obj.oleocelosis,
+        heridas_abiertas=obj.heridas_abiertas,
+        rugoso=obj.rugoso,
+        deforme=obj.deforme,
+        golpe_sol=obj.golpe_sol,
+        verdes=obj.verdes,
+        pre_calibre_defecto=obj.pre_calibre_defecto,
+        palo_largo=obj.palo_largo,
+        calibres_grupos_json=calibres_json,
+        observaciones=obj.observaciones or "",
+        rol=obj.rol or "",
+        operator_code=getattr(obj, "operator_code", "") or "",
+        source_system=getattr(obj, "source_system", "local") or "local",
+    )
+
+
+def _planilla_desv_semillas_to_record(obj) -> PlanillaDesverdizadoSemillasRecord:
+    import json
+    frutas = obj.frutas_data
+    frutas_json = json.dumps(frutas, ensure_ascii=False) if isinstance(frutas, list) else (frutas or "[]")
+    return PlanillaDesverdizadoSemillasRecord(
+        id=obj.pk,
+        lote_id=obj.lote_id,
+        fecha=obj.fecha,
+        supervisor=obj.supervisor or "",
+        productor=obj.productor or "",
+        variedad=obj.variedad or "",
+        cuartel=obj.cuartel or "",
+        sector=obj.sector or "",
+        trazabilidad=obj.trazabilidad or "",
+        cod_sdp=obj.cod_sdp or "",
+        color=obj.color or "",
+        frutas_data_json=frutas_json,
+        total_frutos_muestra=obj.total_frutos_muestra,
+        total_frutos_con_semillas=obj.total_frutos_con_semillas,
+        total_semillas=obj.total_semillas,
+        pct_frutos_con_semillas=obj.pct_frutos_con_semillas,
+        promedio_semillas=obj.promedio_semillas,
+        rol=obj.rol or "",
+        operator_code=getattr(obj, "operator_code", "") or "",
+        source_system=getattr(obj, "source_system", "local") or "local",
+    )
+
+
+def _planilla_calidad_packing_to_record(obj) -> PlanillaCalidadPackingRecord:
+    return PlanillaCalidadPackingRecord(
+        id=obj.pk,
+        pallet_id=obj.pallet_id,
+        productor=obj.productor or "",
+        trazabilidad=obj.trazabilidad or "",
+        cod_sdp=obj.cod_sdp or "",
+        cuartel=obj.cuartel or "",
+        sector=obj.sector or "",
+        nombre_control=obj.nombre_control or "",
+        n_cuadrilla=obj.n_cuadrilla or "",
+        supervisor=obj.supervisor or "",
+        fecha_despacho=obj.fecha_despacho,
+        fecha_cosecha=obj.fecha_cosecha,
+        numero_hoja=obj.numero_hoja or 1,
+        tipo_fruta=obj.tipo_fruta or "",
+        variedad=obj.variedad or "",
+        temperatura=obj.temperatura,
+        humedad=obj.humedad,
+        horas_cosecha=obj.horas_cosecha or "",
+        color=obj.color or "",
+        n_frutos_muestreados=obj.n_frutos_muestreados,
+        brix=obj.brix,
+        pre_calibre=obj.pre_calibre,
+        sobre_calibre=obj.sobre_calibre,
+        color_contrario_evaluado=obj.color_contrario_evaluado,
+        cantidad_frutos=obj.cantidad_frutos,
+        ausencia_roseta=obj.ausencia_roseta,
+        deformes=obj.deformes,
+        frutos_con_semilla=obj.frutos_con_semilla,
+        n_semillas=obj.n_semillas,
+        fumagina=obj.fumagina,
+        h_cicatrizadas=obj.h_cicatrizadas,
+        manchas=obj.manchas,
+        peduculo_largo=obj.peduculo_largo,
+        residuos=obj.residuos,
+        rugosos=obj.rugosos,
+        russet_leve_claros=obj.russet_leve_claros,
+        russet_moderados_claros=obj.russet_moderados_claros,
+        russet_severos_oscuros=obj.russet_severos_oscuros,
+        creasing_leve=obj.creasing_leve,
+        creasing_mod_sev=obj.creasing_mod_sev,
+        dano_frio_granulados=obj.dano_frio_granulados,
+        bufado=obj.bufado,
+        deshidratacion_roseta=obj.deshidratacion_roseta,
+        golpe_sol=obj.golpe_sol,
+        h_abiertas_superior=obj.h_abiertas_superior,
+        h_abiertas_inferior=obj.h_abiertas_inferior,
+        acostillado=obj.acostillado,
+        machucon=obj.machucon,
+        blandos=obj.blandos,
+        oleocelosis=obj.oleocelosis,
+        ombligo_rasgado=obj.ombligo_rasgado,
+        colapso_corteza=obj.colapso_corteza,
+        pudricion=obj.pudricion,
+        dano_arana_leve=obj.dano_arana_leve,
+        dano_arana_moderado=obj.dano_arana_moderado,
+        dano_arana_severo=obj.dano_arana_severo,
+        dano_mecanico=obj.dano_mecanico,
+        otros_condicion=obj.otros_condicion or "",
+        total_defectos_pct=obj.total_defectos_pct,
+        rol=obj.rol or "",
+        operator_code=getattr(obj, "operator_code", "") or "",
+        source_system=getattr(obj, "source_system", "local") or "local",
+    )
+
+
+def _planilla_calidad_camara_to_record(obj) -> PlanillaCalidadCamaraRecord:
+    import json
+    meds = obj.mediciones
+    meds_json = json.dumps(meds, ensure_ascii=False) if isinstance(meds, list) else (meds or "[]")
+    return PlanillaCalidadCamaraRecord(
+        id=obj.pk,
+        pallet_id=obj.pallet_id,
+        fecha_control=obj.fecha_control,
+        tipo_proceso=obj.tipo_proceso or "",
+        zona_planta=obj.zona_planta or "",
+        tunel_camara=obj.tunel_camara or "",
+        capacidad_maxima=obj.capacidad_maxima or "",
+        temperatura_equipos=obj.temperatura_equipos or "",
+        codigo_envases=obj.codigo_envases or "",
+        cantidad_pallets=obj.cantidad_pallets,
+        especie=obj.especie or "",
+        variedad=obj.variedad or "",
+        fecha_embalaje=obj.fecha_embalaje,
+        estiba=obj.estiba or "",
+        tipo_inversion=obj.tipo_inversion or "",
+        mediciones_json=meds_json,
+        temp_pulpa_ext_inicio=obj.temp_pulpa_ext_inicio,
+        temp_pulpa_ext_termino=obj.temp_pulpa_ext_termino,
+        temp_pulpa_int_inicio=obj.temp_pulpa_int_inicio,
+        temp_pulpa_int_termino=obj.temp_pulpa_int_termino,
+        temp_ambiente_inicio=obj.temp_ambiente_inicio,
+        temp_ambiente_termino=obj.temp_ambiente_termino,
+        tiempo_carga_inicio=obj.tiempo_carga_inicio or "",
+        tiempo_carga_termino=obj.tiempo_carga_termino or "",
+        tiempo_descarga_inicio=obj.tiempo_descarga_inicio or "",
+        tiempo_descarga_termino=obj.tiempo_descarga_termino or "",
+        tiempo_enfriado_inicio=obj.tiempo_enfriado_inicio or "",
+        tiempo_enfriado_termino=obj.tiempo_enfriado_termino or "",
+        observaciones=obj.observaciones or "",
+        nombre_control=obj.nombre_control or "",
+        rol=obj.rol or "",
+        operator_code=getattr(obj, "operator_code", "") or "",
+        source_system=getattr(obj, "source_system", "local") or "local",
+    )
+
+
+# ---------------------------------------------------------------------------
+# SQLite repositories — Planillas de Control de Calidad
+# ---------------------------------------------------------------------------
+
+class SqlitePlanillaDesverdizadoCalibreRepository(PlanillaDesverdizadoCalibreRepository):
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaDesverdizadoCalibreRecord:
+        from operaciones.models import PlanillaDesverdizadoCalibre
+        fields = dict(extra or {})
+        obj = PlanillaDesverdizadoCalibre.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(PlanillaDesverdizadoCalibre, k)},
+        )
+        return _planilla_desv_calibre_to_record(obj)
+
+    def list_by_lote(self, lote_id: Any) -> list[PlanillaDesverdizadoCalibreRecord]:
+        from operaciones.models import PlanillaDesverdizadoCalibre
+        objs = PlanillaDesverdizadoCalibre.objects.filter(lote_id=lote_id).order_by("-created_at")
+        return [_planilla_desv_calibre_to_record(obj) for obj in objs]
+
+
+class SqlitePlanillaDesverdizadoSemillasRepository(PlanillaDesverdizadoSemillasRepository):
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaDesverdizadoSemillasRecord:
+        from operaciones.models import PlanillaDesverdizadoSemillas
+        fields = dict(extra or {})
+        obj = PlanillaDesverdizadoSemillas.objects.create(
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(PlanillaDesverdizadoSemillas, k)},
+        )
+        return _planilla_desv_semillas_to_record(obj)
+
+    def list_by_lote(self, lote_id: Any) -> list[PlanillaDesverdizadoSemillasRecord]:
+        from operaciones.models import PlanillaDesverdizadoSemillas
+        objs = PlanillaDesverdizadoSemillas.objects.filter(lote_id=lote_id).order_by("-created_at")
+        return [_planilla_desv_semillas_to_record(obj) for obj in objs]
+
+
+class SqlitePlanillaCalidadPackingRepository(PlanillaCalidadPackingRepository):
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaCalidadPackingRecord:
+        from operaciones.models import PlanillaCalidadPacking
+        fields = dict(extra or {})
+        obj = PlanillaCalidadPacking.objects.create(
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(PlanillaCalidadPacking, k)},
+        )
+        return _planilla_calidad_packing_to_record(obj)
+
+    def list_by_pallet(self, pallet_id: Any) -> list[PlanillaCalidadPackingRecord]:
+        from operaciones.models import PlanillaCalidadPacking
+        objs = PlanillaCalidadPacking.objects.filter(pallet_id=pallet_id).order_by("-created_at")
+        return [_planilla_calidad_packing_to_record(obj) for obj in objs]
+
+
+class SqlitePlanillaCalidadCamaraRepository(PlanillaCalidadCamaraRepository):
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaCalidadCamaraRecord:
+        from operaciones.models import PlanillaCalidadCamara
+        fields = dict(extra or {})
+        obj = PlanillaCalidadCamara.objects.create(
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+            **{k: v for k, v in fields.items() if hasattr(PlanillaCalidadCamara, k)},
+        )
+        return _planilla_calidad_camara_to_record(obj)
+
+    def list_by_pallet(self, pallet_id: Any) -> list[PlanillaCalidadCamaraRecord]:
+        from operaciones.models import PlanillaCalidadCamara
+        objs = PlanillaCalidadCamara.objects.filter(pallet_id=pallet_id).order_by("-created_at")
+        return [_planilla_calidad_camara_to_record(obj) for obj in objs]
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
@@ -883,5 +1151,9 @@ def build_sqlite_repositories() -> Repositories:
         calidad_pallet_muestras=SqliteCalidadPalletMuestraRepository(),
         camara_frios=SqliteCamaraFrioRepository(),
         mediciones_temperatura=SqliteMedicionTemperaturaSalidaRepository(),
+        planillas_desv_calibres=SqlitePlanillaDesverdizadoCalibreRepository(),
+        planillas_desv_semillas=SqlitePlanillaDesverdizadoSemillasRepository(),
+        planillas_calidad_packing=SqlitePlanillaCalidadPackingRepository(),
+        planillas_calidad_camara=SqlitePlanillaCalidadCamaraRepository(),
         sequences=SqliteSequenceCounterRepository(),
     )

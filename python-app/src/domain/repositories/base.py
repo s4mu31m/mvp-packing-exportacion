@@ -316,6 +316,183 @@ class MedicionTemperaturaSalidaRecord:
 
 
 # ---------------------------------------------------------------------------
+# Record types — Planillas de Control de Calidad
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PlanillaDesverdizadoCalibreRecord:
+    """Planilla CALIDAD DESVERDIZADO — medicion de calibres en terreno."""
+    id: Any
+    lote_id: Any
+    supervisor: str = ""
+    productor: str = ""
+    variedad: str = ""
+    trazabilidad: str = ""
+    cod_sdp: str = ""
+    fecha_cosecha: Optional[date] = None
+    fecha_despacho: Optional[date] = None
+    cuartel: str = ""
+    sector: str = ""
+    oleocelosis: Optional[int] = None
+    heridas_abiertas: Optional[int] = None
+    rugoso: Optional[int] = None
+    deforme: Optional[int] = None
+    golpe_sol: Optional[int] = None
+    verdes: Optional[int] = None
+    pre_calibre_defecto: Optional[int] = None
+    palo_largo: Optional[int] = None
+    # JSON string: [{"color": str, "calibres": {"1xx":N,...}, "observacion": str}] x3
+    calibres_grupos_json: str = "[]"
+    observaciones: str = ""
+    rol: str = ""
+    operator_code: str = ""
+    source_system: str = "local"
+
+
+@dataclass
+class PlanillaDesverdizadoSemillasRecord:
+    """Planilla CALIDAD DESVERDIZADO_2 — medicion de semillas en cosecha."""
+    id: Any
+    lote_id: Any
+    fecha: Optional[date] = None
+    supervisor: str = ""
+    productor: str = ""
+    variedad: str = ""
+    cuartel: str = ""
+    sector: str = ""
+    trazabilidad: str = ""
+    cod_sdp: str = ""
+    color: str = ""
+    # JSON string: [{"n_fruto": int, "n_semillas": int}, ...] x50
+    frutas_data_json: str = "[]"
+    total_frutos_muestra: Optional[int] = None
+    total_frutos_con_semillas: Optional[int] = None
+    total_semillas: Optional[int] = None
+    pct_frutos_con_semillas: Optional[Decimal] = None
+    promedio_semillas: Optional[Decimal] = None
+    rol: str = ""
+    operator_code: str = ""
+    source_system: str = "local"
+
+
+@dataclass
+class PlanillaCalidadPackingRecord:
+    """Planilla CALIDAD PACKING CITRICOS — control de calidad exportacion."""
+    id: Any
+    pallet_id: Any
+    # Identificacion
+    productor: str = ""
+    trazabilidad: str = ""
+    cod_sdp: str = ""
+    cuartel: str = ""
+    sector: str = ""
+    nombre_control: str = ""
+    n_cuadrilla: str = ""
+    supervisor: str = ""
+    fecha_despacho: Optional[date] = None
+    fecha_cosecha: Optional[date] = None
+    numero_hoja: int = 1
+    tipo_fruta: str = ""
+    variedad: str = ""
+    # Condiciones
+    temperatura: Optional[Decimal] = None
+    humedad: Optional[Decimal] = None
+    horas_cosecha: str = ""
+    color: str = ""
+    n_frutos_muestreados: Optional[int] = None
+    brix: Optional[Decimal] = None
+    # Calibre
+    pre_calibre: Optional[int] = None
+    sobre_calibre: Optional[int] = None
+    # Calidad
+    color_contrario_evaluado: Optional[int] = None
+    cantidad_frutos: Optional[int] = None
+    ausencia_roseta: Optional[int] = None
+    deformes: Optional[int] = None
+    frutos_con_semilla: Optional[int] = None
+    n_semillas: Optional[int] = None
+    fumagina: Optional[int] = None
+    h_cicatrizadas: Optional[int] = None
+    manchas: Optional[int] = None
+    peduculo_largo: Optional[int] = None
+    residuos: Optional[int] = None
+    rugosos: Optional[int] = None
+    # Russet
+    russet_leve_claros: Optional[int] = None
+    russet_moderados_claros: Optional[int] = None
+    russet_severos_oscuros: Optional[int] = None
+    # Condicion
+    creasing_leve: Optional[int] = None
+    creasing_mod_sev: Optional[int] = None
+    dano_frio_granulados: Optional[int] = None
+    bufado: Optional[int] = None
+    deshidratacion_roseta: Optional[int] = None
+    golpe_sol: Optional[int] = None
+    h_abiertas_superior: Optional[int] = None
+    h_abiertas_inferior: Optional[int] = None
+    acostillado: Optional[int] = None
+    machucon: Optional[int] = None
+    blandos: Optional[int] = None
+    oleocelosis: Optional[int] = None
+    ombligo_rasgado: Optional[int] = None
+    colapso_corteza: Optional[int] = None
+    pudricion: Optional[int] = None
+    # Dano arana
+    dano_arana_leve: Optional[int] = None
+    dano_arana_moderado: Optional[int] = None
+    dano_arana_severo: Optional[int] = None
+    # Otros
+    dano_mecanico: Optional[int] = None
+    otros_condicion: str = ""
+    total_defectos_pct: Optional[Decimal] = None
+    rol: str = ""
+    operator_code: str = ""
+    source_system: str = "local"
+
+
+@dataclass
+class PlanillaCalidadCamaraRecord:
+    """Planilla CALIDAD CAMARAS — control de proceso temperatura camara."""
+    id: Any
+    pallet_id: Any  # nullable
+    fecha_control: Optional[date] = None
+    tipo_proceso: str = ""
+    zona_planta: str = ""
+    tunel_camara: str = ""
+    capacidad_maxima: str = ""
+    temperatura_equipos: str = ""
+    codigo_envases: str = ""
+    cantidad_pallets: Optional[int] = None
+    especie: str = ""
+    variedad: str = ""
+    fecha_embalaje: Optional[date] = None
+    estiba: str = ""
+    tipo_inversion: str = ""
+    # JSON string: [{hora, ambiente, pulpa_ext_entrada, pulpa_ext_medio, pulpa_ext_salida,
+    #                pulpa_int_entrada, pulpa_int_media, pulpa_int_salida}]
+    mediciones_json: str = "[]"
+    # Promedios
+    temp_pulpa_ext_inicio: Optional[Decimal] = None
+    temp_pulpa_ext_termino: Optional[Decimal] = None
+    temp_pulpa_int_inicio: Optional[Decimal] = None
+    temp_pulpa_int_termino: Optional[Decimal] = None
+    temp_ambiente_inicio: Optional[Decimal] = None
+    temp_ambiente_termino: Optional[Decimal] = None
+    # Tiempos
+    tiempo_carga_inicio: str = ""
+    tiempo_carga_termino: str = ""
+    tiempo_descarga_inicio: str = ""
+    tiempo_descarga_termino: str = ""
+    tiempo_enfriado_inicio: str = ""
+    tiempo_enfriado_termino: str = ""
+    observaciones: str = ""
+    nombre_control: str = ""
+    rol: str = ""
+    operator_code: str = ""
+    source_system: str = "local"
+
+
+# ---------------------------------------------------------------------------
 # Repository abstract base classes — entidades base
 # ---------------------------------------------------------------------------
 
@@ -674,6 +851,62 @@ class SequenceCounterRepository(ABC):
 
 
 # ---------------------------------------------------------------------------
+# Repository abstract base classes — Planillas de Control de Calidad
+# ---------------------------------------------------------------------------
+
+class PlanillaDesverdizadoCalibreRepository(ABC):
+
+    @abstractmethod
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaDesverdizadoCalibreRecord:
+        """Crea un registro de planilla de calibres desverdizado."""
+
+    @abstractmethod
+    def list_by_lote(self, lote_id: Any) -> list[PlanillaDesverdizadoCalibreRecord]:
+        """Lista las planillas de calibres de un lote."""
+
+
+class PlanillaDesverdizadoSemillasRepository(ABC):
+
+    @abstractmethod
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaDesverdizadoSemillasRecord:
+        """Crea un registro de planilla de semillas desverdizado."""
+
+    @abstractmethod
+    def list_by_lote(self, lote_id: Any) -> list[PlanillaDesverdizadoSemillasRecord]:
+        """Lista las planillas de semillas de un lote."""
+
+
+class PlanillaCalidadPackingRepository(ABC):
+
+    @abstractmethod
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaCalidadPackingRecord:
+        """Crea un registro de planilla de calidad packing citricos."""
+
+    @abstractmethod
+    def list_by_pallet(self, pallet_id: Any) -> list[PlanillaCalidadPackingRecord]:
+        """Lista las planillas de calidad packing de un pallet."""
+
+
+class PlanillaCalidadCamaraRepository(ABC):
+
+    @abstractmethod
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "local", extra: Optional[dict] = None,
+               ) -> PlanillaCalidadCamaraRecord:
+        """Crea un registro de planilla de control de camara."""
+
+    @abstractmethod
+    def list_by_pallet(self, pallet_id: Any) -> list[PlanillaCalidadCamaraRecord]:
+        """Lista las planillas de control de camara de un pallet."""
+
+
+# ---------------------------------------------------------------------------
 # Container
 # ---------------------------------------------------------------------------
 
@@ -697,5 +930,10 @@ class Repositories:
     calidad_pallet_muestras: CalidadPalletMuestraRepository
     camara_frios: CamaraFrioRepository
     mediciones_temperatura: MedicionTemperaturaSalidaRepository
+    # Planillas de Control de Calidad
+    planillas_desv_calibres: PlanillaDesverdizadoCalibreRepository
+    planillas_desv_semillas: PlanillaDesverdizadoSemillasRepository
+    planillas_calidad_packing: PlanillaCalidadPackingRepository
+    planillas_calidad_camara: PlanillaCalidadCamaraRepository
     # Gestion de correlativos
     sequences: SequenceCounterRepository

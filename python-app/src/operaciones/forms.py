@@ -331,3 +331,207 @@ class MedicionTemperaturaForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
+
+
+# ---------------------------------------------------------------------------
+# Planillas de Control de Calidad
+# ---------------------------------------------------------------------------
+
+class PlanillaDesverdizadoCalibreForm(forms.Form):
+    """Encabezado de la planilla CALIDAD DESVERDIZADO (calibres).
+    Los 3 grupos de calibres se envian como campos dinamicos en el POST."""
+    supervisor = forms.CharField(max_length=100, required=False, label="Supervisor")
+    productor = forms.CharField(max_length=100, required=False, label="Productor")
+    variedad = forms.CharField(max_length=100, required=False, label="Variedad")
+    trazabilidad = forms.CharField(max_length=100, required=False, label="Trazabilidad")
+    cod_sdp = forms.CharField(max_length=50, required=False, label="Cod. SDP")
+    fecha_cosecha = forms.DateField(
+        required=False, label="Fecha cosecha",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    fecha_despacho = forms.DateField(
+        required=False, label="Fecha despacho",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    cuartel = forms.CharField(max_length=100, required=False, label="Cuartel")
+    sector = forms.CharField(max_length=100, required=False, label="Sector")
+    # Defectos (columna derecha — 50 frutos)
+    oleocelosis = forms.IntegerField(required=False, label="Oleocelosis", min_value=0)
+    heridas_abiertas = forms.IntegerField(required=False, label="Heridas abiertas", min_value=0)
+    rugoso = forms.IntegerField(required=False, label="Rugoso", min_value=0)
+    deforme = forms.IntegerField(required=False, label="Deforme", min_value=0)
+    golpe_sol = forms.IntegerField(required=False, label="Golpe de sol", min_value=0)
+    verdes = forms.IntegerField(required=False, label="Verdes", min_value=0)
+    pre_calibre_defecto = forms.IntegerField(required=False, label="Pre calibre", min_value=0)
+    palo_largo = forms.IntegerField(required=False, label="Palo largo", min_value=0)
+    observaciones = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 2}),
+        required=False, label="Observaciones",
+    )
+
+
+class PlanillaDesverdizadoSemillasForm(forms.Form):
+    """Encabezado de la planilla CALIDAD DESVERDIZADO_2 (semillas).
+    Los 50 datos de frutas se envian como campos g{G}_f{N}_semillas en el POST."""
+    fecha = forms.DateField(
+        required=False, label="Fecha",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    supervisor = forms.CharField(max_length=100, required=False, label="Supervisor")
+    productor = forms.CharField(max_length=100, required=False, label="Productor")
+    variedad = forms.CharField(max_length=100, required=False, label="Variedad")
+    cuartel = forms.CharField(max_length=100, required=False, label="Cuartel")
+    sector = forms.CharField(max_length=100, required=False, label="Sector")
+    trazabilidad = forms.CharField(max_length=100, required=False, label="Trazabilidad")
+    cod_sdp = forms.CharField(max_length=50, required=False, label="Cod. SDP")
+    color = forms.CharField(max_length=30, required=False, label="Color(es)")
+
+
+class PlanillaCalidadPackingForm(forms.Form):
+    """Planilla CALIDAD PACKING CITRICOS — todos los campos escalares."""
+    # Identificacion
+    productor = forms.CharField(max_length=100, required=False, label="Productor")
+    trazabilidad = forms.CharField(max_length=100, required=False, label="Trazabilidad")
+    cod_sdp = forms.CharField(max_length=50, required=False, label="Cod. SDP")
+    cuartel = forms.CharField(max_length=100, required=False, label="Cuartel")
+    sector = forms.CharField(max_length=100, required=False, label="Sector")
+    nombre_control = forms.CharField(max_length=100, required=False, label="Nombre control")
+    n_cuadrilla = forms.CharField(max_length=50, required=False, label="N° cuadrilla")
+    supervisor = forms.CharField(max_length=100, required=False, label="Supervisor")
+    fecha_despacho = forms.DateField(
+        required=False, label="Fecha despacho",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    fecha_cosecha = forms.DateField(
+        required=False, label="Fecha cosecha",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    numero_hoja = forms.IntegerField(
+        required=False, label="N° hoja", min_value=1, max_value=2,
+        widget=forms.NumberInput(attrs={"min": "1", "max": "2"}),
+    )
+    tipo_fruta = forms.ChoiceField(
+        choices=[("", "— seleccione —"), ("clementina", "Clementina"), ("mandarina", "Mandarina")],
+        required=False, label="Tipo fruta",
+    )
+    variedad = forms.CharField(max_length=100, required=False, label="Variedad")
+    # Condiciones
+    temperatura = forms.DecimalField(max_digits=5, decimal_places=1, required=False, label="Temp. (°C)")
+    humedad = forms.DecimalField(max_digits=5, decimal_places=1, required=False, label="Hum. (%)")
+    horas_cosecha = forms.CharField(max_length=20, required=False, label="H/Cos")
+    color = forms.CharField(max_length=20, required=False, label="Color")
+    n_frutos_muestreados = forms.IntegerField(required=False, label="N° frutos muestreados")
+    brix = forms.DecimalField(max_digits=5, decimal_places=2, required=False, label="BRIX")
+    # Calibre
+    pre_calibre = forms.IntegerField(required=False, label="Pre calibre", min_value=0)
+    sobre_calibre = forms.IntegerField(required=False, label="Sobre calibre", min_value=0)
+    # CALIDAD
+    color_contrario_evaluado = forms.IntegerField(required=False, label="Color contrario evaluado", min_value=0)
+    cantidad_frutos = forms.IntegerField(required=False, label="Cantidad de frutos", min_value=0)
+    ausencia_roseta = forms.IntegerField(required=False, label="Ausencia roseta", min_value=0)
+    deformes = forms.IntegerField(required=False, label="Deformes", min_value=0)
+    frutos_con_semilla = forms.IntegerField(required=False, label="Frutos con semilla", min_value=0)
+    n_semillas = forms.IntegerField(required=False, label="N° semillas", min_value=0)
+    fumagina = forms.IntegerField(required=False, label="Fumagina", min_value=0)
+    h_cicatrizadas = forms.IntegerField(required=False, label="H. cicatrizadas", min_value=0)
+    manchas = forms.IntegerField(required=False, label="Manchas", min_value=0)
+    peduculo_largo = forms.IntegerField(required=False, label="Pedúnculo largo", min_value=0)
+    residuos = forms.IntegerField(required=False, label="Residuos", min_value=0)
+    rugosos = forms.IntegerField(required=False, label="Rugosos", min_value=0)
+    # Russet
+    russet_leve_claros = forms.IntegerField(required=False, label="Russet leve claros", min_value=0)
+    russet_moderados_claros = forms.IntegerField(required=False, label="Russet moderados claros", min_value=0)
+    russet_severos_oscuros = forms.IntegerField(required=False, label="Russet severos oscuros", min_value=0)
+    # CONDICION
+    creasing_leve = forms.IntegerField(required=False, label="Creasing leve", min_value=0)
+    creasing_mod_sev = forms.IntegerField(required=False, label="Creasing mod./severo", min_value=0)
+    dano_frio_granulados = forms.IntegerField(required=False, label="Daño frío/granulados", min_value=0)
+    bufado = forms.IntegerField(required=False, label="Bufado", min_value=0)
+    deshidratacion_roseta = forms.IntegerField(required=False, label="Deshidratación roseta", min_value=0)
+    golpe_sol = forms.IntegerField(required=False, label="Golpe de sol", min_value=0)
+    h_abiertas_superior = forms.IntegerField(required=False, label="H. abiertas superior", min_value=0)
+    h_abiertas_inferior = forms.IntegerField(required=False, label="H. abiertas inferior", min_value=0)
+    acostillado = forms.IntegerField(required=False, label="Acostillado", min_value=0)
+    machucon = forms.IntegerField(required=False, label="Machucón", min_value=0)
+    blandos = forms.IntegerField(required=False, label="Blandos", min_value=0)
+    oleocelosis = forms.IntegerField(required=False, label="Oleocelosis", min_value=0)
+    ombligo_rasgado = forms.IntegerField(required=False, label="Ombligo rasgado", min_value=0)
+    colapso_corteza = forms.IntegerField(required=False, label="Colapso corteza", min_value=0)
+    pudricion = forms.IntegerField(required=False, label="Pudrición", min_value=0)
+    # Daño Araña
+    dano_arana_leve = forms.IntegerField(required=False, label="Daño araña leve", min_value=0)
+    dano_arana_moderado = forms.IntegerField(required=False, label="Daño araña moderado", min_value=0)
+    dano_arana_severo = forms.IntegerField(required=False, label="Daño araña severo", min_value=0)
+    # Otros
+    dano_mecanico = forms.IntegerField(required=False, label="Daño mecánico", min_value=0)
+    otros_condicion = forms.CharField(max_length=200, required=False, label="Otros condición")
+    total_defectos_pct = forms.DecimalField(
+        max_digits=6, decimal_places=2, required=False, label="Total defectos (%)",
+    )
+
+
+class PlanillaCalidadCamaraForm(forms.Form):
+    """Encabezado y resumen de la planilla CALIDAD CAMARAS.
+    Las filas de medicion horaria se envian como med_{i}_{campo} desde JS dinamico."""
+    fecha_control = forms.DateField(
+        required=False, label="Fecha del control",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    tipo_proceso = forms.CharField(max_length=100, required=False, label="Tipo de proceso")
+    zona_planta = forms.CharField(max_length=100, required=False, label="Zona/planta")
+    tunel_camara = forms.CharField(max_length=50, required=False, label="Túnel/cámara")
+    capacidad_maxima = forms.CharField(max_length=50, required=False, label="Capacidad máxima")
+    temperatura_equipos = forms.CharField(max_length=50, required=False, label="Temp. equipos")
+    codigo_envases = forms.CharField(max_length=100, required=False, label="Cód. envases")
+    cantidad_pallets = forms.IntegerField(required=False, label="Cantidad pallets", min_value=0)
+    especie = forms.CharField(max_length=100, required=False, label="Especie")
+    variedad = forms.CharField(max_length=100, required=False, label="Variedad")
+    fecha_embalaje = forms.DateField(
+        required=False, label="Fecha embalaje",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    estiba = forms.CharField(max_length=100, required=False, label="Estiba")
+    tipo_inversion = forms.CharField(max_length=100, required=False, label="Tipo inversión")
+    # Promedios
+    temp_pulpa_ext_inicio = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Pulpa ext. inicio (°C)")
+    temp_pulpa_ext_termino = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Pulpa ext. término (°C)")
+    temp_pulpa_int_inicio = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Pulpa int. inicio (°C)")
+    temp_pulpa_int_termino = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Pulpa int. término (°C)")
+    temp_ambiente_inicio = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Ambiente inicio (°C)")
+    temp_ambiente_termino = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Ambiente término (°C)")
+    # Tiempos
+    tiempo_carga_inicio = forms.TimeField(
+        required=False, label="Carga inicio",
+        widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
+    )
+    tiempo_carga_termino = forms.TimeField(
+        required=False, label="Carga término",
+        widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
+    )
+    tiempo_descarga_inicio = forms.TimeField(
+        required=False, label="Descarga inicio",
+        widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
+    )
+    tiempo_descarga_termino = forms.TimeField(
+        required=False, label="Descarga término",
+        widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
+    )
+    tiempo_enfriado_inicio = forms.TimeField(
+        required=False, label="Enfriado inicio",
+        widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
+    )
+    tiempo_enfriado_termino = forms.TimeField(
+        required=False, label="Enfriado término",
+        widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
+    )
+    observaciones = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 2}),
+        required=False, label="Observaciones",
+    )
+    nombre_control = forms.CharField(max_length=100, required=False, label="Nombre control proceso")

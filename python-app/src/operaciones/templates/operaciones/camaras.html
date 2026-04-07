@@ -2,7 +2,7 @@
 
 {% block title %}Camaras Frio — CaliPro{% endblock %}
 {% block page_title %}Camaras de Frio{% endblock %}
-{% block page_subtitle %}Ingreso a camara y medicion de temperatura{% endblock %}
+{% block page_subtitle %}Ingreso a camara de frio{% endblock %}
 
 {% block page_body %}
 {% if messages %}
@@ -59,15 +59,14 @@
       </div>
     </div>
 
-    <div class="flex-row" style="gap:.5rem;margin-bottom:1rem">
-      <button type="button" class="btn btn-primary btn-sm" id="tab-btn-camara"
-              onclick="showTab('camara')">Ingreso Camara</button>
-      <button type="button" class="btn btn-ghost btn-sm" id="tab-btn-medicion"
-              onclick="showTab('medicion')">Medicion Temperatura</button>
+    <div style="margin-bottom:1rem;padding:.6rem .8rem;background:var(--bg-card);
+         border:1px solid var(--border);border-radius:6px;font-size:.82rem;color:var(--text-muted)">
+      El registro de temperatura de proceso (planilla cámaras) se gestiona en
+      <a href="{% url 'operaciones:control_camaras' %}">Control de Calidad → Control Cámaras</a>.
     </div>
 
     <!-- Ingreso camara frio -->
-    <div id="tab-camara" class="card">
+    <div class="card">
       <div class="card-title" style="margin-bottom:1rem">Ingreso a Camara de Frio</div>
       <form method="post">
         {% csrf_token %}
@@ -88,27 +87,6 @@
       </form>
     </div>
 
-    <!-- Medicion temperatura -->
-    <div id="tab-medicion" class="card" style="display:none">
-      <div class="card-title" style="margin-bottom:1rem">Medicion de Temperatura</div>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="medicion">
-        <input type="hidden" name="temporada" value="">
-        <input type="hidden" name="pallet_code" id="pallet-code-medicion" value="">
-        {% for field in form_medicion %}
-          <div class="form-group">
-            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-            {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
-          </div>
-        {% endfor %}
-        <div class="flex-row mt-4">
-          <button type="submit" class="btn btn-primary ml-auto">Registrar Medicion</button>
-        </div>
-      </form>
-    </div>
 
   </div>
 
@@ -131,19 +109,9 @@
 <script>
 const PALLETS_DATA = {{ pallets_data_json|safe }};
 
-function showTab(name) {
-  document.getElementById('tab-camara').style.display   = name === 'camara'   ? '' : 'none';
-  document.getElementById('tab-medicion').style.display = name === 'medicion' ? '' : 'none';
-  document.getElementById('tab-btn-camara').className =
-    name === 'camara' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
-  document.getElementById('tab-btn-medicion').className =
-    name === 'medicion' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
-}
-
 function setPalletCode(code) {
-  document.getElementById('pallet-code-camara').value   = code;
-  document.getElementById('pallet-code-medicion').value = code;
-  document.getElementById('pallet-code-input').value    = code;
+  document.getElementById('pallet-code-camara').value = code;
+  document.getElementById('pallet-code-input').value  = code;
 }
 
 function poblarContexto(code) {

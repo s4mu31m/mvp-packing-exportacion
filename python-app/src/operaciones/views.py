@@ -43,6 +43,10 @@ from operaciones.forms import (
     CalidadPalletMuestraForm,
     CamaraFrioForm,
     MedicionTemperaturaForm,
+    PlanillaDesverdizadoCalibreForm,
+    PlanillaDesverdizadoSemillasForm,
+    PlanillaCalidadPackingForm,
+    PlanillaCalidadCamaraForm,
 )
 from operaciones.application.use_cases import (
     iniciar_lote_recepcion,
@@ -58,6 +62,10 @@ from operaciones.application.use_cases import (
     registrar_camara_frio,
     registrar_medicion_temperatura,
     guardar_muestra_calidad_pallet,
+    registrar_planilla_desv_calibre,
+    registrar_planilla_desv_semillas,
+    registrar_planilla_calidad_packing,
+    registrar_planilla_calidad_camara,
 )
 from operaciones.models import (
     Lote,
@@ -1091,12 +1099,12 @@ class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
 
 
 # ---------------------------------------------------------------------------
-# Control proceso packing
+# Control proceso packing (parámetros máquina volcado/tina)
 # ---------------------------------------------------------------------------
 
-class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+class ControlProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
     roles_requeridos = ["Control"]
-    template_name = "operaciones/control.html"
+    template_name = "operaciones/control_proceso.html"
     login_url = reverse_lazy("usuarios:login")
 
     def get_context_data(self, **kwargs):
@@ -1161,7 +1169,332 @@ class ControlView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         }
         result = registrar_control_proceso_packing(payload)
         _handle_result(request, result)
-        return redirect("operaciones:control")
+        return redirect("operaciones:control_proceso")
+
+
+# ---------------------------------------------------------------------------
+# Control de Calidad — Índice
+# ---------------------------------------------------------------------------
+
+class ControlCalidadIndexView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Control"]
+    template_name = "operaciones/control_calidad_index.html"
+    login_url = reverse_lazy("usuarios:login")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["page_title"] = "Control de Calidad"
+        return ctx
+
+
+# ---------------------------------------------------------------------------
+# Control de Calidad — Desverdizado (Planilla 1: Calibres, Planilla 2: Semillas)
+# ---------------------------------------------------------------------------
+
+class ControlCalidadDesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Control"]
+    template_name = "operaciones/control_calidad_desverdizado.html"
+    login_url = reverse_lazy("usuarios:login")
+
+    def _get_lotes(self, request):
+        temporada = (
+            request.session.get("temporada_activa")
+            or str(datetime.date.today().year)
+        )
+        from django.conf import settings
+        backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
+        if backend == "dataverse":
+            try:
+                from infrastructure.repository_factory import get_repositories
+                repos = get_repositories()
+                todos = repos.lotes.list_recent(limit=200)
+                lotes = [l for l in todos if l.is_active][:50]
+            except Exception:
+                lotes = []
+            return lotes, backend, temporada
+        else:
+            lotes = list(
+                Lote.objects
+                .filter(temporada=temporada, is_active=True)
+                .order_by("-created_at")[:50]
+            )
+            return lotes, backend, temporada
+
+    def _build_lotes_data_json(self, lotes, backend, temporada) -> str:
+        """Construye JSON con datos del lote+bin para autocompletar los formularios."""
+        data = {}
+        if backend == "dataverse":
+            try:
+                from infrastructure.repository_factory import get_repositories
+                repos = get_repositories()
+                lote_ids = [l.id for l in lotes if l.id]
+                primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids) if lote_ids else {}
+            except Exception:
+                primer_bin_por_lote = {}
+            for lote in lotes:
+                b = primer_bin_por_lote.get(lote.id)
+                data[lote.lote_code] = {
+                    "productor": (b.codigo_productor if b else None) or getattr(lote, "codigo_productor", ""),
+                    "variedad":  b.variedad_fruta if b else "",
+                    "color":     b.color if b else "",
+                    "fecha_cosecha": str(b.fecha_cosecha) if b and b.fecha_cosecha else "",
+                    "trazabilidad": lote.lote_code,
+                    "cuartel": "",
+                    "sector":  "",
+                }
+        else:
+            from operaciones.models import BinLote
+            # Batch: prefetch bins para todos los lotes de una vez
+            lote_ids = [l.pk for l in lotes]
+            bins_qs = (
+                BinLote.objects
+                .filter(lote_id__in=lote_ids)
+                .select_related("bin", "lote")
+                .order_by("lote_id", "created_at")
+            )
+            primer_bin_map = {}
+            for bl in bins_qs:
+                if bl.lote_id not in primer_bin_map:
+                    primer_bin_map[bl.lote_id] = bl.bin
+            for lote in lotes:
+                b = primer_bin_map.get(lote.pk)
+                data[lote.lote_code] = {
+                    "productor": b.productor if b else "",
+                    "variedad":  b.variedad_fruta if b else "",
+                    "color":     b.color if b else "",
+                    "fecha_cosecha": str(b.fecha_cosecha) if b and b.fecha_cosecha else "",
+                    "trazabilidad": lote.lote_code,
+                    "cuartel": (b.nombre_cuartel or b.numero_cuartel) if b else "",
+                    "sector":  b.sector if b else "",
+                }
+        return json.dumps(data, ensure_ascii=False)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["page_title"] = "Control Calidad Desverdizado"
+        lotes, backend, temporada = self._get_lotes(self.request)
+        ctx["lotes_pendientes"] = lotes
+        ctx["lotes_data_json"] = self._build_lotes_data_json(lotes, backend, temporada)
+        ctx["supervisor_default"] = self.request.session.get("crf21_codigooperador", "")
+        ctx["form_calibres"] = PlanillaDesverdizadoCalibreForm()
+        ctx["form_semillas"] = PlanillaDesverdizadoSemillasForm()
+        ctx["calibres_nombres"] = ["1xx", "1x", "1", "2", "3", "4", "5", "Precalibre"]
+        ctx["grupos_calibre"] = [1, 2, 3]
+        ctx["grupos_semillas"] = [1, 2, 3, 4, 5]
+        ctx["frutas_range"] = list(range(1, 11))
+        ctx["defectos_nombres"] = [
+            ("oleocelosis", "Oleocelosis"),
+            ("heridas_abiertas", "Heridas abiertas"),
+            ("rugoso", "Rugoso"),
+            ("deforme", "Deforme"),
+            ("golpe_sol", "Golpe sol"),
+            ("verdes", "Verdes"),
+            ("pre_calibre", "Pre-calibre"),
+            ("palo_largo", "Palo largo"),
+        ]
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "calibres")
+        lote_code = request.POST.get("lote_code", "").strip()
+
+        if action == "calibres":
+            form = PlanillaDesverdizadoCalibreForm(request.POST)
+            if not form.is_valid():
+                messages.error(request, "Formulario de calibres inválido.")
+                ctx = self.get_context_data()
+                ctx["form_calibres"] = form
+                ctx["tab_activo"] = "calibres"
+                return render(request, self.template_name, ctx)
+            cd = form.cleaned_data
+            # Parse calibres grupos from dynamic POST fields (3 groups)
+            calibres_grupos = []
+            for g in range(1, 4):
+                calibres = {}
+                for cal in ["1xx", "1x", "1", "2", "3", "4", "5", "Precalibre"]:
+                    key = f"grupo_{g}_cal_{cal}"
+                    val = request.POST.get(key, "")
+                    try:
+                        calibres[cal] = int(val) if val else None
+                    except ValueError:
+                        calibres[cal] = None
+                calibres_grupos.append({
+                    "color": request.POST.get(f"grupo_{g}_color", ""),
+                    "calibres": calibres,
+                    "observacion": request.POST.get(f"grupo_{g}_obs", ""),
+                })
+            payload = {
+                "lote_code": lote_code,
+                "operator_code": request.session.get("crf21_codigooperador", ""),
+                "source_system": "web",
+                "extra": {
+                    **{k: (str(v) if isinstance(v, datetime.date) else v)
+                       for k, v in cd.items()},
+                    "calibres_grupos": calibres_grupos,
+                },
+            }
+            result = registrar_planilla_desv_calibre(payload)
+            _handle_result(request, result)
+            return redirect("operaciones:control_desverdizado")
+
+        elif action == "semillas":
+            form = PlanillaDesverdizadoSemillasForm(request.POST)
+            if not form.is_valid():
+                messages.error(request, "Formulario de semillas inválido.")
+                ctx = self.get_context_data()
+                ctx["form_semillas"] = form
+                ctx["tab_activo"] = "semillas"
+                return render(request, self.template_name, ctx)
+            cd = form.cleaned_data
+            # Parse 50 frutas: g{G}_f{N}_semillas (G=1-5, N=1-10)
+            frutas_data = []
+            n = 1
+            for g in range(1, 6):
+                for f in range(1, 11):
+                    val = request.POST.get(f"g{g}_f{f}_semillas", "")
+                    try:
+                        semillas = int(val) if val else 0
+                    except ValueError:
+                        semillas = 0
+                    frutas_data.append({"n_fruto": n, "n_semillas": semillas})
+                    n += 1
+            payload = {
+                "lote_code": lote_code,
+                "operator_code": request.session.get("crf21_codigooperador", ""),
+                "source_system": "web",
+                "extra": {
+                    **{k: (str(v) if isinstance(v, datetime.date) else v)
+                       for k, v in cd.items()},
+                    "frutas_data": frutas_data,
+                },
+            }
+            result = registrar_planilla_desv_semillas(payload)
+            _handle_result(request, result)
+            return redirect("operaciones:control_desverdizado")
+
+        messages.error(request, "Acción desconocida.")
+        return redirect("operaciones:control_desverdizado")
+
+
+# ---------------------------------------------------------------------------
+# Control de Calidad — Packing Cítricos
+# ---------------------------------------------------------------------------
+
+class ControlCalidadPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Control"]
+    template_name = "operaciones/control_calidad_packing.html"
+    login_url = reverse_lazy("usuarios:login")
+
+    def _get_pallets(self, request):
+        from django.conf import settings
+        backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
+        if backend == "dataverse":
+            try:
+                from infrastructure.repository_factory import get_repositories
+                repos = get_repositories()
+                pallets = repos.pallets.list_recent(limit=50)
+            except Exception:
+                pallets = []
+            return pallets
+        else:
+            return list(Pallet.objects.order_by("-created_at")[:50])
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["page_title"] = "Control Calidad Packing Cítricos"
+        ctx["pallets"] = self._get_pallets(self.request)
+        ctx["form"] = PlanillaCalidadPackingForm()
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        form = PlanillaCalidadPackingForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Formulario inválido.")
+            ctx = self.get_context_data()
+            ctx["form"] = form
+            return render(request, self.template_name, ctx)
+        cd = form.cleaned_data
+        pallet_id = request.POST.get("pallet_id", "").strip() or None
+        payload = {
+            "pallet_id": pallet_id,
+            "operator_code": request.session.get("crf21_codigooperador", ""),
+            "source_system": "web",
+            "extra": {
+                k: (str(v) if isinstance(v, datetime.date) else v)
+                for k, v in cd.items()
+            },
+        }
+        result = registrar_planilla_calidad_packing(payload)
+        _handle_result(request, result)
+        return redirect("operaciones:control_packing")
+
+
+# ---------------------------------------------------------------------------
+# Control de Calidad — Cámaras
+# ---------------------------------------------------------------------------
+
+class ControlCalidadCamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
+    roles_requeridos = ["Control"]
+    template_name = "operaciones/control_calidad_camaras.html"
+    login_url = reverse_lazy("usuarios:login")
+
+    def _get_pallets(self, request):
+        from django.conf import settings
+        backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
+        if backend == "dataverse":
+            try:
+                from infrastructure.repository_factory import get_repositories
+                repos = get_repositories()
+                pallets = repos.pallets.list_recent(limit=50)
+            except Exception:
+                pallets = []
+            return pallets
+        else:
+            return list(Pallet.objects.order_by("-created_at")[:50])
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["page_title"] = "Control Calidad Cámaras"
+        ctx["pallets"] = self._get_pallets(self.request)
+        ctx["form"] = PlanillaCalidadCamaraForm()
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        form = PlanillaCalidadCamaraForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Formulario inválido.")
+            ctx = self.get_context_data()
+            ctx["form"] = form
+            return render(request, self.template_name, ctx)
+        cd = form.cleaned_data
+        pallet_id = request.POST.get("pallet_id", "").strip() or None
+        # Parse dynamic hourly measurement rows: med_{i}_{campo}
+        mediciones = []
+        i = 0
+        while True:
+            hora = request.POST.get(f"med_{i}_hora", "")
+            if not hora:
+                break
+            fila = {"hora": hora}
+            for campo in ["ambiente", "pulpa_ext_entrada", "pulpa_ext_medio",
+                          "pulpa_ext_salida", "pulpa_int_entrada", "pulpa_int_media",
+                          "pulpa_int_salida"]:
+                fila[campo] = request.POST.get(f"med_{i}_{campo}", "") or None
+            mediciones.append(fila)
+            i += 1
+        payload = {
+            "pallet_id": pallet_id,
+            "operator_code": request.session.get("crf21_codigooperador", ""),
+            "source_system": "web",
+            "extra": {
+                **{k: (str(v) if isinstance(v, (datetime.date, datetime.time)) else v)
+                   for k, v in cd.items()},
+                "mediciones": mediciones,
+            },
+        }
+        result = registrar_planilla_calidad_camara(payload)
+        _handle_result(request, result)
+        return redirect("operaciones:control_camaras")
 
 
 # ---------------------------------------------------------------------------

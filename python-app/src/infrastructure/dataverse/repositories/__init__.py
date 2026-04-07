@@ -77,6 +77,14 @@ from domain.repositories.base import (
     CamaraFrioRepository,
     MedicionTemperaturaSalidaRecord,
     MedicionTemperaturaSalidaRepository,
+    PlanillaDesverdizadoCalibreRecord,
+    PlanillaDesverdizadoCalibreRepository,
+    PlanillaDesverdizadoSemillasRecord,
+    PlanillaDesverdizadoSemillasRepository,
+    PlanillaCalidadPackingRecord,
+    PlanillaCalidadPackingRepository,
+    PlanillaCalidadCamaraRecord,
+    PlanillaCalidadCamaraRepository,
 )
 from infrastructure.dataverse.mapping import (
     ENTITY_SET_BIN,
@@ -94,6 +102,10 @@ from infrastructure.dataverse.mapping import (
     ENTITY_SET_CALIDAD_PALLET_MUESTRA,
     ENTITY_SET_CAMARA_FRIO,
     ENTITY_SET_MEDICION_TEMPERATURA,
+    ENTITY_SET_PLANILLA_DESV_CALIBRE,
+    ENTITY_SET_PLANILLA_DESV_SEMILLAS,
+    ENTITY_SET_PLANILLA_CALIDAD_PACKING,
+    ENTITY_SET_PLANILLA_CALIDAD_CAMARA,
     AOR_DV,
     BIN_FIELDS,
     BIN_LOTE_FIELDS,
@@ -111,6 +123,10 @@ from infrastructure.dataverse.mapping import (
     CALIDAD_PALLET_MUESTRA_FIELDS,
     CAMARA_FRIO_FIELDS,
     MEDICION_TEMPERATURA_FIELDS,
+    PLANILLA_DESV_CALIBRE_FIELDS,
+    PLANILLA_DESV_SEMILLAS_FIELDS,
+    PLANILLA_CALIDAD_PACKING_FIELDS,
+    PLANILLA_CALIDAD_CAMARA_FIELDS,
     odata_bind,
 )
 
@@ -1885,6 +1901,409 @@ def resolve_etapa_lote(lote, repos=None) -> str:
 # Factory
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Dataverse repositories — Planillas de Control de Calidad
+# ---------------------------------------------------------------------------
+
+def _parse_int(value) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_json_parse(value) -> list:
+    """Deserializa JSON string a lista, con fallback a []."""
+    import json
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return []
+
+
+def _row_to_planilla_desv_calibre(row: dict, lote_id: Any = None) -> PlanillaDesverdizadoCalibreRecord:
+    import json
+    grupos_raw = row.get(PLANILLA_DESV_CALIBRE_FIELDS["calibres_grupos"]) or "[]"
+    return PlanillaDesverdizadoCalibreRecord(
+        id=row.get(PLANILLA_DESV_CALIBRE_FIELDS["id"]),
+        lote_id=lote_id or row.get(PLANILLA_DESV_CALIBRE_FIELDS["lote_id_value"]),
+        supervisor=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["supervisor"])),
+        productor=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["productor"])),
+        variedad=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["variedad"])),
+        trazabilidad=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["trazabilidad"])),
+        cod_sdp=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["cod_sdp"])),
+        fecha_cosecha=_parse_date(row.get(PLANILLA_DESV_CALIBRE_FIELDS["fecha_cosecha"])),
+        fecha_despacho=_parse_date(row.get(PLANILLA_DESV_CALIBRE_FIELDS["fecha_despacho"])),
+        cuartel=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["cuartel"])),
+        sector=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["sector"])),
+        oleocelosis=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["oleocelosis"])),
+        heridas_abiertas=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["heridas_abiertas"])),
+        rugoso=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["rugoso"])),
+        deforme=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["deforme"])),
+        golpe_sol=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["golpe_sol"])),
+        verdes=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["verdes"])),
+        pre_calibre_defecto=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["pre_calibre_defecto"])),
+        palo_largo=_parse_int(row.get(PLANILLA_DESV_CALIBRE_FIELDS["palo_largo"])),
+        calibres_grupos_json=grupos_raw if isinstance(grupos_raw, str) else json.dumps(grupos_raw),
+        observaciones=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["observaciones"])),
+        operator_code=_str(row.get(PLANILLA_DESV_CALIBRE_FIELDS["operator_code"])),
+        source_system="dataverse",
+    )
+
+
+def _row_to_planilla_desv_semillas(row: dict, lote_id: Any = None) -> PlanillaDesverdizadoSemillasRecord:
+    import json
+    frutas_raw = row.get(PLANILLA_DESV_SEMILLAS_FIELDS["frutas_data"]) or "[]"
+    return PlanillaDesverdizadoSemillasRecord(
+        id=row.get(PLANILLA_DESV_SEMILLAS_FIELDS["id"]),
+        lote_id=lote_id or row.get(PLANILLA_DESV_SEMILLAS_FIELDS["lote_id_value"]),
+        fecha=_parse_date(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["fecha"])),
+        supervisor=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["supervisor"])),
+        productor=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["productor"])),
+        variedad=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["variedad"])),
+        cuartel=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["cuartel"])),
+        sector=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["sector"])),
+        trazabilidad=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["trazabilidad"])),
+        cod_sdp=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["cod_sdp"])),
+        color=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["color"])),
+        frutas_data_json=frutas_raw if isinstance(frutas_raw, str) else json.dumps(frutas_raw),
+        total_frutos_muestra=_parse_int(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["total_frutos_muestra"])),
+        total_frutos_con_semillas=_parse_int(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["total_frutos_con_semillas"])),
+        total_semillas=_parse_int(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["total_semillas"])),
+        pct_frutos_con_semillas=_parse_decimal(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["pct_frutos_con_semillas"])),
+        promedio_semillas=_parse_decimal(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["promedio_semillas"])),
+        operator_code=_str(row.get(PLANILLA_DESV_SEMILLAS_FIELDS["operator_code"])),
+        source_system="dataverse",
+    )
+
+
+def _row_to_planilla_calidad_packing(row: dict, pallet_id: Any = None) -> PlanillaCalidadPackingRecord:
+    F = PLANILLA_CALIDAD_PACKING_FIELDS
+    return PlanillaCalidadPackingRecord(
+        id=row.get(F["id"]),
+        pallet_id=pallet_id or row.get(F["pallet_id_value"]),
+        productor=_str(row.get(F["productor"])),
+        trazabilidad=_str(row.get(F["trazabilidad"])),
+        cod_sdp=_str(row.get(F["cod_sdp"])),
+        cuartel=_str(row.get(F["cuartel"])),
+        sector=_str(row.get(F["sector"])),
+        nombre_control=_str(row.get(F["nombre_control"])),
+        n_cuadrilla=_str(row.get(F["n_cuadrilla"])),
+        supervisor=_str(row.get(F["supervisor"])),
+        fecha_despacho=_parse_date(row.get(F["fecha_despacho"])),
+        fecha_cosecha=_parse_date(row.get(F["fecha_cosecha"])),
+        numero_hoja=_parse_int(row.get(F["numero_hoja"])) or 1,
+        tipo_fruta=_str(row.get(F["tipo_fruta"])),
+        variedad=_str(row.get(F["variedad"])),
+        temperatura=_parse_decimal(row.get(F["temperatura"])),
+        humedad=_parse_decimal(row.get(F["humedad"])),
+        horas_cosecha=_str(row.get(F["horas_cosecha"])),
+        color=_str(row.get(F["color"])),
+        n_frutos_muestreados=_parse_int(row.get(F["n_frutos_muestreados"])),
+        brix=_parse_decimal(row.get(F["brix"])),
+        pre_calibre=_parse_int(row.get(F["pre_calibre"])),
+        sobre_calibre=_parse_int(row.get(F["sobre_calibre"])),
+        color_contrario_evaluado=_parse_int(row.get(F["color_contrario_evaluado"])),
+        cantidad_frutos=_parse_int(row.get(F["cantidad_frutos"])),
+        ausencia_roseta=_parse_int(row.get(F["ausencia_roseta"])),
+        deformes=_parse_int(row.get(F["deformes"])),
+        frutos_con_semilla=_parse_int(row.get(F["frutos_con_semilla"])),
+        n_semillas=_parse_int(row.get(F["n_semillas"])),
+        fumagina=_parse_int(row.get(F["fumagina"])),
+        h_cicatrizadas=_parse_int(row.get(F["h_cicatrizadas"])),
+        manchas=_parse_int(row.get(F["manchas"])),
+        peduculo_largo=_parse_int(row.get(F["peduculo_largo"])),
+        residuos=_parse_int(row.get(F["residuos"])),
+        rugosos=_parse_int(row.get(F["rugosos"])),
+        russet_leve_claros=_parse_int(row.get(F["russet_leve_claros"])),
+        russet_moderados_claros=_parse_int(row.get(F["russet_moderados_claros"])),
+        russet_severos_oscuros=_parse_int(row.get(F["russet_severos_oscuros"])),
+        creasing_leve=_parse_int(row.get(F["creasing_leve"])),
+        creasing_mod_sev=_parse_int(row.get(F["creasing_mod_sev"])),
+        dano_frio_granulados=_parse_int(row.get(F["dano_frio_granulados"])),
+        bufado=_parse_int(row.get(F["bufado"])),
+        deshidratacion_roseta=_parse_int(row.get(F["deshidratacion_roseta"])),
+        golpe_sol=_parse_int(row.get(F["golpe_sol"])),
+        h_abiertas_superior=_parse_int(row.get(F["h_abiertas_superior"])),
+        h_abiertas_inferior=_parse_int(row.get(F["h_abiertas_inferior"])),
+        acostillado=_parse_int(row.get(F["acostillado"])),
+        machucon=_parse_int(row.get(F["machucon"])),
+        blandos=_parse_int(row.get(F["blandos"])),
+        oleocelosis=_parse_int(row.get(F["oleocelosis"])),
+        ombligo_rasgado=_parse_int(row.get(F["ombligo_rasgado"])),
+        colapso_corteza=_parse_int(row.get(F["colapso_corteza"])),
+        pudricion=_parse_int(row.get(F["pudricion"])),
+        dano_arana_leve=_parse_int(row.get(F["dano_arana_leve"])),
+        dano_arana_moderado=_parse_int(row.get(F["dano_arana_moderado"])),
+        dano_arana_severo=_parse_int(row.get(F["dano_arana_severo"])),
+        dano_mecanico=_parse_int(row.get(F["dano_mecanico"])),
+        otros_condicion=_str(row.get(F["otros_condicion"])),
+        total_defectos_pct=_parse_decimal(row.get(F["total_defectos_pct"])),
+        operator_code=_str(row.get(F["operator_code"])),
+        source_system="dataverse",
+    )
+
+
+def _row_to_planilla_calidad_camara(row: dict, pallet_id: Any = None) -> PlanillaCalidadCamaraRecord:
+    import json
+    F = PLANILLA_CALIDAD_CAMARA_FIELDS
+    meds_raw = row.get(F["mediciones"]) or "[]"
+    return PlanillaCalidadCamaraRecord(
+        id=row.get(F["id"]),
+        pallet_id=pallet_id or row.get(F["pallet_id_value"]),
+        fecha_control=_parse_date(row.get(F["fecha_control"])),
+        tipo_proceso=_str(row.get(F["tipo_proceso"])),
+        zona_planta=_str(row.get(F["zona_planta"])),
+        tunel_camara=_str(row.get(F["tunel_camara"])),
+        capacidad_maxima=_str(row.get(F["capacidad_maxima"])),
+        temperatura_equipos=_str(row.get(F["temperatura_equipos"])),
+        codigo_envases=_str(row.get(F["codigo_envases"])),
+        cantidad_pallets=_parse_int(row.get(F["cantidad_pallets"])),
+        especie=_str(row.get(F["especie"])),
+        variedad=_str(row.get(F["variedad"])),
+        fecha_embalaje=_parse_date(row.get(F["fecha_embalaje"])),
+        estiba=_str(row.get(F["estiba"])),
+        tipo_inversion=_str(row.get(F["tipo_inversion"])),
+        mediciones_json=meds_raw if isinstance(meds_raw, str) else json.dumps(meds_raw),
+        temp_pulpa_ext_inicio=_parse_decimal(row.get(F["temp_pulpa_ext_inicio"])),
+        temp_pulpa_ext_termino=_parse_decimal(row.get(F["temp_pulpa_ext_termino"])),
+        temp_pulpa_int_inicio=_parse_decimal(row.get(F["temp_pulpa_int_inicio"])),
+        temp_pulpa_int_termino=_parse_decimal(row.get(F["temp_pulpa_int_termino"])),
+        temp_ambiente_inicio=_parse_decimal(row.get(F["temp_ambiente_inicio"])),
+        temp_ambiente_termino=_parse_decimal(row.get(F["temp_ambiente_termino"])),
+        tiempo_carga_inicio=_str(row.get(F["tiempo_carga_inicio"])),
+        tiempo_carga_termino=_str(row.get(F["tiempo_carga_termino"])),
+        tiempo_descarga_inicio=_str(row.get(F["tiempo_descarga_inicio"])),
+        tiempo_descarga_termino=_str(row.get(F["tiempo_descarga_termino"])),
+        tiempo_enfriado_inicio=_str(row.get(F["tiempo_enfriado_inicio"])),
+        tiempo_enfriado_termino=_str(row.get(F["tiempo_enfriado_termino"])),
+        observaciones=_str(row.get(F["observaciones"])),
+        nombre_control=_str(row.get(F["nombre_control"])),
+        operator_code=_str(row.get(F["operator_code"])),
+        source_system="dataverse",
+    )
+
+
+class DataversePlanillaDesverdizadoCalibreRepository(PlanillaDesverdizadoCalibreRepository):
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "dataverse", extra: Optional[dict] = None,
+               ) -> PlanillaDesverdizadoCalibreRecord:
+        import json
+        F = PLANILLA_DESV_CALIBRE_FIELDS
+        body: dict = {
+            f"{F['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            F["operator_code"]: operator_code,
+        }
+        _scalar_keys = [
+            "supervisor", "productor", "variedad", "trazabilidad", "cod_sdp",
+            "fecha_cosecha", "fecha_despacho", "cuartel", "sector",
+            "oleocelosis", "heridas_abiertas", "rugoso", "deforme", "golpe_sol",
+            "verdes", "pre_calibre_defecto", "palo_largo", "observaciones", "rol",
+        ]
+        for k in _scalar_keys:
+            v = (extra or {}).get(k)
+            if v not in (None, ""):
+                body[F[k]] = str(v) if isinstance(v, (type(None),)) else v
+        # JSON field
+        grupos = (extra or {}).get("calibres_grupos")
+        if grupos is not None:
+            body[F["calibres_grupos"]] = json.dumps(grupos, ensure_ascii=False) if not isinstance(grupos, str) else grupos
+        row = self._client.create_row(ENTITY_SET_PLANILLA_DESV_CALIBRE, body) or {}
+        return PlanillaDesverdizadoCalibreRecord(
+            id=row.get(F["id"]),
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_lote(self, lote_id: Any) -> list[PlanillaDesverdizadoCalibreRecord]:
+        F = PLANILLA_DESV_CALIBRE_FIELDS
+        filt = f"{F['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_PLANILLA_DESV_CALIBRE,
+            select=[F[k] for k in ("id", "supervisor", "productor", "variedad",
+                                   "fecha_cosecha", "fecha_despacho", "calibres_grupos",
+                                   "oleocelosis", "heridas_abiertas", "rugoso", "deforme",
+                                   "golpe_sol", "verdes", "observaciones", "operator_code")],
+            filter_expr=filt,
+            top=50,
+        )
+        return [_row_to_planilla_desv_calibre(r, lote_id) for r in (result or {}).get("value", [])]
+
+
+class DataversePlanillaDesverdizadoSemillasRepository(PlanillaDesverdizadoSemillasRepository):
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, lote_id: Any, *, operator_code: str = "",
+               source_system: str = "dataverse", extra: Optional[dict] = None,
+               ) -> PlanillaDesverdizadoSemillasRecord:
+        import json
+        F = PLANILLA_DESV_SEMILLAS_FIELDS
+        body: dict = {
+            f"{F['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
+            F["operator_code"]: operator_code,
+        }
+        _scalar_keys = [
+            "fecha", "supervisor", "productor", "variedad", "cuartel", "sector",
+            "trazabilidad", "cod_sdp", "color",
+            "total_frutos_muestra", "total_frutos_con_semillas", "total_semillas",
+            "pct_frutos_con_semillas", "promedio_semillas", "rol",
+        ]
+        for k in _scalar_keys:
+            v = (extra or {}).get(k)
+            if v not in (None, ""):
+                body[F[k]] = v
+        # JSON field
+        frutas = (extra or {}).get("frutas_data")
+        if frutas is not None:
+            body[F["frutas_data"]] = json.dumps(frutas, ensure_ascii=False) if not isinstance(frutas, str) else frutas
+        row = self._client.create_row(ENTITY_SET_PLANILLA_DESV_SEMILLAS, body) or {}
+        return PlanillaDesverdizadoSemillasRecord(
+            id=row.get(F["id"]),
+            lote_id=lote_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_lote(self, lote_id: Any) -> list[PlanillaDesverdizadoSemillasRecord]:
+        F = PLANILLA_DESV_SEMILLAS_FIELDS
+        filt = f"{F['lote_id_value']} eq {lote_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_PLANILLA_DESV_SEMILLAS,
+            select=[F[k] for k in ("id", "fecha", "variedad", "frutas_data",
+                                   "total_frutos_muestra", "total_semillas",
+                                   "pct_frutos_con_semillas", "operator_code")],
+            filter_expr=filt,
+            top=50,
+        )
+        return [_row_to_planilla_desv_semillas(r, lote_id) for r in (result or {}).get("value", [])]
+
+
+class DataversePlanillaCalidadPackingRepository(PlanillaCalidadPackingRepository):
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "dataverse", extra: Optional[dict] = None,
+               ) -> PlanillaCalidadPackingRecord:
+        F = PLANILLA_CALIDAD_PACKING_FIELDS
+        body: dict = {
+            f"{F['pallet_id']}@odata.bind": odata_bind(ENTITY_SET_PALLET, str(pallet_id)),
+            F["operator_code"]: operator_code,
+        }
+        _scalar_keys = [
+            "productor", "trazabilidad", "cod_sdp", "cuartel", "sector",
+            "nombre_control", "n_cuadrilla", "supervisor",
+            "fecha_despacho", "fecha_cosecha", "numero_hoja", "tipo_fruta", "variedad",
+            "temperatura", "humedad", "horas_cosecha", "color",
+            "n_frutos_muestreados", "brix", "pre_calibre", "sobre_calibre",
+            "color_contrario_evaluado", "cantidad_frutos", "ausencia_roseta", "deformes",
+            "frutos_con_semilla", "n_semillas", "fumagina", "h_cicatrizadas", "manchas",
+            "peduculo_largo", "residuos", "rugosos",
+            "russet_leve_claros", "russet_moderados_claros", "russet_severos_oscuros",
+            "creasing_leve", "creasing_mod_sev", "dano_frio_granulados", "bufado",
+            "deshidratacion_roseta", "golpe_sol", "h_abiertas_superior", "h_abiertas_inferior",
+            "acostillado", "machucon", "blandos", "oleocelosis", "ombligo_rasgado",
+            "colapso_corteza", "pudricion",
+            "dano_arana_leve", "dano_arana_moderado", "dano_arana_severo",
+            "dano_mecanico", "otros_condicion", "total_defectos_pct", "rol",
+        ]
+        for k in _scalar_keys:
+            v = (extra or {}).get(k)
+            if v not in (None, ""):
+                body[F[k]] = v
+        row = self._client.create_row(ENTITY_SET_PLANILLA_CALIDAD_PACKING, body) or {}
+        return PlanillaCalidadPackingRecord(
+            id=row.get(F["id"]),
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_pallet(self, pallet_id: Any) -> list[PlanillaCalidadPackingRecord]:
+        F = PLANILLA_CALIDAD_PACKING_FIELDS
+        filt = f"{F['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_PLANILLA_CALIDAD_PACKING,
+            select=[F[k] for k in ("id", "variedad", "numero_hoja", "brix",
+                                   "total_defectos_pct", "operator_code")],
+            filter_expr=filt,
+            top=50,
+        )
+        return [_row_to_planilla_calidad_packing(r, pallet_id) for r in (result or {}).get("value", [])]
+
+
+class DataversePlanillaCalidadCamaraRepository(PlanillaCalidadCamaraRepository):
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    def create(self, pallet_id: Any, *, operator_code: str = "",
+               source_system: str = "dataverse", extra: Optional[dict] = None,
+               ) -> PlanillaCalidadCamaraRecord:
+        import json
+        F = PLANILLA_CALIDAD_CAMARA_FIELDS
+        body: dict = {F["operator_code"]: operator_code}
+        if pallet_id:
+            body[f"{F['pallet_id']}@odata.bind"] = odata_bind(ENTITY_SET_PALLET, str(pallet_id))
+        _scalar_keys = [
+            "fecha_control", "tipo_proceso", "zona_planta", "tunel_camara",
+            "capacidad_maxima", "temperatura_equipos", "codigo_envases", "cantidad_pallets",
+            "especie", "variedad", "fecha_embalaje", "estiba", "tipo_inversion",
+            "temp_pulpa_ext_inicio", "temp_pulpa_ext_termino",
+            "temp_pulpa_int_inicio", "temp_pulpa_int_termino",
+            "temp_ambiente_inicio", "temp_ambiente_termino",
+            "tiempo_carga_inicio", "tiempo_carga_termino",
+            "tiempo_descarga_inicio", "tiempo_descarga_termino",
+            "tiempo_enfriado_inicio", "tiempo_enfriado_termino",
+            "observaciones", "nombre_control", "rol",
+        ]
+        for k in _scalar_keys:
+            v = (extra or {}).get(k)
+            if v not in (None, ""):
+                body[F[k]] = v
+        # JSON field
+        meds = (extra or {}).get("mediciones")
+        if meds is not None:
+            body[F["mediciones"]] = json.dumps(meds, ensure_ascii=False) if not isinstance(meds, str) else meds
+        row = self._client.create_row(ENTITY_SET_PLANILLA_CALIDAD_CAMARA, body) or {}
+        return PlanillaCalidadCamaraRecord(
+            id=row.get(F["id"]),
+            pallet_id=pallet_id,
+            operator_code=operator_code,
+            source_system=source_system,
+        )
+
+    def list_by_pallet(self, pallet_id: Any) -> list[PlanillaCalidadCamaraRecord]:
+        F = PLANILLA_CALIDAD_CAMARA_FIELDS
+        filt = f"{F['pallet_id_value']} eq {pallet_id}"
+        result = self._client.list_rows(
+            ENTITY_SET_PLANILLA_CALIDAD_CAMARA,
+            select=[F[k] for k in ("id", "fecha_control", "tunel_camara",
+                                   "mediciones", "nombre_control", "operator_code")],
+            filter_expr=filt,
+            top=50,
+        )
+        return [_row_to_planilla_calidad_camara(r, pallet_id) for r in (result or {}).get("value", [])]
+
+
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
 def build_dataverse_repositories() -> Repositories:
     from infrastructure.dataverse.client import DataverseClient
     client = DataverseClient()
@@ -1906,4 +2325,8 @@ def build_dataverse_repositories() -> Repositories:
         calidad_pallet_muestras=DataverseCalidadPalletMuestraRepository(client),
         camara_frios=DataverseCamaraFrioRepository(client),
         mediciones_temperatura=DataverseMedicionTemperaturaSalidaRepository(client),
+        planillas_desv_calibres=DataversePlanillaDesverdizadoCalibreRepository(client),
+        planillas_desv_semillas=DataversePlanillaDesverdizadoSemillasRepository(client),
+        planillas_calidad_packing=DataversePlanillaCalidadPackingRepository(client),
+        planillas_calidad_camara=DataversePlanillaCalidadCamaraRepository(client),
     )
