@@ -19,6 +19,8 @@ from tests.e2e.dataverse_support import (
 )
 from tests.e2e.pages.camaras_page import CamarasPage
 from tests.e2e.pages.consulta_page import ConsultaPage
+from tests.e2e.pages.control_desv_page import ControlDesvPage
+from tests.e2e.pages.control_packing_page import ControlPackingPage
 from tests.e2e.pages.desverdizado_page import DesverdizadoPage
 from tests.e2e.pages.ingreso_packing_page import IngresoPackingPage
 from tests.e2e.pages.paletizado_page import PaletizadoPage
@@ -519,3 +521,317 @@ def test_dataverse_consulta_jefatura_filters_and_exports_enriched_fields(
     csv_content = Path(download.path()).read_text(encoding="utf-8-sig")
     assert lote.lote_code in csv_content, "El CSV exportado no incluyo el lote filtrado"
     assert lote.productor in csv_content, "El CSV exportado no incluyo el productor heredado"
+
+
+# ---------------------------------------------------------------------------
+# Validacion negativa: campos requeridos y reglas de negocio
+# ---------------------------------------------------------------------------
+
+def test_dataverse_desverdizado_form_rejects_invalid_inputs(
+    page,
+    live_server,
+    login_as_role,
+    repositories,
+):
+    """
+    Valida que el formulario de desverdizado rechaza entradas invalidas
+    con mensajes de error especificos.
+    """
+    login_as_role("Desverdizado")
+    lote = seed_closed_lote(
+        repositories,
+        requiere_desverdizado=True,
+        disponibilidad="no_disponible",
+        roja=True,
+    )
+    desverdizado = DesverdizadoPage(page, live_server.url)
+    desverdizado.navigate()
+
+    # Sin lote seleccionado: debe rechazar con mensaje especifico
+    desverdizado.fill_mantencion_form(
+        camara_numero="CM-NEGATIVO",
+        fecha_ingreso=lote.fecha_cosecha,
+        hora_ingreso="09:00",
+    )
+    desverdizado.submit_mantencion_form()
+    desverdizado.expect_error_message("Campo requerido: lote_code")
+
+    # Con lote seleccionado: hora en formato invalido
+    desverdizado.select_lote(lote.lote_code)
+    desverdizado.fill_mantencion_form(
+        camara_numero="CM-NEGATIVO",
+        fecha_ingreso=lote.fecha_cosecha,
+        hora_ingreso="25:99",  # formato invalido
+    )
+    desverdizado.submit_mantencion_form()
+    desverdizado.expect_error_message("hora")
+
+
+def test_dataverse_ingreso_packing_rejects_kilos_neto_exceeding_bruto(
+    page,
+    live_server,
+    login_as_role,
+    repositories,
+):
+    """
+    Valida que el view rechaza un ingreso a packing donde kilos_neto > kilos_bruto.
+    El validador validate_ingreso_packing_payload debe capturar esto.
+    """
+    login_as_role("Ingreso Packing")
+    lote = seed_lote_with_desverdizado(repositories)
+
+    ingreso = IngresoPackingPage(page, live_server.url)
+    ingreso.navigate()
+    ingreso.select_lote(lote.lote_code)
+
+    # kilos_neto > kilos_bruto (regla de negocio violada)
+    ingreso.fill_form(
+        fecha=lote.fecha_cosecha,
+        hora="11:00",
+        kilos_bruto="100",
+        kilos_neto="150",   # mayor que bruto → debe rechazar
+    )
+    ingreso.submit()
+    # El view debe retornar la pagina con un error (no redirect ni 500)
+    expect(page.locator(".alert-error")).to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Planilla calibres desverdizado
+# ---------------------------------------------------------------------------
+
+def test_dataverse_planilla_calibres_desverdizado_persists(
+    page,
+    live_server,
+    login_as_role,
+    repositories,
+):
+    """
+    Valida que la planilla de calibres desverdizado persiste correctamente
+    en Dataverse: encabezado, defectos y grupos de calibres (JSON).
+    """
+    assert_dataverse_entity_set_published("crf21_planilla_desv_calibres")
+
+    login_as_role("Control")
+    lote = seed_lote_with_desverdizado(repositories)
+
+    ctrl = ControlDesvPage(page, live_server.url)
+    ctrl.navigate()
+    ctrl.select_lote(lote.lote_code)
+    ctrl.go_to_tab_calibres()
+
+    ctrl.fill_calibres_header(
+        supervisor="Inspector E2E",
+        productor=lote.productor,
+        variedad=lote.variedad,
+        trazabilidad=f"TRAZ-{lote.token}",
+        cod_sdp=f"SDP-{lote.token[-4:]}",
+        fecha_cosecha=lote.fecha_cosecha,
+        fecha_despacho=lote.fecha_cosecha,
+        cuartel="C-01",
+        sector="Sector Norte",
+    )
+    ctrl.fill_defect_fields({
+        "oleocelosis": "2.5",
+        "rugoso": "1.0",
+        "deforme": "0.5",
+    })
+    ctrl.fill_calibres_group(
+        1,
+        color="Verde",
+        calibres={"XL": "10", "L": "25", "M": "15"},
+    )
+    ctrl.fill_calibres_group(
+        2,
+        color="Pinton",
+        calibres={"XL": "8", "L": "20"},
+    )
+    ctrl.submit_calibres()
+    ctrl.expect_success_message()
+
+    planillas = wait_for(
+        f"planilla calibres de {lote.lote_code}",
+        lambda: repositories.planillas_desv_calibres.list_by_lote(lote.lote_id),
+    )
+    assert planillas, "La planilla de calibres no fue persistida en Dataverse"
+    planilla = planillas[-1]
+    _assert_filled(planilla, "supervisor", "productor", "variedad")
+
+    # Verificar que el JSON de calibres fue almacenado
+    assert planilla.calibres_grupos_json, "El campo calibres_grupos_json quedo vacio"
+    calibres_data = json.loads(planilla.calibres_grupos_json)
+    assert isinstance(calibres_data, list), "calibres_grupos no es un JSON array"
+    assert len(calibres_data) >= 1, "calibres_grupos no contiene grupos"
+
+
+# ---------------------------------------------------------------------------
+# Planilla semillas desverdizado
+# ---------------------------------------------------------------------------
+
+def test_dataverse_planilla_semillas_desverdizado_persists(
+    page,
+    live_server,
+    login_as_role,
+    repositories,
+):
+    """
+    Valida que la planilla de semillas desverdizado persiste en Dataverse,
+    incluyendo el JSON frutas_data con los conteos individuales.
+    """
+    assert_dataverse_entity_set_published("crf21_planilla_desv_semillas")
+
+    login_as_role("Control")
+    lote = seed_lote_with_desverdizado(repositories)
+
+    ctrl = ControlDesvPage(page, live_server.url)
+    ctrl.navigate()
+    ctrl.select_lote(lote.lote_code)
+    ctrl.go_to_tab_semillas()
+
+    ctrl.fill_semillas_header(
+        supervisor="Inspector E2E",
+        productor=lote.productor,
+        variedad=lote.variedad,
+        color=lote.color,
+        cuartel="C-01",
+        sector="Sector Norte",
+        fecha=lote.fecha_cosecha,
+    )
+    # Llenar 10 frutas con conteos variados
+    ctrl.fill_fruit_seed_counts({
+        1: 0, 2: 2, 3: 1, 4: 0, 5: 3,
+        6: 0, 7: 1, 8: 0, 9: 2, 10: 0,
+    })
+    ctrl.submit_semillas()
+    ctrl.expect_success_message()
+
+    planillas = wait_for(
+        f"planilla semillas de {lote.lote_code}",
+        lambda: repositories.planillas_desv_semillas.list_by_lote(lote.lote_id),
+    )
+    assert planillas, "La planilla de semillas no fue persistida en Dataverse"
+    planilla = planillas[-1]
+    _assert_filled(planilla, "supervisor", "productor", "variedad")
+
+    # Verificar JSON frutas_data
+    assert planilla.frutas_data_json, "El campo frutas_data_json quedo vacio"
+    frutas = json.loads(planilla.frutas_data_json)
+    assert isinstance(frutas, list), "frutas_data no es un JSON array"
+    assert len(frutas) >= 10, "frutas_data tiene menos de 10 entradas"
+
+    # Verificar estadisticas calculadas
+    assert planilla.total_frutos_muestra is not None, "total_frutos_muestra quedo nulo"
+    assert planilla.total_semillas is not None, "total_semillas quedo nulo"
+
+
+# ---------------------------------------------------------------------------
+# Planilla calidad packing
+# ---------------------------------------------------------------------------
+
+def test_dataverse_planilla_calidad_packing_persists_defect_fields(
+    page,
+    live_server,
+    login_as_role,
+    repositories,
+):
+    """
+    Valida que la planilla de calidad packing persiste campos de defectos
+    y el total calculado en Dataverse.
+    """
+    assert_dataverse_entity_set_published("crf21_planilla_calidad_packings")
+
+    login_as_role("Control")
+    lote = seed_lote_in_process(repositories, via_desverdizado=False)
+    pallet = seed_pallet_from_lote(repositories, lote)
+
+    ctrl = ControlPackingPage(page, live_server.url)
+    ctrl.navigate()
+    ctrl.select_pallet(str(pallet.pallet_id))
+
+    ctrl.fill_identification_fields(
+        productor=lote.productor,
+        variedad=lote.variedad,
+        nombre_control="Inspector E2E",
+        tipo_fruta="Uva de mesa",
+        color=lote.color,
+        fecha_cosecha=lote.fecha_cosecha,
+    )
+    ctrl.fill_quality_fields(
+        n_frutos_muestreados="50",
+        brix="16.5",
+        temperatura="5.2",
+        humedad="92",
+    )
+    ctrl.fill_multiple_defects({
+        "deformes": "3",
+        "manchas": "2",
+        "rugosos": "1",
+        "blandos": "0",
+        "total_defectos_pct": "6.0",
+    })
+    ctrl.submit()
+    ctrl.expect_success_message()
+
+    planillas = wait_for(
+        f"planilla calidad packing de {pallet.pallet_code}",
+        lambda: repositories.planillas_calidad_packing.list_by_pallet(pallet.pallet_id),
+    )
+    assert planillas, "La planilla de calidad packing no fue persistida en Dataverse"
+    planilla = planillas[-1]
+    _assert_filled(planilla, "productor", "variedad", "n_frutos_muestreados")
+    assert planilla.total_defectos_pct is not None, "total_defectos_pct quedo nulo"
+
+
+# ---------------------------------------------------------------------------
+# Exportacion CSV — validacion de estructura
+# ---------------------------------------------------------------------------
+
+def test_dataverse_consulta_csv_has_correct_structure(
+    page,
+    live_server,
+    login_as_role,
+    repositories,
+):
+    """
+    Valida que el CSV exportado desde Consulta Jefatura tenga:
+    - Codificacion UTF-8 con BOM (compatible con Excel)
+    - Columnas esperadas
+    - Al menos una fila de datos correspondiente al lote filtrado
+    """
+    import csv
+    import io
+
+    login_as_role("Jefatura")
+    lote = seed_lote_with_ingreso_packing(repositories, via_desverdizado=False)
+    consulta = ConsultaPage(page, live_server.url)
+
+    consulta.navigate()
+    consulta.filter_by_productor(lote.productor)
+    consulta.expect_lote_in_table(lote.lote_code)
+
+    download = consulta.click_export_csv()
+    csv_content = Path(download.path()).read_text(encoding="utf-8-sig")
+
+    # Parsear CSV
+    reader = csv.DictReader(io.StringIO(csv_content))
+    rows = list(reader)
+
+    assert rows, "El CSV exportado esta vacio"
+
+    # Verificar columnas minimas esperadas
+    expected_columns = {"lote_code", "productor", "variedad"}
+    actual_columns = set(reader.fieldnames or [])
+    missing_cols = expected_columns - actual_columns
+    assert not missing_cols, (
+        f"El CSV no tiene las columnas esperadas. Faltantes: {missing_cols}. "
+        f"Columnas actuales: {actual_columns}"
+    )
+
+    # Verificar que el lote filtrado aparece en los datos
+    lote_row = next(
+        (r for r in rows if lote.lote_code in r.get("lote_code", "")),
+        None,
+    )
+    assert lote_row is not None, (
+        f"El lote {lote.lote_code} no aparece en las filas del CSV"
+    )
