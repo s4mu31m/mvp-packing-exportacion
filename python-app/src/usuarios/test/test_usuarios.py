@@ -33,30 +33,9 @@ from usuarios.permissions import (
     get_roles, is_admin, is_jefatura, has_role, puede_acceder_modulo,
     parsear_roles, normalizar_roles, SESSION_KEY_ROL,
 )
+from usuarios.test.helpers import make_profile  # fuente única de verdad
 
 User = get_user_model()
-
-
-# ---------------------------------------------------------------------------
-# Helpers de fixture
-# ---------------------------------------------------------------------------
-
-def make_profile(usernamelogin="operador1", rol="Recepcion", activo=True, bloqueado=False,
-                 password="testpass123", nombrecompleto="Operador Uno") -> UsuarioProfile:
-    """Crea un UsuarioProfile en SQLite para tests."""
-    # Necesita un codigooperador único
-    prefix = "ADM" if "Administrador" in rol else ("JEF" if "Jefatura" in rol else "OPE")
-    count = UsuarioProfile.objects.filter(codigooperador__startswith=prefix + "-").count()
-    return UsuarioProfile.objects.create(
-        usernamelogin=usernamelogin,
-        nombrecompleto=nombrecompleto,
-        correo=f"{usernamelogin}@test.com",
-        passwordhash=make_password(password),
-        rol=rol,
-        activo=activo,
-        bloqueado=bloqueado,
-        codigooperador=f"{prefix}-{count + 1:03d}",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -374,18 +353,18 @@ class VistaGestionUsuariosTests(TestCase):
             "correo": "nuevo@test.com",
             "password": "newpass123",
             "password_confirm": "newpass123",
-            "roles": ["Recepcion", "Pesaje"],
+            "roles": ["Recepcion", "Desverdizado"],  # "Pesaje" no existe en ROLES_CHOICES
             "activo": "true",
         })
         self.assertRedirects(resp, reverse("usuarios:gestion_usuarios"))
         from usuarios.models import UsuarioProfile
         perfil = UsuarioProfile.objects.get(usernamelogin="nuevo_ope")
         self.assertIn("Recepcion", perfil.rol)
-        self.assertIn("Pesaje", perfil.rol)
+        self.assertIn("Desverdizado", perfil.rol)
         # Roles deben estar separados por coma
         roles_list = [r.strip() for r in perfil.rol.split(",")]
         self.assertIn("Recepcion", roles_list)
-        self.assertIn("Pesaje", roles_list)
+        self.assertIn("Desverdizado", roles_list)
 
 
 # ---------------------------------------------------------------------------

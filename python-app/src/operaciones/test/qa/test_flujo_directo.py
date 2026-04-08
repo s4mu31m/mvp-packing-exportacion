@@ -197,7 +197,7 @@ class FlujoDirectoE2ETest(TestCase):
         lote_code = self._setup_lote_con_ingreso_packing()
 
         resp = self._c("control").post(
-            reverse("operaciones:control"),
+            reverse("operaciones:control_proceso"),  # índice no acepta POST
             build_control_payload(lote_code),
         )
         self.assertIn(resp.status_code, [200, 302],

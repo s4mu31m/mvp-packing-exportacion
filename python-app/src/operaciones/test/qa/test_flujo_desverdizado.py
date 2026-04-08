@@ -231,7 +231,7 @@ class FlujoConDesverdizadoE2ETest(TestCase):
         self.assertIn(resp_proc.status_code, [200, 302])
 
         resp_ctrl = self._c("control").post(
-            reverse("operaciones:control"),
+            reverse("operaciones:control_proceso"),  # índice no acepta POST
             build_control_payload(lote_code),
         )
         self.assertIn(resp_ctrl.status_code, [200, 302])

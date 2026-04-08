@@ -155,13 +155,15 @@ class ContextoLotesEnVistaTest(TestCase):
         )
 
     def test_lote_aparece_en_contexto_control(self):
-        resp = self.client_ctrl.get(reverse("operaciones:control"))
+        # La vista de índice /control/ no tiene lotes_pendientes — esa info
+        # está en /control/proceso/ (ControlProcesoView)
+        resp = self.client_ctrl.get(reverse("operaciones:control_proceso"))
         self.assertEqual(resp.status_code, 200)
         lotes = resp.context.get("lotes_pendientes", [])
         lote_codes = [getattr(l, "lote_code", None) for l in lotes]
         self.assertIn(
             self.lote_code, lote_codes,
-            msg=f"Lote {self.lote_code} no aparece en lotes_pendientes de /control/",
+            msg=f"Lote {self.lote_code} no aparece en lotes_pendientes de /control/proceso/",
         )
 
     def test_lote_data_json_en_html(self):

@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.local"
+pythonpath = ["src", "."]
+markers = [
+    "e2e: end-to-end browser tests (require live server and playwright)",
+]

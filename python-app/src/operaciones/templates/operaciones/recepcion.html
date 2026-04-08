@@ -233,3 +233,8 @@
 {% include "operaciones/includes/op_common_js.html" %}
 
 {% endblock %}
+
+{% block extra_js %}
+{# scan.js: lector de código de barras USB y simulación para E2E testing #}
+<script src="{% static 'js/scan.js' %}"></script>
+{% endblock %}
