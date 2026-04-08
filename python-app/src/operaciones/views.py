@@ -82,6 +82,22 @@ def _temporada(request) -> str:
     )
 
 
+def _serialize_form_value(value):
+    """
+    Normaliza cleaned_data para payloads de vistas web.
+
+    Los TimeField de Django salen como HH:mm:ss, pero los validadores de la
+    aplicacion esperan HH:mm.
+    """
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, datetime.time):
+        return value.strftime("%H:%M")
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    return value
+
+
 def _etapa_lote(lote: Lote) -> str:
     """
     Determina la etapa actual de un lote revisando qué registros existen.
@@ -428,13 +444,13 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "lote_code": lote_code,
             "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
-            "fecha_cosecha": str(cd["fecha_cosecha"]) if cd.get("fecha_cosecha") else None,
+            "fecha_cosecha": _serialize_form_value(cd["fecha_cosecha"]) if cd.get("fecha_cosecha") else None,
             "variedad_fruta": cd.get("variedad_fruta") or "",
             "codigo_productor": cd.get("codigo_productor") or "",
             "tipo_cultivo": cd.get("tipo_cultivo") or "",
             "numero_cuartel": cd.get("numero_cuartel") or "",
             "color": cd.get("color") or "",
-            "hora_recepcion": str(cd["hora_recepcion"]) if cd.get("hora_recepcion") else "",
+            "hora_recepcion": _serialize_form_value(cd["hora_recepcion"]) if cd.get("hora_recepcion") else "",
             "kilos_bruto_ingreso": float(cd["kilos_bruto_ingreso"]) if cd.get("kilos_bruto_ingreso") else None,
             "kilos_neto_ingreso": float(cd["kilos_neto_ingreso"]) if cd.get("kilos_neto_ingreso") else None,
             "a_o_r": cd.get("a_o_r") or None,
@@ -449,7 +465,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 if not current.get(campo) and cd.get(campo):
                     current[campo] = cd[campo]
             if not current.get("fecha_cosecha") and cd.get("fecha_cosecha"):
-                current["fecha_cosecha"] = str(cd["fecha_cosecha"])
+                current["fecha_cosecha"] = _serialize_form_value(cd["fecha_cosecha"])
             request.session["lote_activo_campos_base"] = current
             messages.success(
                 request,
@@ -591,8 +607,8 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "source_system": "web",
                     "extra": {
                         "camara_numero": cd.get("camara_numero"),
-                        "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                        "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
+                        "fecha_ingreso": _serialize_form_value(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
+                        "hora_ingreso": _serialize_form_value(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                         "temperatura_camara": float(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
                         "humedad_relativa": float(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
                         "observaciones": cd.get("observaciones"),
@@ -613,8 +629,8 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
-                        "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                        "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
+                        "fecha_ingreso": _serialize_form_value(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
+                        "hora_ingreso": _serialize_form_value(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                         "color_salida": cd.get("color") or "",
                         "horas_desverdizado": cd.get("horas_desverdizado"),
                         "kilos_enviados_terreno": float(cd["kilos_enviados_terreno"]) if cd.get("kilos_enviados_terreno") else None,
@@ -808,6 +824,8 @@ def _lotes_json_from_records(lotes, repos=None) -> str:
 
     data = {}
     for lote in lotes:
+        if lote.lote_code in data:
+            continue
         via_desv = (
             lote.etapa_actual in ("Desverdizado", "Mantencion")
             if lote.etapa_actual else False
@@ -821,6 +839,7 @@ def _lotes_json_from_records(lotes, repos=None) -> str:
             "kilos_neto": float(lote.kilos_neto_conformacion) if lote.kilos_neto_conformacion else None,
             "via_desverdizado": via_desv,
             "requiere_desverdizado": lote.requiere_desverdizado,
+            "disponibilidad_camara": lote.disponibilidad_camara_desverdizado,
             "productor": (primer_bin.codigo_productor if primer_bin else None) or getattr(lote, "codigo_productor", ""),
             "variedad": primer_bin.variedad_fruta if primer_bin else "",
             "color": primer_bin.color if primer_bin else "",
@@ -830,14 +849,16 @@ def _lotes_json_from_records(lotes, repos=None) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
-def _pallets_json_from_records(pallets) -> str:
+def _build_pallet_context_map_from_records(pallets, repos=None) -> dict:
     """
-    Serializa PalletRecord objects como JSON para autocomplete del template.
-    Usado en modo Dataverse. Los campos de lote/bin se devuelven vacios.
+    Enriquecer pallets Dataverse con el lote asociado y su primer bin.
+
+    La relacion pallet->lote no se expande en list_recent(), por lo que aquí
+    resolvemos pallet_lote y luego reutilizamos first_bin_by_lotes() para traer
+    el contexto heredado visible en UI.
     """
-    data = {}
-    for p in pallets:
-        data[p.pallet_code] = {
+    data = {
+        p.pallet_code: {
             "pallet_code": p.pallet_code,
             "lote_code": "",
             "tipo_caja": p.tipo_caja or "",
@@ -848,7 +869,66 @@ def _pallets_json_from_records(pallets) -> str:
             "color": "",
             "fecha_cosecha": "",
         }
-    return json.dumps(data, ensure_ascii=False)
+        for p in pallets
+    }
+    if repos is None or not pallets:
+        return data
+
+    ordered_codes: list[str] = []
+    deduped_pallets = []
+    for pallet in pallets:
+        if pallet.pallet_code in data and pallet.pallet_code in ordered_codes:
+            continue
+        ordered_codes.append(pallet.pallet_code)
+        deduped_pallets.append(pallet)
+
+    data = {p.pallet_code: data[p.pallet_code] for p in deduped_pallets}
+    pallets = deduped_pallets
+
+    pallet_to_lote: dict = {}
+    lote_ids: list = []
+    for pallet in pallets:
+        try:
+            pl = repos.pallet_lotes.find_by_pallet(pallet.id)
+        except Exception:
+            pl = None
+        if pl and pl.lote_id:
+            pallet_to_lote[pallet.id] = pl.lote_id
+            if pl.lote_id not in lote_ids:
+                lote_ids.append(pl.lote_id)
+
+    lotes_by_id = {}
+    for lote_id in lote_ids:
+        try:
+            lote = repos.lotes.find_by_id(lote_id)
+        except Exception:
+            lote = None
+        if lote:
+            lotes_by_id[lote_id] = lote
+
+    try:
+        primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids) if lote_ids else {}
+    except Exception:
+        primer_bin_por_lote = {}
+
+    for pallet in pallets:
+        lote_id = pallet_to_lote.get(pallet.id)
+        lote = lotes_by_id.get(lote_id)
+        primer_bin = primer_bin_por_lote.get(lote_id) if lote_id else None
+        data[pallet.pallet_code].update({
+            "lote_code": lote.lote_code if lote else "",
+            "productor": (primer_bin.codigo_productor if primer_bin else None) or (getattr(lote, "codigo_productor", "") if lote else ""),
+            "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
+            "variedad": primer_bin.variedad_fruta if primer_bin else "",
+            "color": primer_bin.color if primer_bin else "",
+            "fecha_cosecha": str(primer_bin.fecha_cosecha) if primer_bin and primer_bin.fecha_cosecha else "",
+        })
+    return data
+
+
+def _pallets_json_from_records(pallets, repos=None) -> str:
+    """Serializa PalletRecord objects como JSON para autocomplete del template."""
+    return json.dumps(_build_pallet_context_map_from_records(pallets, repos), ensure_ascii=False)
 
 
 def _campos_base_lote(lote: Lote) -> dict:
@@ -917,17 +997,7 @@ def _pallet_info(temporada: str, pallet_code: str) -> dict:
             pallet = repos.pallets.find_by_code(temporada, pallet_code)
             if not pallet:
                 return {}
-            return {
-                "pallet_code": pallet.pallet_code,
-                "lote_code":   "",
-                "tipo_caja":   pallet.tipo_caja or "",
-                "peso_total":  float(pallet.peso_total_kg) if pallet.peso_total_kg else None,
-                "productor":   "",
-                "tipo_cultivo": "",
-                "variedad":    "",
-                "color":       "",
-                "fecha_cosecha": "",
-            }
+            return _build_pallet_context_map_from_records([pallet], repos).get(pallet_code, {})
         except Exception:
             return {}
     try:
@@ -1002,8 +1072,8 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "source_system": "web",
             "via_desverdizado": cd.get("via_desverdizado") or info.get("via_desverdizado", False),
             "extra": {
-                "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
+                "fecha_ingreso": _serialize_form_value(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
+                "hora_ingreso": _serialize_form_value(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                 "kilos_bruto_ingreso_packing": float(cd["kilos_bruto_ingreso_packing"]) if cd.get("kilos_bruto_ingreso_packing") else None,
                 "kilos_neto_ingreso_packing": float(cd["kilos_neto_ingreso_packing"]) if cd.get("kilos_neto_ingreso_packing") else None,
                 "observaciones": cd.get("observaciones"),
@@ -1083,8 +1153,8 @@ class ProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "extra": {
-                "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                "hora_inicio": str(cd["hora_inicio"]) if cd.get("hora_inicio") else None,
+                "fecha": _serialize_form_value(cd["fecha"]) if cd.get("fecha") else None,
+                "hora_inicio": _serialize_form_value(cd["hora_inicio"]) if cd.get("hora_inicio") else None,
                 "linea_proceso": cd.get("linea_proceso"),
                 "categoria_calidad": cd.get("categoria_calidad"),
                 "calibre": cd.get("calibre"),
@@ -1157,8 +1227,8 @@ class ControlProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "extra": {
-                "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                "hora": str(cd["hora"]) if cd.get("hora") else None,
+                "fecha": _serialize_form_value(cd["fecha"]) if cd.get("fecha") else None,
+                "hora": _serialize_form_value(cd["hora"]) if cd.get("hora") else None,
                 "n_bins_procesados": cd.get("n_bins_procesados"),
                 "temp_agua_tina": float(cd["temp_agua_tina"]) if cd.get("temp_agua_tina") else None,
                 "ph_agua": float(cd["ph_agua"]) if cd.get("ph_agua") else None,
@@ -1328,7 +1398,7 @@ class ControlCalidadDesverdizadoView(LoginRequiredMixin, RolRequiredMixin, Templ
                 "operator_code": request.session.get("crf21_codigooperador", ""),
                 "source_system": "web",
                 "extra": {
-                    **{k: (str(v) if isinstance(v, datetime.date) else v)
+                    **{k: _serialize_form_value(v)
                        for k, v in cd.items()},
                     "calibres_grupos": calibres_grupos,
                 },
@@ -1363,7 +1433,7 @@ class ControlCalidadDesverdizadoView(LoginRequiredMixin, RolRequiredMixin, Templ
                 "operator_code": request.session.get("crf21_codigooperador", ""),
                 "source_system": "web",
                 "extra": {
-                    **{k: (str(v) if isinstance(v, datetime.date) else v)
+                    **{k: _serialize_form_value(v)
                        for k, v in cd.items()},
                     "frutas_data": frutas_data,
                 },
@@ -1420,7 +1490,7 @@ class ControlCalidadPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateVi
             "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "extra": {
-                k: (str(v) if isinstance(v, datetime.date) else v)
+                k: _serialize_form_value(v)
                 for k, v in cd.items()
             },
         }
@@ -1487,7 +1557,7 @@ class ControlCalidadCamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateVi
             "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "extra": {
-                **{k: (str(v) if isinstance(v, (datetime.date, datetime.time)) else v)
+                **{k: _serialize_form_value(v)
                    for k, v in cd.items()},
                 "mediciones": mediciones,
             },
@@ -1519,7 +1589,8 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         ctx["pallets_pendientes"] = pallets
         from django.conf import settings
         if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
-            ctx["pallets_data_json"] = _pallets_json_from_records(pallets)
+            from infrastructure.repository_factory import get_repositories
+            ctx["pallets_data_json"] = _pallets_json_from_records(pallets, get_repositories())
         else:
             ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
@@ -1558,8 +1629,8 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 "source_system": "web",
                 "extra": {
                     "numero_muestra":    i,
-                    "temperatura_fruta": temp or None,
-                    "peso_caja_muestra": peso or None,
+                    "temperatura_fruta": float(temp) if temp else None,
+                    "peso_caja_muestra": float(peso) if peso else None,
                     "n_frutos":          int(n_frutos) if n_frutos else None,
                     "aprobado":          aprobado,
                     "observaciones":     obs,
@@ -1590,8 +1661,8 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
-                        "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                        "hora": str(cd["hora"]) if cd.get("hora") else None,
+                        "fecha": _serialize_form_value(cd["fecha"]) if cd.get("fecha") else None,
+                        "hora": _serialize_form_value(cd["hora"]) if cd.get("hora") else None,
                         "temperatura_fruta": float(cd["temperatura_fruta"]) if cd.get("temperatura_fruta") else None,
                         "peso_caja_muestra": float(cd["peso_caja_muestra"]) if cd.get("peso_caja_muestra") else None,
                         "estado_visual_fruta": cd.get("estado_visual_fruta"),
@@ -1658,7 +1729,8 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         ctx["pallets_pendientes"] = pallets
         from django.conf import settings
         if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
-            ctx["pallets_data_json"] = _pallets_json_from_records(pallets)
+            from infrastructure.repository_factory import get_repositories
+            ctx["pallets_data_json"] = _pallets_json_from_records(pallets, get_repositories())
         else:
             ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
@@ -1681,8 +1753,8 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                         "camara_numero": cd.get("camara_numero"),
                         "temperatura_camara": float(cd["temperatura_camara"]) if cd.get("temperatura_camara") else None,
                         "humedad_relativa": float(cd["humedad_relativa"]) if cd.get("humedad_relativa") else None,
-                        "fecha_ingreso": str(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
-                        "hora_ingreso": str(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
+                        "fecha_ingreso": _serialize_form_value(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
+                        "hora_ingreso": _serialize_form_value(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
                         "destino_despacho": cd.get("destino_despacho"),
                     },
                 }
@@ -1701,8 +1773,8 @@ class CamarasView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
                     "extra": {
-                        "fecha": str(cd["fecha"]) if cd.get("fecha") else None,
-                        "hora": str(cd["hora"]) if cd.get("hora") else None,
+                        "fecha": _serialize_form_value(cd["fecha"]) if cd.get("fecha") else None,
+                        "hora": _serialize_form_value(cd["hora"]) if cd.get("hora") else None,
                         "temperatura_pallet": float(cd["temperatura_pallet"]) if cd.get("temperatura_pallet") else None,
                         "punto_medicion": cd.get("punto_medicion"),
                         "dentro_rango": cd.get("dentro_rango"),
@@ -1796,6 +1868,8 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
         from infrastructure.dataverse.repositories import resolve_etapa_lote
         repos = get_repositories()
         lotes = repos.lotes.list_recent(limit=500)
+        lote_ids = [l.id for l in lotes if l.id]
+        primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids) if lote_ids else {}
         resultado = []
         for lote in lotes:
             etapa = resolve_etapa_lote(lote)
@@ -1803,7 +1877,8 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
                 continue
             if filtro_estado == "cerrado" and etapa == "Recepcion":
                 continue
-            productor = lote.codigo_productor or ""
+            primer_bin = primer_bin_por_lote.get(lote.id)
+            productor = (primer_bin.codigo_productor if primer_bin else None) or lote.codigo_productor or ""
             if filtro_productor and filtro_productor.lower() not in productor.lower():
                 continue
             resultado.append({
@@ -1815,8 +1890,8 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
                 "cantidad_bins": lote.cantidad_bins,
                 "kilos_neto": lote.kilos_neto_conformacion,
                 "productor": productor,
-                "variedad": "",
-                "tipo_cultivo": "",
+                "variedad": primer_bin.variedad_fruta if primer_bin else "",
+                "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
                 "fecha": lote.fecha_conformacion,
             })
         return resultado

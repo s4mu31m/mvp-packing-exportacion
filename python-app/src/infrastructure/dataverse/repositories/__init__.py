@@ -180,7 +180,12 @@ def _row_to_bin(row: dict) -> BinRecord:
         source_event_id=_str(row.get(BIN_FIELDS["source_event_id"])),
         is_active=row.get("statecode", 0) == 0,
         id_bin=_str(row.get(BIN_FIELDS["id_bin"])),
+        nombre_productor=_str(row.get(BIN_FIELDS["nombre_productor"])),
+        tipo_cultivo=_str(row.get(BIN_FIELDS["tipo_cultivo"])),
         variedad_fruta=_str(row.get(BIN_FIELDS["variedad_fruta"])),
+        numero_cuartel=_str(row.get(BIN_FIELDS["numero_cuartel"])),
+        nombre_cuartel=_str(row.get(BIN_FIELDS["nombre_cuartel"])),
+        sector=_str(row.get(BIN_FIELDS["sector"])),
         kilos_bruto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_bruto_ingreso"])),
         kilos_neto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_neto_ingreso"])),
         codigo_productor=_str(row.get(BIN_FIELDS["codigo_productor"])),
@@ -366,11 +371,12 @@ def _row_to_calidad_pallet(row: dict, pallet_id: Any = None) -> CalidadPalletRec
 
 
 def _row_to_calidad_pallet_muestra(row: dict, pallet_id: Any = None) -> CalidadPalletMuestraRecord:
+    raw_numero = row.get(CALIDAD_PALLET_MUESTRA_FIELDS["numero_muestra"])
     raw_n = row.get(CALIDAD_PALLET_MUESTRA_FIELDS["n_frutos"])
     return CalidadPalletMuestraRecord(
         id=row.get(CALIDAD_PALLET_MUESTRA_FIELDS["id"]),
         pallet_id=pallet_id or row.get(CALIDAD_PALLET_MUESTRA_FIELDS["pallet_id_value"]),
-        numero_muestra=int(raw_n) if raw_n is not None else None,
+        numero_muestra=int(raw_numero) if raw_numero is not None else None,
         temperatura_fruta=_parse_decimal(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["temperatura_fruta"])),
         peso_caja_muestra=_parse_decimal(row.get(CALIDAD_PALLET_MUESTRA_FIELDS["peso_caja_muestra"])),
         n_frutos=int(raw_n) if raw_n is not None else None,
@@ -422,8 +428,10 @@ def _row_to_medicion_temperatura(row: dict, pallet_id: Any = None) -> MedicionTe
 
 _BIN_SELECT = [BIN_FIELDS[k] for k in (
     "id", "id_bin", "bin_code", "operator_code", "source_system",
-    "source_event_id", "variedad_fruta", "kilos_bruto_ingreso", "kilos_neto_ingreso",
-    "codigo_productor", "color", "fecha_cosecha",
+    "source_event_id", "nombre_productor", "tipo_cultivo", "variedad_fruta",
+    "numero_cuartel", "nombre_cuartel", "sector",
+    "kilos_bruto_ingreso", "kilos_neto_ingreso", "codigo_productor", "color",
+    "fecha_cosecha",
 )]
 _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "id", "id_lote_planta", "lote_code", "operator_code", "source_system",
@@ -651,6 +659,16 @@ class DataverseLoteRepository(LoteRepository):
     def __init__(self, client) -> None:
         self._client = client
 
+    def find_by_id(self, lote_id: Any) -> Optional[LoteRecord]:
+        result = self._client.list_rows(
+            ENTITY_SET_LOTE,
+            select=_LOTE_SELECT,
+            filter_expr=f"{LOTE_FIELDS['id']} eq {lote_id}",
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        return _row_to_lote(rows[0]) if rows else None
+
     def find_by_code(self, temporada: str, lote_code: str) -> Optional[LoteRecord]:
         # lote_code se almacena en crf21_id_lote_planta
         f = f"{LOTE_FIELDS['lote_code']} eq '{lote_code}'"
@@ -658,6 +676,7 @@ class DataverseLoteRepository(LoteRepository):
             ENTITY_SET_LOTE,
             select=_LOTE_SELECT,
             filter_expr=f,
+            orderby="createdon desc",
             top=1,
         )
         rows = (result or {}).get("value", [])
@@ -790,6 +809,7 @@ class DataversePalletRepository(PalletRepository):
             ENTITY_SET_PALLET,
             select=_PALLET_SELECT,
             filter_expr=f,
+            orderby="createdon desc",
             top=1,
         )
         rows = (result or {}).get("value", [])
@@ -932,6 +952,7 @@ class DataversePalletLoteRepository(PalletLoteRepository):
                     PALLET_LOTE_FIELDS["pallet_id_value"],
                     PALLET_LOTE_FIELDS["lote_id_value"]],
             filter_expr=f,
+            orderby="createdon desc",
             top=1,
         )
         rows = (result or {}).get("value", [])
@@ -957,6 +978,7 @@ class DataversePalletLoteRepository(PalletLoteRepository):
                     PALLET_LOTE_FIELDS["pallet_id_value"],
                     PALLET_LOTE_FIELDS["lote_id_value"]],
             filter_expr=f,
+            orderby="createdon desc",
             top=1,
         )
         rows = (result or {}).get("value", [])
@@ -1147,8 +1169,8 @@ class DataverseSequenceCounterRepository(SequenceCounterRepository):
             ENTITY_SET_LOTE,
             select=[LOTE_FIELDS["id"]],
             filter_expr=(
-                f"{LOTE_FIELDS['fecha_conformacion']} ge {start}"
-                f" and {LOTE_FIELDS['fecha_conformacion']} le {end}"
+                f"{LOTE_FIELDS['created_at']} ge {start}"
+                f" and {LOTE_FIELDS['created_at']} le {end}"
             ),
             top=9999,
         )
@@ -1166,7 +1188,7 @@ class DataverseSequenceCounterRepository(SequenceCounterRepository):
         result = self._client.list_rows(
             ENTITY_SET_PALLET,
             select=[PALLET_FIELDS["id"]],
-            filter_expr=f"{PALLET_FIELDS['fecha']} ge {start} and {PALLET_FIELDS['fecha']} lt {end}",
+            filter_expr=f"{PALLET_FIELDS['created_at']} ge {start} and {PALLET_FIELDS['created_at']} lt {end}",
             top=9999,
         )
         return len((result or {}).get("value", []))
@@ -1219,6 +1241,8 @@ class DataverseCamaraMantencionRepository(CamaraMantencionRepository):
         for domain_key, dv_field in _extra_map.items():
             v = (extra or {}).get(domain_key)
             if v not in (None, ""):
+                if domain_key in {"temperatura_fruta", "peso_caja_muestra"}:
+                    v = float(v)
                 body[dv_field] = v
 
         row = self._client.create_row(ENTITY_SET_CAMARA_MANTENCION, body) or {}
@@ -1495,8 +1519,9 @@ class DataverseRegistroPackingRepository(RegistroPackingRepository):
             ENTITY_SET_REGISTRO_PACKING,
             select=[REGISTRO_PACKING_FIELDS[k] for k in (
                 "id", "lote_id_value", "fecha", "hora_inicio",
-                "linea_proceso", "categoria_calidad", "calibre",
-                "cantidad_cajas_producidas", "operator_code",
+                "linea_proceso", "categoria_calidad", "calibre", "tipo_envase",
+                "cantidad_cajas_producidas", "peso_promedio_caja_kg",
+                "merma_seleccion_pct", "operator_code",
             )],
             filter_expr=f,
             orderby="createdon desc",
@@ -1555,7 +1580,8 @@ class DataverseControlProcesoPackingRepository(ControlProcesoPackingRepository):
             ENTITY_SET_CONTROL_PROCESO_PACKING,
             select=[CONTROL_PROCESO_PACKING_FIELDS[k] for k in (
                 "id", "lote_id_value", "fecha", "hora",
-                "n_bins_procesados", "temp_agua_tina", "ph_agua", "operator_code",
+                "n_bins_procesados", "temp_agua_tina", "ph_agua", "recambio_agua",
+                "rendimiento_lote_pct", "observaciones_generales", "operator_code",
             )],
             filter_expr=f,
             orderby="createdon desc",
@@ -1618,7 +1644,8 @@ class DataverseCalidadPalletRepository(CalidadPalletRepository):
             ENTITY_SET_CALIDAD_PALLET,
             select=[CALIDAD_PALLET_FIELDS[k] for k in (
                 "id", "pallet_id_value", "fecha", "hora",
-                "temperatura_fruta", "aprobado", "observaciones", "operator_code",
+                "temperatura_fruta", "peso_caja_muestra", "estado_visual_fruta",
+                "presencia_defectos", "aprobado", "observaciones", "operator_code",
             )],
             filter_expr=f,
             orderby="createdon desc",
@@ -2292,8 +2319,9 @@ class DataversePlanillaCalidadCamaraRepository(PlanillaCalidadCamaraRepository):
         filt = f"{F['pallet_id_value']} eq {pallet_id}"
         result = self._client.list_rows(
             ENTITY_SET_PLANILLA_CALIDAD_CAMARA,
-            select=[F[k] for k in ("id", "fecha_control", "tunel_camara",
-                                   "mediciones", "nombre_control", "operator_code")],
+            select=[F[k] for k in ("id", "fecha_control", "tipo_proceso",
+                                   "tunel_camara", "mediciones",
+                                   "nombre_control", "operator_code")],
             filter_expr=filt,
             top=50,
         )

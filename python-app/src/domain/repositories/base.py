@@ -32,7 +32,12 @@ class BinRecord:
     # Campos extendidos (nullable para compatibilidad con registros anteriores)
     id_bin: str = ""
     fecha_cosecha: Optional[date] = None
+    nombre_productor: str = ""
+    tipo_cultivo: str = ""
     variedad_fruta: str = ""
+    numero_cuartel: str = ""
+    nombre_cuartel: str = ""
+    sector: str = ""
     color: str = ""
     kilos_bruto_ingreso: Optional[Decimal] = None
     kilos_neto_ingreso: Optional[Decimal] = None
@@ -533,6 +538,14 @@ class LoteRepository(ABC):
     @abstractmethod
     def find_by_code(self, temporada: str, lote_code: str) -> Optional[LoteRecord]:
         """Busca un lote por temporada y codigo. Retorna None si no existe."""
+
+    def find_by_id(self, lote_id: Any) -> Optional[LoteRecord]:
+        """
+        Busca un lote por su identificador interno.
+        Implementacion por defecto: None. Dataverse sobreescribe para vistas que
+        necesitan enriquecer contexto a partir de relaciones pallet-lote.
+        """
+        return None
 
     @abstractmethod
     def create(

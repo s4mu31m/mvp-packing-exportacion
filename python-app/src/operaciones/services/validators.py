@@ -45,6 +45,19 @@ def _validate_pct(value, campo: str, errors: list) -> None:
             errors.append(f"{campo} debe ser un numero")
 
 
+def _payload_values(payload: dict) -> dict:
+    """
+    Compatibilidad entre payloads legacy (campos top-level) y payloads de las
+    vistas web que encapsulan los datos operativos dentro de payload["extra"].
+    """
+    values = {}
+    extra = payload.get("extra")
+    if isinstance(extra, dict):
+        values.update(extra)
+    values.update(payload)
+    return values
+
+
 # ---------------------------------------------------------------------------
 # Entidades base
 # ---------------------------------------------------------------------------
@@ -140,146 +153,155 @@ def validate_pallet_payload(payload: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def validate_camara_mantencion_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "lote_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "lote_code"])
     errors = []
-    _validate_hora(payload.get("hora_ingreso", ""), "hora_ingreso", errors)
-    _validate_hora(payload.get("hora_salida", ""), "hora_salida", errors)
+    _validate_hora(values.get("hora_ingreso", ""), "hora_ingreso", errors)
+    _validate_hora(values.get("hora_salida", ""), "hora_salida", errors)
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "lote_code": normalize_code(payload["lote_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "lote_code": normalize_code(values["lote_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in ["camara_numero", "fecha_ingreso", "hora_ingreso",
                       "fecha_salida", "hora_salida", "temperatura_camara",
                       "humedad_relativa", "observaciones", "rol"]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }
 
 
 def validate_desverdizado_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "lote_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "lote_code"])
     errors = []
-    _validate_hora(payload.get("hora_ingreso", ""), "hora_ingreso", errors)
-    _validate_hora(payload.get("hora_salida", ""), "hora_salida", errors)
+    _validate_hora(values.get("hora_ingreso", ""), "hora_ingreso", errors)
+    _validate_hora(values.get("hora_salida", ""), "hora_salida", errors)
     _validate_neto_bruto(
-        payload.get("kilos_neto_salida"), payload.get("kilos_bruto_salida"),
+        values.get("kilos_neto_salida"), values.get("kilos_bruto_salida"),
         "kilos_neto_salida", "kilos_bruto_salida", errors
     )
     if errors:
         raise PayloadValidationError(errors)
+    extra = {
+        k: values[k]
+        for k in [
+            "fecha_ingreso", "hora_ingreso", "fecha_salida", "hora_salida",
+            "kilos_enviados_terreno", "kilos_recepcionados", "kilos_procesados",
+            "kilos_bruto_salida", "kilos_neto_salida",
+            "color_salida", "proceso", "fecha_proceso", "sector", "cuartel", "rol",
+        ]
+        if k in values and values[k] not in [None, ""]
+    }
+    if "proceso" not in extra and values.get("horas_desverdizado") not in [None, ""]:
+        extra["proceso"] = str(values["horas_desverdizado"])
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "lote_code": normalize_code(payload["lote_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
-        "extra": {
-            k: payload[k]
-            for k in [
-                "fecha_ingreso", "hora_ingreso", "fecha_salida", "hora_salida",
-                "kilos_enviados_terreno", "kilos_recepcionados", "kilos_procesados",
-                "kilos_bruto_salida", "kilos_neto_salida",
-                "color_salida", "proceso", "fecha_proceso", "sector", "cuartel", "rol",
-            ]
-            if k in payload and payload[k] not in [None, ""]
-        },
+        "temporada": normalize_temporada(values["temporada"]),
+        "lote_code": normalize_code(values["lote_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
+        "extra": extra,
     }
 
 
 def validate_calidad_desverdizado_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "lote_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "lote_code"])
     errors = []
-    _validate_hora(payload.get("hora", ""), "hora", errors)
+    _validate_hora(values.get("hora", ""), "hora", errors)
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "lote_code": normalize_code(payload["lote_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "lote_code": normalize_code(values["lote_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in [
                 "fecha", "hora", "temperatura_fruta", "color_evaluado",
                 "estado_visual", "presencia_defectos", "descripcion_defectos",
                 "aprobado", "observaciones", "rol",
             ]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }
 
 
 def validate_ingreso_packing_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "lote_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "lote_code"])
     errors = []
-    _validate_hora(payload.get("hora_ingreso", ""), "hora_ingreso", errors)
+    _validate_hora(values.get("hora_ingreso", ""), "hora_ingreso", errors)
     _validate_neto_bruto(
-        payload.get("kilos_neto_ingreso_packing"),
-        payload.get("kilos_bruto_ingreso_packing"),
+        values.get("kilos_neto_ingreso_packing"),
+        values.get("kilos_bruto_ingreso_packing"),
         "kilos_neto_ingreso_packing", "kilos_bruto_ingreso_packing", errors
     )
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "lote_code": normalize_code(payload["lote_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "lote_code": normalize_code(values["lote_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in [
                 "fecha_ingreso", "hora_ingreso",
                 "kilos_bruto_ingreso_packing", "kilos_neto_ingreso_packing",
                 "via_desverdizado", "observaciones", "rol",
             ]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }
 
 
 def validate_registro_packing_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "lote_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "lote_code"])
     errors = []
-    _validate_hora(payload.get("hora_inicio", ""), "hora_inicio", errors)
-    _validate_pct(payload.get("merma_seleccion_pct"), "merma_seleccion_pct", errors)
+    _validate_hora(values.get("hora_inicio", ""), "hora_inicio", errors)
+    _validate_pct(values.get("merma_seleccion_pct"), "merma_seleccion_pct", errors)
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "lote_code": normalize_code(payload["lote_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "lote_code": normalize_code(values["lote_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in [
                 "fecha", "hora_inicio", "linea_proceso", "categoria_calidad",
                 "calibre", "tipo_envase", "cantidad_cajas_producidas",
                 "peso_promedio_caja_kg", "merma_seleccion_pct", "rol",
             ]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }
 
 
 def validate_control_proceso_packing_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "lote_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "lote_code"])
     errors = []
-    _validate_hora(payload.get("hora", ""), "hora", errors)
+    _validate_hora(values.get("hora", ""), "hora", errors)
     for campo in ["rendimiento_lote_pct", "pct_calibre_export", "pct_calibres_menores"]:
-        _validate_pct(payload.get(campo), campo, errors)
+        _validate_pct(values.get(campo), campo, errors)
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "lote_code": normalize_code(payload["lote_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "lote_code": normalize_code(values["lote_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in [
                 "fecha", "hora", "n_bins_procesados", "velocidad_volcador",
                 "obs_volcador", "temp_agua_tina", "cloro_libre_ppm", "ph_agua",
@@ -293,75 +315,78 @@ def validate_control_proceso_packing_payload(payload: dict) -> dict:
                 "tipo_caja", "peso_promedio_caja_kg", "n_cajas_producidas",
                 "rendimiento_lote_pct", "observaciones_generales", "rol",
             ]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }
 
 
 def validate_calidad_pallet_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "pallet_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "pallet_code"])
     errors = []
-    _validate_hora(payload.get("hora", ""), "hora", errors)
+    _validate_hora(values.get("hora", ""), "hora", errors)
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "pallet_code": normalize_code(payload["pallet_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "pallet_code": normalize_code(values["pallet_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in [
                 "fecha", "hora", "temperatura_fruta", "peso_caja_muestra",
                 "estado_embalaje", "estado_visual_fruta", "presencia_defectos",
                 "descripcion_defectos", "aprobado", "observaciones", "rol",
             ]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }
 
 
 def validate_camara_frio_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "pallet_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "pallet_code"])
     errors = []
-    _validate_hora(payload.get("hora_ingreso", ""), "hora_ingreso", errors)
-    _validate_hora(payload.get("hora_salida", ""), "hora_salida", errors)
+    _validate_hora(values.get("hora_ingreso", ""), "hora_ingreso", errors)
+    _validate_hora(values.get("hora_salida", ""), "hora_salida", errors)
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "pallet_code": normalize_code(payload["pallet_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "pallet_code": normalize_code(values["pallet_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in [
                 "camara_numero", "temperatura_camara", "humedad_relativa",
                 "fecha_ingreso", "hora_ingreso", "fecha_salida", "hora_salida",
                 "destino_despacho", "rol",
             ]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }
 
 
 def validate_medicion_temperatura_payload(payload: dict) -> dict:
-    require_fields(payload, ["temporada", "pallet_code"])
+    values = _payload_values(payload)
+    require_fields(values, ["temporada", "pallet_code"])
     errors = []
-    _validate_hora(payload.get("hora", ""), "hora", errors)
+    _validate_hora(values.get("hora", ""), "hora", errors)
     if errors:
         raise PayloadValidationError(errors)
     return {
-        "temporada": normalize_temporada(payload["temporada"]),
-        "pallet_code": normalize_code(payload["pallet_code"]),
-        "operator_code": normalize_operator_code(payload.get("operator_code", "")),
-        "source_system": payload.get("source_system", "local").strip() or "local",
+        "temporada": normalize_temporada(values["temporada"]),
+        "pallet_code": normalize_code(values["pallet_code"]),
+        "operator_code": normalize_operator_code(values.get("operator_code", "")),
+        "source_system": values.get("source_system", "local").strip() or "local",
         "extra": {
-            k: payload[k]
+            k: values[k]
             for k in [
                 "fecha", "hora", "temperatura_pallet", "punto_medicion",
                 "dentro_rango", "observaciones", "rol",
             ]
-            if k in payload and payload[k] not in [None, ""]
+            if k in values and values[k] not in [None, ""]
         },
     }

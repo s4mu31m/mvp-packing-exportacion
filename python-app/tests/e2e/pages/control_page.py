@@ -2,7 +2,8 @@ from playwright.sync_api import Page, expect
 
 
 class ControlPage:
-    """Página índice de Control de Calidad con links a las 4 planillas."""
+    """Pagina indice de control de calidad con links a las planillas visibles."""
+
     URL_PATH = "/operaciones/control/"
 
     def __init__(self, page: Page, base_url: str):
@@ -13,19 +14,19 @@ class ControlPage:
         self.page.goto(f"{self.base_url}{self.URL_PATH}")
 
     def expect_all_planillas_visible(self) -> None:
-        expect(self.page.get_by_text("Calidad Desverdizado")).to_be_visible()
-        expect(self.page.get_by_text("Calidad Packing Cítricos")).to_be_visible()
-        expect(self.page.get_by_text("Control Cámaras")).to_be_visible()
-        expect(self.page.get_by_text("Parámetros Proceso")).to_be_visible()
+        expect(self.page.locator("a[href$='/operaciones/control/desverdizado/']")).to_be_visible()
+        expect(self.page.locator("a[href$='/operaciones/control/packing/']")).to_be_visible()
+        expect(self.page.locator("a[href$='/operaciones/control/camaras/']")).to_be_visible()
+        expect(self.page.locator("a[href$='/operaciones/control/proceso/']")).to_be_visible()
 
     def go_to_desverdizado(self) -> None:
-        self.page.get_by_text("Calidad Desverdizado").click()
+        self.page.locator("a[href$='/operaciones/control/desverdizado/']").click()
 
     def go_to_packing(self) -> None:
-        self.page.get_by_text("Calidad Packing Cítricos").click()
+        self.page.locator("a[href$='/operaciones/control/packing/']").click()
 
     def go_to_camaras(self) -> None:
-        self.page.get_by_text("Control Cámaras").click()
+        self.page.locator("a[href$='/operaciones/control/camaras/']").click()
 
     def go_to_proceso(self) -> None:
-        self.page.get_by_text("Parámetros Proceso").click()
+        self.page.locator("a[href$='/operaciones/control/proceso/']").click()
