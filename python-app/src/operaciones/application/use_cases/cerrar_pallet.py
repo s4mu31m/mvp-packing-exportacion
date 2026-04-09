@@ -167,7 +167,7 @@ def cerrar_pallet(payload: dict, *, repos: Repositories | None = None) -> UseCas
 
     return UseCaseResult.success(
         code="PALLET_CLOSED",
-        message="Pallet procesado correctamente",
+        message=f"Pallet {pallet_record.pallet_code} procesado correctamente",
         data={
             "pallet_id":              pallet_record.id,
             "pallet_code":            pallet_record.pallet_code,

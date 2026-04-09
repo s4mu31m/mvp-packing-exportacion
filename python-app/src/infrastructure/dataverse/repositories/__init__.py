@@ -264,10 +264,12 @@ def _row_to_desverdizado(row: dict, lote_id: Any = None) -> DesverdizadoRecord:
     return DesverdizadoRecord(
         id=row.get(DESVERDIZADO_FIELDS["id"]),
         lote_id=lote_id or row.get(DESVERDIZADO_FIELDS["lote_id_value"]),
+        numero_camara=_str(row.get(DESVERDIZADO_FIELDS["numero_camara"])),
         fecha_ingreso=_parse_date(row.get(DESVERDIZADO_FIELDS["fecha_ingreso"])),
         hora_ingreso=_str(row.get(DESVERDIZADO_FIELDS["hora_ingreso"])),
         fecha_salida=_parse_date(row.get(DESVERDIZADO_FIELDS["fecha_salida"])),
         hora_salida=_str(row.get(DESVERDIZADO_FIELDS["hora_salida"])),
+        horas_desverdizado=_parse_int(row.get(DESVERDIZADO_FIELDS["horas_desverdizado"])),
         kilos_enviados_terreno=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_enviados_terreno"])),
         kilos_recepcionados=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_recepcionados"])),
         kilos_procesados=_parse_decimal(row.get(DESVERDIZADO_FIELDS["kilos_procesados"])),
@@ -649,6 +651,38 @@ class DataverseBinRepository(BinRepository):
         _log.debug("first_bin_by_lotes: resultado final tiene %d entradas", len(resultado))
         return resultado
 
+    def update(self, bin_id: Any, fields: dict) -> BinRecord:
+        _updatable = {
+            "numero_cuartel":      BIN_FIELDS["numero_cuartel"],
+            "hora_recepcion":      BIN_FIELDS["hora_recepcion"],
+            "kilos_bruto_ingreso": BIN_FIELDS["kilos_bruto_ingreso"],
+            "kilos_neto_ingreso":  BIN_FIELDS["kilos_neto_ingreso"],
+            "a_o_r":               BIN_FIELDS["a_o_r"],
+            "observaciones":       BIN_FIELDS["observaciones"],
+        }
+        body = {}
+        for domain_key, dv_field in _updatable.items():
+            if domain_key not in fields:
+                continue
+            v = fields[domain_key]
+            if domain_key == "a_o_r" and isinstance(v, str):
+                v = AOR_DV.get(v, v)
+            body[dv_field] = v
+        if body:
+            self._client.update_row(ENTITY_SET_BIN, str(bin_id), body)
+        # Retornar el registro actualizado
+        result = self._client.list_rows(
+            ENTITY_SET_BIN,
+            select=_BIN_SELECT,
+            filter_expr=f"{BIN_FIELDS['id']} eq {bin_id}",
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        return _row_to_bin(rows[0]) if rows else BinRecord(id=bin_id, temporada="", bin_code="")
+
+    def delete(self, bin_id: Any) -> None:
+        self._client.delete_row(ENTITY_SET_BIN, str(bin_id))
+
 
 # ---------------------------------------------------------------------------
 # LoteRepository
@@ -933,6 +967,30 @@ class DataverseBinLoteRepository(BinLoteRepository):
                 lote_id=lote_id,
             ))
         return records
+
+    def find_by_bin_and_lote(self, bin_id: Any, lote_id: Any) -> Optional[BinLoteRecord]:
+        """Retorna el registro BinLote para el par (bin_id, lote_id), o None."""
+        f = (
+            f"{BIN_LOTE_FIELDS['bin_id_value']} eq {bin_id} and "
+            f"{BIN_LOTE_FIELDS['lote_id_value']} eq {lote_id}"
+        )
+        result = self._client.list_rows(
+            ENTITY_SET_BIN_LOTE,
+            filter_expr=f,
+            top=1,
+        )
+        rows = (result or {}).get("value", [])
+        if not rows:
+            return None
+        row = rows[0]
+        return BinLoteRecord(
+            id=row.get(BIN_LOTE_FIELDS["id"]),
+            bin_id=bin_id,
+            lote_id=lote_id,
+        )
+
+    def delete(self, bin_lote_id: Any) -> None:
+        self._client.delete_row(ENTITY_SET_BIN_LOTE, str(bin_lote_id))
 
 
 # ---------------------------------------------------------------------------
@@ -1282,9 +1340,10 @@ class DataverseDesverdizadoRepository(DesverdizadoRepository):
         result = self._client.list_rows(
             ENTITY_SET_DESVERDIZADO,
             select=[DESVERDIZADO_FIELDS[k] for k in (
-                "id", "lote_id_value", "fecha_ingreso", "hora_ingreso",
-                "fecha_salida", "hora_salida", "kilos_enviados_terreno",
-                "kilos_recepcionados", "kilos_bruto_salida", "kilos_neto_salida",
+                "id", "lote_id_value", "numero_camara", "fecha_ingreso", "hora_ingreso",
+                "fecha_salida", "hora_salida", "horas_desverdizado",
+                "kilos_enviados_terreno", "kilos_recepcionados",
+                "kilos_bruto_salida", "kilos_neto_salida",
                 "color_salida", "proceso", "operator_code",
             )],
             filter_expr=f,
@@ -1306,8 +1365,10 @@ class DataverseDesverdizadoRepository(DesverdizadoRepository):
             DESVERDIZADO_FIELDS["operator_code"]: operator_code,
         }
         _extra_map = {
+            "numero_camara":          DESVERDIZADO_FIELDS["numero_camara"],
             "fecha_ingreso":          DESVERDIZADO_FIELDS["fecha_ingreso"],
             "hora_ingreso":           DESVERDIZADO_FIELDS["hora_ingreso"],
+            "horas_desverdizado":     DESVERDIZADO_FIELDS["horas_desverdizado"],
             "color_salida":           DESVERDIZADO_FIELDS["color_salida"],
             "proceso":                DESVERDIZADO_FIELDS["proceso"],
             "kilos_enviados_terreno": DESVERDIZADO_FIELDS["kilos_enviados_terreno"],

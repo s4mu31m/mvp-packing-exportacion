@@ -130,8 +130,7 @@
     <div id="tab-desverdizado" class="card" style="display:none">
       <div class="card-title" style="margin-bottom:1rem">Ingreso a Desverdizado</div>
       <p style="color:var(--text-muted);font-size:.82rem;margin-bottom:.8rem">
-        Solo aplica si el lote tiene <strong>requiere_desverdizado=True</strong>
-        y camara disponible.
+        Solo disponible cuando el lote requiere desverdizado y hay cámara disponible.
       </p>
       <form method="post" id="form-desverdizado">
         {% csrf_token %}
@@ -140,32 +139,18 @@
         <input type="hidden" name="lote_code" id="lote-code-desverdizado" value="">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
           {% for field in form_desverdizado %}
-            {% if field.name != "kilos_enviados_terreno" and field.name != "kilos_recepcionados" %}
-              <div class="form-group">
-                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-                {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
-              </div>
-            {% endif %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+              {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+            </div>
           {% endfor %}
         </div>
         <!-- Horas sugeridas por color -->
         <div style="font-size:.78rem;color:var(--text-muted);margin:.5rem 0 1rem">
           Horas sugeridas: Verde → 96h · Verde-Amarillo → 72h · Amarillo → 48h
           (el operador puede ajustar)
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
-          {% for field in form_desverdizado %}
-            {% if field.name == "kilos_enviados_terreno" or field.name == "kilos_recepcionados" %}
-              <div class="form-group">
-                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-                {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
-              </div>
-            {% endif %}
-          {% endfor %}
         </div>
         <div class="form-group" style="margin-top:.5rem">
           <label class="form-label">Codigo operador</label>

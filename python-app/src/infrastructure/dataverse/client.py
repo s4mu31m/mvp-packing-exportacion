@@ -150,3 +150,6 @@ class DataverseClient:
             f"{entity_set_name}({row_id})",
             json=payload,
         )
+
+    def delete_row(self, entity_set_name: str, row_id: str) -> None:
+        self._request("DELETE", f"{entity_set_name}({row_id})")

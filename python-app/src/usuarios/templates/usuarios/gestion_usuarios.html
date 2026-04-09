@@ -9,7 +9,7 @@
   <div class="flex-row" style="flex-wrap: wrap; gap: 16px; margin-bottom: 28px; align-items: flex-start;">
     <div>
       <h1 style="margin: 0 0 4px 0; font-size: 1.5rem;">Gestión de Usuarios</h1>
-      <p style="margin: 0; color: var(--text-muted); font-size: .88rem;">Usuarios operativos — solo administradores. Roles leídos desde crf21_usuariooperativos.</p>
+      <p style="margin: 0; color: var(--text-muted); font-size: .88rem;">Administración de usuarios del sistema.</p>
     </div>
     <a href="{% url 'usuarios:portal' %}" class="btn btn-ghost" style="margin-left: auto;">← Portal</a>
   </div>
@@ -168,10 +168,6 @@
     {% endif %}
   </div>
 
-  <div style="margin-top: 16px; font-size: .75rem; color: var(--text-dim);">
-    Roles leídos desde <code>crf21_rol</code> (texto separado por coma). Código de operador generado automáticamente al crear (inmutable).
-    Backend activo: <code>{{ request.session.crf21_rol|default:"sin sesión" }}</code>.
-  </div>
 
 </div>
 {% endblock %}

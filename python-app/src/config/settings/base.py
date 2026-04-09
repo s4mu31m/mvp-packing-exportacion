@@ -40,6 +40,18 @@ DATAVERSE_TIMEOUT = int(os.getenv("DATAVERSE_TIMEOUT", "30"))
 #   "dataverse" → Microsoft Dataverse vía Web API OData v4
 PERSISTENCE_BACKEND = os.getenv("PERSISTENCE_BACKEND", "sqlite")
 
+# Cache JSON para consulta jefatura en backend Dataverse
+try:
+    CONSULTA_DATAVERSE_CACHE_TTL_SECONDS = int(
+        os.getenv("CONSULTA_DATAVERSE_CACHE_TTL_SECONDS", "3600")
+    )
+except ValueError:
+    CONSULTA_DATAVERSE_CACHE_TTL_SECONDS = 3600
+CONSULTA_DATAVERSE_CACHE_FILE = os.getenv(
+    "CONSULTA_DATAVERSE_CACHE_FILE",
+    str(BASE_DIR / ".cache" / "consulta_dataverse.json"),
+)
+
 # Backends de autenticación:
 #   - CaliProAuthBackend: fuente de verdad en ambos modos (SQLite y Dataverse)
 #   - ModelBackend: fallback SOLO en modo sqlite, para bootstrap via createsuperuser.

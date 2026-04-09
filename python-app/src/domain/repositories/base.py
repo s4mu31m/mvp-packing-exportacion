@@ -165,10 +165,12 @@ class CamaraMantencionRecord:
 class DesverdizadoRecord:
     id: Any
     lote_id: Any
+    numero_camara: str = ""
     fecha_ingreso: Optional[date] = None
     hora_ingreso: str = ""
     fecha_salida: Optional[date] = None
     hora_salida: str = ""
+    horas_desverdizado: Optional[int] = None
     kilos_enviados_terreno: Optional[Decimal] = None
     kilos_recepcionados: Optional[Decimal] = None
     kilos_procesados: Optional[Decimal] = None
@@ -532,6 +534,21 @@ class BinRepository(ABC):
         """
         return []
 
+    def update(self, bin_id: Any, fields: dict) -> "BinRecord":
+        """
+        Actualiza campos variables de un bin.
+        Campos soportados: numero_cuartel, hora_recepcion, kilos_bruto_ingreso,
+        kilos_neto_ingreso, a_o_r, observaciones.
+        """
+        raise NotImplementedError("BinRepository.update() no implementado en este backend")
+
+    def delete(self, bin_id: Any) -> None:
+        """
+        Elimina un bin. Debe llamarse despues de eliminar su BinLote asociado
+        (PROTECT FK en SQLite; orden requerido en todos los backends).
+        """
+        raise NotImplementedError("BinRepository.delete() no implementado en este backend")
+
 
 class LoteRepository(ABC):
 
@@ -631,6 +648,20 @@ class BinLoteRepository(ABC):
         SQLite usa ORM directo via lote.bin_lotes.all().
         """
         return []
+
+    def find_by_bin_and_lote(self, bin_id: Any, lote_id: Any) -> Optional[BinLoteRecord]:
+        """
+        Retorna el registro BinLote para el par (bin_id, lote_id), o None si no existe.
+        Usado para verificar que un bin pertenece al lote antes de editar/eliminar.
+        """
+        raise NotImplementedError("BinLoteRepository.find_by_bin_and_lote() no implementado en este backend")
+
+    def delete(self, bin_lote_id: Any) -> None:
+        """
+        Elimina el registro BinLote indicado.
+        Debe llamarse antes de BinRepository.delete() para liberar la FK PROTECT.
+        """
+        raise NotImplementedError("BinLoteRepository.delete() no implementado en este backend")
 
 
 class PalletLoteRepository(ABC):

@@ -17,5 +17,8 @@ urlpatterns = [
     path("paletizado/",    views.PaletizadoView.as_view(),     name="paletizado"),
     path("camaras/",       views.CamarasView.as_view(),        name="camaras"),
     path("consulta/",          views.ConsultaJefaturaView.as_view(),     name="consulta"),
+    path("consulta/lotes/<str:lote_code>/", views.ConsultaLoteDetalleView.as_view(), name="consulta_lote_detalle"),
+    path("consulta/pallets/<str:pallet_code>/", views.ConsultaPalletDetalleView.as_view(), name="consulta_pallet_detalle"),
     path("consulta/exportar/", views.ExportarConsultaCSVView.as_view(), name="exportar_consulta"),
+    path("consulta/exportar/excel/", views.ExportarConsultaExcelView.as_view(), name="exportar_consulta_excel"),
 ]

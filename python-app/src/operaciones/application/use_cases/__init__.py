@@ -20,3 +20,5 @@ from .registrar_planilla_desv_calibre import registrar_planilla_desv_calibre
 from .registrar_planilla_desv_semillas import registrar_planilla_desv_semillas
 from .registrar_planilla_calidad_packing import registrar_planilla_calidad_packing
 from .registrar_planilla_calidad_camara import registrar_planilla_calidad_camara
+from .eliminar_bin_de_lote import eliminar_bin_de_lote
+from .editar_bin_de_lote import editar_bin_de_lote

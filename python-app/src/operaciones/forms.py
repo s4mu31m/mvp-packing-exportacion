@@ -26,11 +26,19 @@ class CerrarLoteForm(forms.Form):
         help_text="Solo si requiere desverdizado",
     )
     kilos_bruto_conformacion = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False, label="Kilos bruto total lote",
+        max_digits=10, decimal_places=2, required=True, label="Kilos bruto total lote",
     )
     kilos_neto_conformacion = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False, label="Kilos neto total lote",
+        max_digits=10, decimal_places=2, required=True, label="Kilos neto total lote",
     )
+
+    def clean(self):
+        cleaned = super().clean()
+        kb = cleaned.get("kilos_bruto_conformacion")
+        kn = cleaned.get("kilos_neto_conformacion")
+        if kb is not None and kn is not None and kn > kb:
+            raise forms.ValidationError("Kilos neto no puede superar kilos bruto.")
+        return cleaned
 
 
 class BinForm(forms.Form):
@@ -59,25 +67,51 @@ class BinForm(forms.Form):
     )
     # --- Campos variables por bin ---
     numero_cuartel = forms.CharField(
-        max_length=20, required=False, label="Cuartel",
+        max_length=20, required=True, label="Cuartel",
         widget=forms.TextInput(attrs={"placeholder": "C01", "autocomplete": "off"}),
     )
     # --- Campos operativos adicionales ---
     hora_recepcion = forms.TimeField(
-        required=False, label="Hora recepcion",
+        required=True, label="Hora recepcion",
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
     )
     kilos_bruto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False,
+        max_digits=10, decimal_places=2, required=True,
         label="Kilos bruto ingreso",
     )
     kilos_neto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False,
+        max_digits=10, decimal_places=2, required=True,
         label="Kilos neto ingreso",
     )
     a_o_r = forms.ChoiceField(
         choices=[("", "---------")] + list(AOR.choices),
-        required=False, label="A/O/R",
+        required=True, label="A/O/R",
+    )
+    observaciones = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 2}),
+        required=False, label="Observaciones",
+    )
+
+
+class EditBinVariableForm(forms.Form):
+    """Edicion de campos variables de un bin ya registrado en un lote abierto."""
+    numero_cuartel = forms.CharField(
+        max_length=20, required=True, label="Cuartel",
+        widget=forms.TextInput(attrs={"placeholder": "C01", "autocomplete": "off"}),
+    )
+    hora_recepcion = forms.TimeField(
+        required=True, label="Hora recepcion",
+        widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
+    )
+    kilos_bruto_ingreso = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True, label="Kilos bruto ingreso",
+    )
+    kilos_neto_ingreso = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True, label="Kilos neto ingreso",
+    )
+    a_o_r = forms.ChoiceField(
+        choices=[("", "---------")] + list(AOR.choices),
+        required=True, label="A/O/R",
     )
     observaciones = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 2}),
@@ -88,22 +122,22 @@ class BinForm(forms.Form):
 class CamaraMantencionForm(forms.Form):
     """Ingreso a camara de mantencion."""
     camara_numero = forms.CharField(
-        max_length=20, required=False, label="Numero de camara",
+        max_length=20, required=True, label="Numero de camara",
         widget=forms.TextInput(attrs={"autocomplete": "off"}),
     )
     fecha_ingreso = forms.DateField(
-        required=False, label="Fecha ingreso",
+        required=True, label="Fecha ingreso",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
     hora_ingreso = forms.TimeField(
-        required=False, label="Hora ingreso",
+        required=True, label="Hora ingreso",
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
     )
     temperatura_camara = forms.DecimalField(
-        max_digits=5, decimal_places=2, required=False, label="Temperatura camara (°C)",
+        max_digits=5, decimal_places=2, required=True, label="Temperatura camara (°C)",
     )
     humedad_relativa = forms.DecimalField(
-        max_digits=5, decimal_places=2, required=False, label="Humedad relativa (%)",
+        max_digits=5, decimal_places=2, required=True, label="Humedad relativa (%)",
     )
     observaciones = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 2}),
@@ -113,31 +147,27 @@ class CamaraMantencionForm(forms.Form):
 
 class DesverdizadoForm(forms.Form):
     """Ingreso a desverdizado."""
+    numero_camara = forms.CharField(
+        max_length=50, required=True, label="Numero de camara",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
     fecha_ingreso = forms.DateField(
-        required=False, label="Fecha ingreso",
+        required=True, label="Fecha ingreso",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
     hora_ingreso = forms.TimeField(
-        required=False, label="Hora ingreso",
+        required=True, label="Hora ingreso",
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
     )
     color = forms.CharField(
-        max_length=30, required=False, label="Color objetivo (numero)",
+        max_length=30, required=True, label="Color objetivo (numero)",
         help_text="Numero de color esperado al salir. Ej: 3, 4. El operador puede ajustar.",
         widget=forms.TextInput(attrs={"placeholder": "3", "inputmode": "numeric", "autocomplete": "off"}),
     )
     horas_desverdizado = forms.IntegerField(
-        required=False, label="Horas de desverdizado",
+        required=True, label="Horas de desverdizado",
         help_text="Horas planificadas (1-240). Reemplaza el campo legacy 'proceso' para este dato.",
         widget=forms.NumberInput(attrs={"placeholder": "72", "min": "1", "max": "240"}),
-    )
-    kilos_enviados_terreno = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False,
-        label="Kilos enviados terreno",
-    )
-    kilos_recepcionados = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False,
-        label="Kilos recepcionados",
     )
 
     def clean_horas_desverdizado(self):
@@ -160,11 +190,11 @@ class IngresoPackingForm(forms.Form):
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
     )
     kilos_bruto_ingreso_packing = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False,
+        max_digits=10, decimal_places=2, required=True,
         label="Kilos bruto",
     )
     kilos_neto_ingreso_packing = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False,
+        max_digits=10, decimal_places=2, required=True,
         label="Kilos neto",
     )
     via_desverdizado = forms.BooleanField(
@@ -175,6 +205,14 @@ class IngresoPackingForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
+
+    def clean(self):
+        cleaned = super().clean()
+        kb = cleaned.get("kilos_bruto_ingreso_packing")
+        kn = cleaned.get("kilos_neto_ingreso_packing")
+        if kb is not None and kn is not None and kn > kb:
+            raise forms.ValidationError("Kilos neto no puede superar kilos bruto.")
+        return cleaned
 
 
 class RegistroPackingForm(forms.Form):

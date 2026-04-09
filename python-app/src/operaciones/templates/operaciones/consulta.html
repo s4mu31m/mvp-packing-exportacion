@@ -1,149 +1,259 @@
 {% extends "layout_app.html" %}
 
-{% block title %}Consulta Jefatura — CaliPro{% endblock %}
+{% block title %}Consulta Jefatura - CaliPro{% endblock %}
 {% block page_title %}Consulta Jefatura{% endblock %}
-{% block page_subtitle %}Trazabilidad y estado de lotes — Temporada {{ temporada }}{% endblock %}
+{% block page_subtitle %}Trazabilidad y estado - Temporada {{ temporada }}{% endblock %}
 
 {% block page_actions %}
-  <a href="{% url 'operaciones:exportar_consulta' %}{% if filtro_productor or filtro_estado %}?{% if filtro_productor %}productor={{ filtro_productor }}{% endif %}{% if filtro_productor and filtro_estado %}&{% endif %}{% if filtro_estado %}estado={{ filtro_estado }}{% endif %}{% endif %}"
-     class="btn btn-ghost btn-sm"
-     title="Exportar vista actual a CSV">
+  {% if is_dataverse_backend %}
+    <a href="{{ refresh_url }}" class="btn btn-ghost btn-sm" title="Sincronizar datos desde Dataverse">
+      Refrescar
+    </a>
+  {% endif %}
+  <a href="{{ export_csv_url }}" class="btn btn-ghost btn-sm" title="Exportar vista actual a CSV">
     Exportar CSV
+  </a>
+  <a href="{{ export_excel_url }}" class="btn btn-ghost btn-sm" title="Exportar vista actual a Excel">
+    Exportar Excel
   </a>
 {% endblock %}
 
 {% block page_body %}
 
-<!-- Filtros -->
+<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+  <a href="{{ tab_lotes_url }}" class="btn btn-sm {% if tab_actual == 'lotes' %}btn-primary{% else %}btn-ghost{% endif %}">
+    Lotes ({{ lotes_count }})
+  </a>
+  <a href="{{ tab_pallets_url }}" class="btn btn-sm {% if tab_actual == 'pallets' %}btn-primary{% else %}btn-ghost{% endif %}">
+    Pallets ({{ pallets_count }})
+  </a>
+</div>
+
 <div class="card" style="margin-bottom:1rem">
   <form method="get" id="form-filtros">
+    <input type="hidden" name="tab" value="{{ tab_actual }}">
     <div style="display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-end">
-
       <div class="form-group" style="margin-bottom:0;min-width:180px">
         <label class="form-label">Productor / codigo</label>
         <input type="text" class="form-control" name="productor"
                value="{{ filtro_productor }}" placeholder="Filtrar por productor...">
       </div>
 
-      <div class="form-group" style="margin-bottom:0;min-width:160px">
+      <div class="form-group" style="margin-bottom:0;min-width:180px">
         <label class="form-label">Estado</label>
         <select class="form-control" name="estado">
-          <option value="">— Todos —</option>
+          <option value="">- Todos -</option>
           {% for value, label in estados_choices %}
-            <option value="{{ value }}" {% if filtro_estado == value %}selected{% endif %}>
-              {{ label }}
-            </option>
+            <option value="{{ value }}" {% if filtro_estado == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
 
       <div style="display:flex;gap:.5rem;padding-bottom:1px">
         <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
-        <a href="{% url 'operaciones:consulta' %}" class="btn btn-ghost btn-sm">Limpiar</a>
+        <a href="{% url 'operaciones:consulta' %}?tab={{ tab_actual }}" class="btn btn-ghost btn-sm">Limpiar</a>
       </div>
-
     </div>
   </form>
 </div>
 
-<!-- Resumen rapido -->
 <div style="display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.82rem;color:var(--text-muted)">
-  <span>{{ lotes|length }} lote{{ lotes|length|pluralize:"s" }} mostrado{{ lotes|length|pluralize:"s" }}</span>
+  {% if tab_actual == 'pallets' %}
+    <span>{{ pallets_count }} pallet{{ pallets_count|pluralize:"s" }} mostrado{{ pallets_count|pluralize:"s" }}</span>
+  {% else %}
+    <span>{{ lotes_count }} lote{{ lotes_count|pluralize:"s" }} mostrado{{ lotes_count|pluralize:"s" }}</span>
+  {% endif %}
   {% if filtro_productor or filtro_estado %}
-    <span>·</span>
+    <span>-</span>
     <span style="color:var(--teal-400,#2dd4bf)">Filtros activos</span>
   {% endif %}
-</div>
-
-<!-- Tabla principal -->
-<div class="card">
-  {% if lotes %}
-    <div style="overflow-x:auto">
-      <table class="table" style="font-size:.83rem">
-        <thead>
-          <tr>
-            <th>Lote</th>
-            <th>Fecha</th>
-            <th>Productor</th>
-            <th>Variedad</th>
-            <th style="text-align:center">Bins</th>
-            <th style="text-align:right">Kg neto</th>
-            <th>Etapa actual</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in lotes %}
-            <tr style="cursor:pointer" title="Ver detalle de {{ item.lote_code }}">
-              <td style="font-family:monospace;font-weight:600;white-space:nowrap">
-                {{ item.lote_code }}
-              </td>
-              <td style="white-space:nowrap;color:var(--text-muted)">
-                {{ item.fecha|date:"d/m/Y"|default:"—" }}
-              </td>
-              <td>{{ item.productor|default:"—" }}</td>
-              <td>{{ item.variedad|default:"—" }}</td>
-              <td style="text-align:center">{{ item.cantidad_bins }}</td>
-              <td style="text-align:right;font-weight:600">
-                {% if item.kilos_neto %}
-                  {{ item.kilos_neto|floatformat:0 }} kg
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-              <td>
-                <span class="badge"
-                  style="background:var(--surface-2);color:var(--text-muted);font-size:.75rem;white-space:nowrap">
-                  {{ item.etapa }}
-                </span>
-              </td>
-              <td>
-                {% if item.estado == "abierto" %}
-                  <span style="color:var(--teal-400,#2dd4bf);white-space:nowrap">● Abierto</span>
-                {% elif item.estado == "cerrado" %}
-                  <span style="color:var(--text-muted);white-space:nowrap">● Cerrado</span>
-                {% elif item.estado == "finalizado" %}
-                  <span style="color:var(--success,#22c55e);white-space:nowrap">✓ Finalizado</span>
-                {% elif item.estado == "anulado" %}
-                  <span style="color:var(--danger,#ef4444);white-space:nowrap">✕ Anulado</span>
-                {% else %}
-                  {{ item.estado_display }}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% else %}
-    <div class="empty-state" style="padding:2rem 0">
-      <div class="empty-state-desc">
-        {% if filtro_productor or filtro_estado %}
-          Sin lotes que coincidan con los filtros aplicados.
-        {% else %}
-          Sin lotes registrados en temporada {{ temporada }}.
-        {% endif %}
-      </div>
-    </div>
+  {% if is_dataverse_backend %}
+    <span>-</span>
+    <span>
+      Cache Dataverse:
+      {% if cache_last_updated_display %}
+        actualizada {{ cache_last_updated_display }}
+      {% else %}
+        sin inicializar
+      {% endif %}
+    </span>
+    {% if cache_is_stale %}
+      <span style="color:var(--warning,#f59e0b)">usando cache vencido</span>
+    {% endif %}
+    {% if background_refresh_started %}
+      <span style="color:var(--teal-400,#2dd4bf)">refrescando en segundo plano...</span>
+    {% endif %}
   {% endif %}
 </div>
 
-<!-- Leyenda de etapas -->
-<div style="margin-top:1rem;font-size:.78rem;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:.5rem 1.2rem">
-  <span style="font-weight:600">Etapas:</span>
-  <span>Recepcion</span>
-  <span>→</span>
-  <span>Pesado / Pendiente</span>
-  <span>→</span>
-  <span>Mantencion / Desv.</span>
-  <span>→</span>
-  <span>Ingreso Packing</span>
-  <span>→</span>
-  <span>Packing / Proceso</span>
-  <span>→</span>
-  <span>Pallet Cerrado</span>
-  <span>→</span>
-  <span>Camara Frio</span>
+<div class="card">
+  {% if tab_actual == 'pallets' %}
+    {% if pallets %}
+      <div style="overflow-x:auto">
+        <table class="table" style="font-size:.83rem">
+          <thead>
+            <tr>
+              <th>Pallet</th>
+              <th>Lote relacionado</th>
+              <th>Tipo caja</th>
+              <th style="text-align:right">Peso total</th>
+              <th>Productor</th>
+              <th>Variedad</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in pallets %}
+              {% url 'operaciones:consulta_pallet_detalle' item.pallet_code as detalle_pallet_url %}
+              <tr class="consulta-row-link" data-href="{{ detalle_pallet_url }}{% if query_consulta %}?{{ query_consulta }}{% endif %}" style="cursor:pointer" title="Ver detalle de {{ item.pallet_code }}">
+                <td style="font-family:monospace;font-weight:600;white-space:nowrap">
+                  <a href="{{ detalle_pallet_url }}{% if query_consulta %}?{{ query_consulta }}{% endif %}" style="color:inherit;text-decoration:none">
+                    {{ item.pallet_code }}
+                  </a>
+                </td>
+                <td style="font-family:monospace;white-space:nowrap">{{ item.lote_code|default:"-" }}</td>
+                <td>{{ item.tipo_caja|default:"-" }}</td>
+                <td style="text-align:right;font-weight:600">
+                  {% if item.peso_total %}
+                    {{ item.peso_total|floatformat:0 }} kg
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ item.productor|default:"-" }}</td>
+                <td>{{ item.variedad|default:"-" }}</td>
+                <td>
+                  {% if item.estado == "en_camara_frio" %}
+                    <span style="color:var(--success,#22c55e);white-space:nowrap">● En Camara de Frio</span>
+                  {% elif item.estado == "abierto" %}
+                    <span style="color:var(--teal-400,#2dd4bf);white-space:nowrap">● Abierto</span>
+                  {% elif item.estado == "cerrado" %}
+                    <span style="color:var(--text-muted);white-space:nowrap">● Cerrado</span>
+                  {% elif item.estado == "finalizado" %}
+                    <span style="color:var(--success,#22c55e);white-space:nowrap">✓ Finalizado</span>
+                  {% else %}
+                    {{ item.estado_display|default:"-" }}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding:2rem 0">
+        <div class="empty-state-desc">
+          {% if filtro_productor or filtro_estado %}
+            Sin pallets que coincidan con los filtros aplicados.
+          {% else %}
+            Sin pallets registrados en temporada {{ temporada }}.
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% else %}
+    {% if lotes %}
+      <div style="overflow-x:auto">
+        <table class="table" style="font-size:.83rem">
+          <thead>
+            <tr>
+              <th>Lote</th>
+              <th>Fecha</th>
+              <th>Productor</th>
+              <th>Variedad</th>
+              <th style="text-align:center">Bins</th>
+              <th style="text-align:right">Kg neto</th>
+              <th>Etapa actual</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in lotes %}
+              {% url 'operaciones:consulta_lote_detalle' item.lote_code as detalle_lote_url %}
+              <tr class="consulta-row-link" data-href="{{ detalle_lote_url }}{% if query_consulta %}?{{ query_consulta }}{% endif %}" style="cursor:pointer" title="Ver detalle de {{ item.lote_code }}">
+                <td style="font-family:monospace;font-weight:600;white-space:nowrap">
+                  <a href="{{ detalle_lote_url }}{% if query_consulta %}?{{ query_consulta }}{% endif %}" style="color:inherit;text-decoration:none">
+                    {{ item.lote_code }}
+                  </a>
+                </td>
+                <td style="white-space:nowrap;color:var(--text-muted)">{{ item.fecha|date:"d/m/Y"|default:"-" }}</td>
+                <td>{{ item.productor|default:"-" }}</td>
+                <td>{{ item.variedad|default:"-" }}</td>
+                <td style="text-align:center">{{ item.cantidad_bins }}</td>
+                <td style="text-align:right;font-weight:600">
+                  {% if item.kilos_neto %}
+                    {{ item.kilos_neto|floatformat:0 }} kg
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge" style="background:var(--surface-2);color:var(--text-muted);font-size:.75rem;white-space:nowrap">
+                    {{ item.etapa }}
+                  </span>
+                </td>
+                <td>
+                  {% if item.estado == "abierto" %}
+                    <span style="color:var(--teal-400,#2dd4bf);white-space:nowrap">● Abierto</span>
+                  {% elif item.estado == "cerrado" %}
+                    <span style="color:var(--text-muted);white-space:nowrap">● Cerrado</span>
+                  {% elif item.estado == "finalizado" %}
+                    <span style="color:var(--success,#22c55e);white-space:nowrap">✓ Finalizado</span>
+                  {% elif item.estado == "anulado" %}
+                    <span style="color:var(--danger,#ef4444);white-space:nowrap">✕ Anulado</span>
+                  {% else %}
+                    {{ item.estado_display|default:"-" }}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state" style="padding:2rem 0">
+        <div class="empty-state-desc">
+          {% if filtro_productor or filtro_estado %}
+            Sin lotes que coincidan con los filtros aplicados.
+          {% else %}
+            Sin lotes registrados en temporada {{ temporada }}.
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
 </div>
+
+{% if tab_actual == 'lotes' %}
+  <div style="margin-top:1rem;font-size:.78rem;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:.5rem 1.2rem">
+    <span style="font-weight:600">Etapas:</span>
+    <span>Recepcion</span>
+    <span>-></span>
+    <span>Pesado / Pendiente</span>
+    <span>-></span>
+    <span>Mantencion / Desv.</span>
+    <span>-></span>
+    <span>Ingreso Packing</span>
+    <span>-></span>
+    <span>Packing / Proceso</span>
+    <span>-></span>
+    <span>Pallet Cerrado</span>
+    <span>-></span>
+    <span>Camara Frio</span>
+  </div>
+{% endif %}
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".consulta-row-link[data-href]").forEach(function (row) {
+      row.addEventListener("click", function (event) {
+        if (event.target.closest("a, button, input, select, textarea, label")) {
+          return;
+        }
+        window.location.href = row.dataset.href;
+      });
+    });
+  });
+</script>
 
 {% endblock %}

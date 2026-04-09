@@ -112,3 +112,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+/* ───────────────────────────────────────────
+   SUBMIT LOADING STATE — previene doble envío
+   Desactiva el botón y muestra spinner mientras
+   el backend procesa la solicitud.
+   Se aplica a todos los formularios POST.
+─────────────────────────────────────────── */
+document.addEventListener('submit', e => {
+  const form = e.target;
+
+  // Saltar formularios GET (búsquedas/filtros — no modifican datos)
+  if ((form.getAttribute('method') || 'get').toLowerCase() === 'get') return;
+
+  // e.submitter: botón exacto que disparó el submit (incluye botones externos con form="id")
+  // Fallback: primer [type=submit] dentro del form
+  const btn = e.submitter || form.querySelector('[type="submit"]');
+  if (!btn || btn.disabled) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Enviando\u2026';
+});

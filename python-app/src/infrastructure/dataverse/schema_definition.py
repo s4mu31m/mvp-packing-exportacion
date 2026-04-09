@@ -272,8 +272,10 @@ REQUIRED_SCHEMA: list[EntitySpec] = [
         fields=[
             _lookup("crf21_lote_planta_id", "Lote Planta", "crf21_lote_planta",
                     "crf21_lote_planta_desverdizados"),
+            _str("crf21_numerocamara", "Numero Camara", max_length=50),
             _str("crf21_fecha_ingreso", "Fecha Ingreso", max_length=20),
             _str("crf21_hora_ingreso", "Hora Ingreso", max_length=10),
+            _int("crf21_horasdesverdizado", "Horas Desverdizado", min_val=1, max_val=240),
             _str("crf21_color_salida", "Color Salida", max_length=50),
             _str("crf21_proceso", "Proceso (horas desverdizado)", max_length=200),
             _dec("crf21_kilos_neto_salida", "Kilos Neto Salida", min_val=0, max_val=999999),

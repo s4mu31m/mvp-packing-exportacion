@@ -66,11 +66,20 @@ def registrar_desverdizado(
             errors=[f"Ya existe un registro de Desverdizado para lote {lote_code}"],
         )
 
+    # Auto-calcular kilos desde datos ya existentes
+    extra = dict(data.get("extra", {}))
+    extra["kilos_recepcionados"] = (
+        float(lote.kilos_neto_conformacion) if lote.kilos_neto_conformacion else None
+    )
+    bins = repos.bins.list_by_lote(lote.id)
+    kilos_terreno = sum((b.kilos_neto_ingreso or 0) for b in bins) or None
+    extra["kilos_enviados_terreno"] = float(kilos_terreno) if kilos_terreno else None
+
     record = repos.desverdizados.create(
         lote.id,
         operator_code=data["operator_code"],
         source_system=data["source_system"],
-        extra=data.get("extra", {}),
+        extra=extra,
     )
 
     # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)

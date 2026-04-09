@@ -1,0 +1,38 @@
+{% extends "layout_app.html" %}
+
+{% block title %}Detalle Pallet {{ detalle.pallet_code }} - CaliPro{% endblock %}
+{% block page_title %}Detalle Pallet {{ detalle.pallet_code }}{% endblock %}
+{% block page_subtitle %}Temporada {{ temporada }}{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ back_url }}" class="btn btn-ghost btn-sm">Volver a consulta</a>
+{% endblock %}
+
+{% block page_body %}
+
+<div class="card">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem;font-size:.88rem">
+    <div><strong>Codigo pallet</strong><br><span style="font-family:monospace">{{ detalle.pallet_code }}</span></div>
+    <div><strong>Tipo caja</strong><br>{{ detalle.tipo_caja|default:"-" }}</div>
+    <div><strong>Peso total</strong><br>{% if detalle.peso_total %}{{ detalle.peso_total|floatformat:2 }} kg{% else %}-{% endif %}</div>
+    <div><strong>Estado</strong><br>{{ detalle.estado_display|default:"-" }}</div>
+    <div><strong>Etapa</strong><br>{{ detalle.etapa|default:"-" }}</div>
+    <div>
+      <strong>Lote relacionado</strong><br>
+      {% if detalle.lote_code %}
+        <a href="{% url 'operaciones:consulta_lote_detalle' detalle.lote_code %}{% if query_lote %}?{{ query_lote }}{% endif %}" style="font-family:monospace">
+          {{ detalle.lote_code }}
+        </a>
+      {% else %}
+        -
+      {% endif %}
+    </div>
+    <div><strong>Productor</strong><br>{{ detalle.productor|default:"-" }}</div>
+    <div><strong>Variedad</strong><br>{{ detalle.variedad|default:"-" }}</div>
+    <div><strong>Color</strong><br>{{ detalle.color|default:"-" }}</div>
+    <div><strong>Fecha cosecha</strong><br>{{ detalle.fecha_cosecha|default:"-" }}</div>
+    <div><strong>En camara de frio</strong><br>{% if detalle.en_camara_frio %}Si{% else %}No{% endif %}</div>
+  </div>
+</div>
+
+{% endblock %}

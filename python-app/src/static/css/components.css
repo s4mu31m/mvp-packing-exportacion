@@ -54,6 +54,28 @@
 .btn-full { width: 100%; }
 .btn-icon { padding: 10px; border-radius: var(--radius-sm); }
 
+/* ---- Loading state ---- */
+.btn[disabled] {
+  opacity: 0.65;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ============ FORM ELEMENTS ============ */
 .form-group {
   display: flex;

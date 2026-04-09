@@ -11,6 +11,13 @@ Cobertura:
   - RoleAccessControlTest: evidencia negativa de enforcement de roles por módulo
 """
 import datetime
+import json
+import tempfile
+from decimal import Decimal
+from io import BytesIO
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from django.test import TestCase, Client, override_settings
 from django.contrib.auth import get_user_model
@@ -30,6 +37,7 @@ from operaciones.models import (
     LotePlantaEstado,
     Pallet,
     PalletLote,
+    CamaraFrio,
     IngresoAPacking,
     Desverdizado,
 )
@@ -1048,6 +1056,7 @@ class RoleAccessControlTest(TestCase):
             reverse("operaciones:camaras"),
             reverse("operaciones:consulta"),
             reverse("operaciones:exportar_consulta"),
+            reverse("operaciones:exportar_consulta_excel"),
         ]
         for url in urls:
             resp = c.get(url)
@@ -1067,7 +1076,540 @@ class RoleAccessControlTest(TestCase):
             reverse("operaciones:camaras"),
             reverse("operaciones:consulta"),
             reverse("operaciones:exportar_consulta"),
+            reverse("operaciones:exportar_consulta_excel"),
         ]
         for url in urls:
             resp = anon.get(url)
             self.assertIn(resp.status_code, [301, 302], f"Anónimo debe ser redirigido en {url}")
+
+
+@override_settings(PERSISTENCE_BACKEND="sqlite")
+class ConsultaJefaturaDetalleExportSqliteTest(TestCase):
+    def setUp(self):
+        self.client = _make_admin_client("admin_consulta_det_sqlite")
+        hoy = datetime.date.today()
+
+        self.lote_a = _make_lote(estado=LotePlantaEstado.CERRADO, lote_code="LP-CONS-001")
+        _make_bin(
+            self.lote_a,
+            bin_code="BIN-CONS-0001",
+            codigo_productor="PROD-A",
+            variedad_fruta="Clementina",
+            color="3",
+            fecha_cosecha=hoy,
+            kilos_bruto_ingreso=520,
+            kilos_neto_ingreso=500,
+        )
+        self.lote_a.cantidad_bins = 1
+        self.lote_a.kilos_bruto_conformacion = Decimal("520")
+        self.lote_a.kilos_neto_conformacion = Decimal("500")
+        self.lote_a.fecha_conformacion = hoy
+        self.lote_a.save()
+
+        self.lote_b = _make_lote(estado=LotePlantaEstado.ABIERTO, lote_code="LP-CONS-002")
+        _make_bin(
+            self.lote_b,
+            bin_code="BIN-CONS-0002",
+            codigo_productor="PROD-B",
+            variedad_fruta="Murcott",
+            color="4",
+            fecha_cosecha=hoy,
+            kilos_bruto_ingreso=410,
+            kilos_neto_ingreso=395,
+        )
+        self.lote_b.cantidad_bins = 1
+        self.lote_b.save(update_fields=["cantidad_bins"])
+
+        self.pallet_a = Pallet.objects.create(
+            temporada=TEMPORADA,
+            pallet_code="PAL-CONS-001",
+            tipo_caja="Caja 10kg",
+            peso_total_kg=Decimal("900"),
+            is_active=True,
+        )
+        PalletLote.objects.create(pallet=self.pallet_a, lote=self.lote_a)
+        CamaraFrio.objects.create(
+            pallet=self.pallet_a,
+            camara_numero="CF-01",
+            source_system="test",
+        )
+
+        self.pallet_b = Pallet.objects.create(
+            temporada=TEMPORADA,
+            pallet_code="PAL-CONS-002",
+            tipo_caja="Caja 8kg",
+            peso_total_kg=Decimal("720"),
+            is_active=True,
+        )
+        PalletLote.objects.create(pallet=self.pallet_b, lote=self.lote_b)
+
+    def test_consulta_renderiza_tabs_lotes_y_pallets(self):
+        resp_lotes = self.client.get(reverse("operaciones:consulta"))
+        self.assertEqual(resp_lotes.status_code, 200)
+        self.assertContains(resp_lotes, "Lotes (")
+        self.assertContains(resp_lotes, "Pallets (")
+
+        resp_pallets = self.client.get(reverse("operaciones:consulta"), {"tab": "pallets"})
+        self.assertEqual(resp_pallets.status_code, 200)
+        self.assertContains(resp_pallets, self.pallet_a.pallet_code)
+
+    def test_detalle_lote_muestra_bins_relacionados(self):
+        resp = self.client.get(
+            reverse("operaciones:consulta_lote_detalle", args=[self.lote_a.lote_code])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.lote_a.lote_code)
+        self.assertContains(resp, "BIN-CONS-0001")
+
+    def test_detalle_pallet_muestra_lote_y_link(self):
+        resp = self.client.get(
+            reverse("operaciones:consulta_pallet_detalle", args=[self.pallet_a.pallet_code])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.pallet_a.pallet_code)
+        self.assertContains(resp, self.lote_a.lote_code)
+        lote_url = reverse("operaciones:consulta_lote_detalle", args=[self.lote_a.lote_code])
+        self.assertContains(resp, lote_url)
+
+    def test_detalle_no_encontrado_redirige_consulta(self):
+        resp = self.client.get(
+            reverse("operaciones:consulta_lote_detalle", args=["LP-NO-EXISTE"]),
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(
+            resp.redirect_chain[-1][0].startswith(reverse("operaciones:consulta"))
+        )
+        self.assertIn("no encontrado", resp.content.decode("utf-8", errors="ignore").lower())
+
+    def test_detalle_pallet_no_encontrado_redirige_consulta(self):
+        resp = self.client.get(
+            reverse("operaciones:consulta_pallet_detalle", args=["PAL-NO-EXISTE"]),
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(
+            resp.redirect_chain[-1][0].startswith(reverse("operaciones:consulta"))
+        )
+        self.assertIn("no encontrado", resp.content.decode("utf-8", errors="ignore").lower())
+
+    def test_filtro_productor_aplica_a_lotes_y_pallets(self):
+        resp_lotes = self.client.get(
+            reverse("operaciones:consulta"),
+            {"tab": "lotes", "productor": "PROD-A"},
+        )
+        self.assertContains(resp_lotes, self.lote_a.lote_code)
+        self.assertNotContains(resp_lotes, self.lote_b.lote_code)
+
+        resp_pallets = self.client.get(
+            reverse("operaciones:consulta"),
+            {"tab": "pallets", "productor": "PROD-A"},
+        )
+        self.assertContains(resp_pallets, self.pallet_a.pallet_code)
+        self.assertNotContains(resp_pallets, self.pallet_b.pallet_code)
+
+    def test_filtro_estado_en_camara_frio_filtra_pallets(self):
+        resp = self.client.get(
+            reverse("operaciones:consulta"),
+            {"tab": "pallets", "estado": "en_camara_frio"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.pallet_a.pallet_code)
+        self.assertNotContains(resp, self.pallet_b.pallet_code)
+
+    def test_export_csv_por_tab(self):
+        resp_lotes = self.client.get(
+            reverse("operaciones:exportar_consulta"),
+            {"tab": "lotes"},
+        )
+        self.assertEqual(resp_lotes.status_code, 200)
+        self.assertIn("text/csv", resp_lotes.get("Content-Type", ""))
+        csv_lotes = resp_lotes.content.decode("utf-8-sig")
+        self.assertIn("Lote (code)", csv_lotes)
+        self.assertIn(self.lote_a.lote_code, csv_lotes)
+
+        resp_pallets = self.client.get(
+            reverse("operaciones:exportar_consulta"),
+            {"tab": "pallets"},
+        )
+        self.assertEqual(resp_pallets.status_code, 200)
+        csv_pallets = resp_pallets.content.decode("utf-8-sig")
+        self.assertIn("Pallet (code)", csv_pallets)
+        self.assertIn("Lote relacionado", csv_pallets)
+        self.assertIn(self.pallet_a.pallet_code, csv_pallets)
+
+    def test_export_excel_por_tab(self):
+        try:
+            from openpyxl import load_workbook
+        except Exception:
+            self.skipTest("openpyxl no disponible en este entorno")
+
+        resp_lotes = self.client.get(
+            reverse("operaciones:exportar_consulta_excel"),
+            {"tab": "lotes"},
+        )
+        self.assertEqual(resp_lotes.status_code, 200)
+        self.assertIn(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            resp_lotes.get("Content-Type", ""),
+        )
+        self.assertIn(".xlsx", resp_lotes.get("Content-Disposition", ""))
+        wb_lotes = load_workbook(filename=BytesIO(resp_lotes.content))
+        ws_lotes = wb_lotes.active
+        headers_lotes = [c.value for c in ws_lotes[1]]
+        self.assertIn("Lote (code)", headers_lotes)
+        self.assertIn("Etapa actual", headers_lotes)
+
+        resp_pallets = self.client.get(
+            reverse("operaciones:exportar_consulta_excel"),
+            {"tab": "pallets"},
+        )
+        self.assertEqual(resp_pallets.status_code, 200)
+        wb_pallets = load_workbook(filename=BytesIO(resp_pallets.content))
+        ws_pallets = wb_pallets.active
+        headers_pallets = [c.value for c in ws_pallets[1]]
+        self.assertIn("Pallet (code)", headers_pallets)
+        self.assertIn("Lote relacionado", headers_pallets)
+
+
+@override_settings(PERSISTENCE_BACKEND="dataverse")
+class ConsultaJefaturaDataverseCompatTest(TestCase):
+    def setUp(self):
+        self.client = _make_admin_client("admin_consulta_dataverse")
+        hoy = datetime.date.today()
+        self._tmp_cache_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_cache_dir.cleanup)
+        self.cache_file = Path(self._tmp_cache_dir.name) / "consulta_dataverse.json"
+        self._cache_override = override_settings(
+            CONSULTA_DATAVERSE_CACHE_FILE=str(self.cache_file),
+            CONSULTA_DATAVERSE_CACHE_TTL_SECONDS=3600,
+        )
+        self._cache_override.enable()
+        self.addCleanup(self._cache_override.disable)
+
+        self.dv_lote = SimpleNamespace(
+            id="dv-lote-1",
+            lote_code="LP-DV-001",
+            estado="cerrado",
+            etapa_actual="Pallet Cerrado",
+            cantidad_bins=1,
+            kilos_bruto_conformacion=Decimal("610"),
+            kilos_neto_conformacion=Decimal("590"),
+            requiere_desverdizado=False,
+            fecha_conformacion=hoy,
+            codigo_productor="PROD-DV",
+        )
+        self.dv_bin = SimpleNamespace(
+            id="dv-bin-1",
+            bin_code="BIN-DV-001",
+            codigo_productor="PROD-DV",
+            tipo_cultivo="Citricos",
+            variedad_fruta="Oronules",
+            color="4",
+            fecha_cosecha=hoy,
+            kilos_bruto_ingreso=Decimal("610"),
+            kilos_neto_ingreso=Decimal("590"),
+        )
+        self.dv_pallet = SimpleNamespace(
+            id="dv-pallet-1",
+            pallet_code="PAL-DV-001",
+            tipo_caja="Caja DV",
+            peso_total_kg=Decimal("990"),
+            fecha=hoy,
+        )
+        self.dv_pallet_lote = SimpleNamespace(
+            id="dv-pl-1",
+            pallet_id="dv-pallet-1",
+            lote_id="dv-lote-1",
+        )
+        self.dv_camara = SimpleNamespace(id="dv-cf-1", pallet_id="dv-pallet-1")
+
+        self.repos = SimpleNamespace(
+            lotes=SimpleNamespace(
+                list_recent=lambda limit=500: [self.dv_lote],
+                find_by_code=lambda temporada, code: self.dv_lote if code == "LP-DV-001" else None,
+                find_by_id=lambda lote_id: self.dv_lote if lote_id == "dv-lote-1" else None,
+            ),
+            bins=SimpleNamespace(
+                first_bin_by_lotes=lambda lote_ids: {"dv-lote-1": self.dv_bin},
+                list_by_lote=lambda lote_id: [self.dv_bin] if lote_id == "dv-lote-1" else [],
+            ),
+            desverdizados=SimpleNamespace(find_by_lote=lambda lote_id: None),
+            ingresos_packing=SimpleNamespace(find_by_lote=lambda lote_id: None),
+            pallets=SimpleNamespace(
+                list_recent=lambda limit=500: [self.dv_pallet],
+                find_by_code=lambda temporada, code: self.dv_pallet if code == "PAL-DV-001" else None,
+            ),
+            pallet_lotes=SimpleNamespace(
+                find_by_pallet=lambda pallet_id: self.dv_pallet_lote if pallet_id == "dv-pallet-1" else None,
+            ),
+            camara_frios=SimpleNamespace(
+                find_by_pallet=lambda pallet_id: self.dv_camara if pallet_id == "dv-pallet-1" else None,
+            ),
+        )
+
+        self.repo_patcher = patch(
+            "infrastructure.repository_factory.get_repositories",
+            return_value=self.repos,
+        )
+        self.repo_patcher.start()
+        self.addCleanup(self.repo_patcher.stop)
+
+        self.etapa_patcher = patch(
+            "infrastructure.dataverse.repositories.resolve_etapa_lote",
+            side_effect=lambda lote, repos=None: (
+                "Pallet Cerrado" if lote and getattr(lote, "id", "") == "dv-lote-1" else "Recepcion"
+            ),
+        )
+        self.etapa_patcher.start()
+        self.addCleanup(self.etapa_patcher.stop)
+
+    def test_consulta_tab_pallets_dataverse(self):
+        resp = self.client.get(reverse("operaciones:consulta"), {"tab": "pallets"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "PAL-DV-001")
+        self.assertContains(resp, "LP-DV-001")
+
+    def test_detalle_lote_dataverse_muestra_bins(self):
+        resp = self.client.get(reverse("operaciones:consulta_lote_detalle", args=["LP-DV-001"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "BIN-DV-001")
+
+    def test_detalle_pallet_dataverse_linkea_lote(self):
+        resp = self.client.get(reverse("operaciones:consulta_pallet_detalle", args=["PAL-DV-001"]))
+        self.assertEqual(resp.status_code, 200)
+        lote_url = reverse("operaciones:consulta_lote_detalle", args=["LP-DV-001"])
+        self.assertContains(resp, lote_url)
+
+    def test_filtro_estado_en_camara_frio_dataverse(self):
+        resp = self.client.get(
+            reverse("operaciones:consulta"),
+            {"tab": "pallets", "estado": "en_camara_frio"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "PAL-DV-001")
+
+    def test_export_csv_pallets_dataverse(self):
+        resp = self.client.get(reverse("operaciones:exportar_consulta"), {"tab": "pallets"})
+        self.assertEqual(resp.status_code, 200)
+        csv_txt = resp.content.decode("utf-8-sig")
+        self.assertIn("Pallet (code)", csv_txt)
+        self.assertIn("PAL-DV-001", csv_txt)
+
+
+@override_settings(PERSISTENCE_BACKEND="dataverse")
+class ConsultaJefaturaDataverseCacheTest(TestCase):
+    def setUp(self):
+        self.client = _make_admin_client("admin_consulta_cache_dataverse")
+        hoy = datetime.date.today()
+        self._tmp_cache_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_cache_dir.cleanup)
+        self.cache_file = Path(self._tmp_cache_dir.name) / "consulta_dataverse.json"
+        self._cache_override = override_settings(
+            CONSULTA_DATAVERSE_CACHE_FILE=str(self.cache_file),
+            CONSULTA_DATAVERSE_CACHE_TTL_SECONDS=3600,
+        )
+        self._cache_override.enable()
+        self.addCleanup(self._cache_override.disable)
+
+        self.dv_lote = SimpleNamespace(
+            id="dv-lote-cache-1",
+            lote_code="LP-DVC-001",
+            estado="cerrado",
+            etapa_actual="Pallet Cerrado",
+            cantidad_bins=1,
+            kilos_bruto_conformacion=Decimal("510"),
+            kilos_neto_conformacion=Decimal("500"),
+            requiere_desverdizado=False,
+            fecha_conformacion=hoy,
+            codigo_productor="PROD-DVC",
+        )
+        self.dv_bin = SimpleNamespace(
+            id="dv-bin-cache-1",
+            bin_code="BIN-DVC-001",
+            codigo_productor="PROD-DVC",
+            tipo_cultivo="Citricos",
+            variedad_fruta="Nadorcott",
+            color="3",
+            fecha_cosecha=hoy,
+            kilos_bruto_ingreso=Decimal("510"),
+            kilos_neto_ingreso=Decimal("500"),
+        )
+        self.dv_pallet = SimpleNamespace(
+            id="dv-pallet-cache-1",
+            pallet_code="PAL-DVC-001",
+            tipo_caja="Caja 10kg",
+            peso_total_kg=Decimal("800"),
+            fecha=hoy,
+        )
+        self.dv_pallet_lote = SimpleNamespace(
+            id="dv-pl-cache-1",
+            pallet_id="dv-pallet-cache-1",
+            lote_id="dv-lote-cache-1",
+        )
+        self.dv_camara = SimpleNamespace(id="dv-cf-cache-1", pallet_id="dv-pallet-cache-1")
+
+        self.mock_lotes_list_recent = Mock(return_value=[self.dv_lote])
+        self.mock_pallets_list_recent = Mock(return_value=[self.dv_pallet])
+        self.repos = SimpleNamespace(
+            lotes=SimpleNamespace(
+                list_recent=self.mock_lotes_list_recent,
+                find_by_code=Mock(
+                    side_effect=lambda temporada, code: self.dv_lote if code == "LP-DVC-001" else None
+                ),
+                find_by_id=Mock(
+                    side_effect=lambda lote_id: self.dv_lote if lote_id == "dv-lote-cache-1" else None
+                ),
+            ),
+            bins=SimpleNamespace(
+                first_bin_by_lotes=Mock(return_value={"dv-lote-cache-1": self.dv_bin}),
+                list_by_lote=Mock(
+                    side_effect=lambda lote_id: [self.dv_bin] if lote_id == "dv-lote-cache-1" else []
+                ),
+            ),
+            desverdizados=SimpleNamespace(find_by_lote=Mock(return_value=None)),
+            ingresos_packing=SimpleNamespace(find_by_lote=Mock(return_value=None)),
+            pallets=SimpleNamespace(
+                list_recent=self.mock_pallets_list_recent,
+                find_by_code=Mock(
+                    side_effect=lambda temporada, code: self.dv_pallet if code == "PAL-DVC-001" else None
+                ),
+            ),
+            pallet_lotes=SimpleNamespace(
+                find_by_pallet=Mock(
+                    side_effect=lambda pallet_id: self.dv_pallet_lote if pallet_id == "dv-pallet-cache-1" else None
+                ),
+            ),
+            camara_frios=SimpleNamespace(
+                find_by_pallet=Mock(
+                    side_effect=lambda pallet_id: self.dv_camara if pallet_id == "dv-pallet-cache-1" else None
+                ),
+            ),
+        )
+
+        self.repo_patcher = patch(
+            "infrastructure.repository_factory.get_repositories",
+            return_value=self.repos,
+        )
+        self.repo_patcher.start()
+        self.addCleanup(self.repo_patcher.stop)
+
+        self.etapa_patcher = patch(
+            "infrastructure.dataverse.repositories.resolve_etapa_lote",
+            side_effect=lambda lote, repos=None: (
+                "Pallet Cerrado"
+                if lote and getattr(lote, "id", "") == "dv-lote-cache-1"
+                else "Recepcion"
+            ),
+        )
+        self.etapa_patcher.start()
+        self.addCleanup(self.etapa_patcher.stop)
+
+    def _write_stale_cache(self):
+        payload = json.loads(self.cache_file.read_text(encoding="utf-8"))
+        payload["updated_at"] = "2000-01-01T00:00:00+00:00"
+        self.cache_file.write_text(
+            json.dumps(payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def test_cache_miss_crea_json_y_segunda_carga_usa_cache(self):
+        consulta_url = reverse("operaciones:consulta")
+        self.assertFalse(self.cache_file.exists())
+
+        resp_1 = self.client.get(consulta_url, {"tab": "lotes"})
+        self.assertEqual(resp_1.status_code, 200)
+        self.assertContains(resp_1, "LP-DVC-001")
+        self.assertTrue(self.cache_file.exists())
+        live_calls = self.mock_lotes_list_recent.call_count
+        self.assertGreaterEqual(live_calls, 1)
+
+        resp_2 = self.client.get(consulta_url, {"tab": "lotes"})
+        self.assertEqual(resp_2.status_code, 200)
+        self.assertContains(resp_2, "LP-DVC-001")
+        self.assertEqual(self.mock_lotes_list_recent.call_count, live_calls)
+
+    def test_refresh_manual_fuerza_sync_dataverse(self):
+        consulta_url = reverse("operaciones:consulta")
+        self.client.get(consulta_url, {"tab": "lotes"})
+        calls_before = self.mock_lotes_list_recent.call_count
+
+        resp = self.client.get(consulta_url, {"tab": "lotes", "refresh": "1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertGreater(self.mock_lotes_list_recent.call_count, calls_before)
+
+    def test_cache_expirado_dispara_refresco_background_y_no_bloquea(self):
+        consulta_url = reverse("operaciones:consulta")
+        self.client.get(consulta_url, {"tab": "lotes"})
+        self._write_stale_cache()
+        calls_before = self.mock_lotes_list_recent.call_count
+
+        with patch(
+            "operaciones.views._consulta_dataverse_cache_refresh_background",
+            return_value=True,
+        ) as mock_background_refresh:
+            resp = self.client.get(consulta_url, {"tab": "lotes"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "LP-DVC-001")
+        self.assertEqual(self.mock_lotes_list_recent.call_count, calls_before)
+        mock_background_refresh.assert_called_once()
+        self.assertTrue(resp.context["cache_is_stale"])
+        self.assertTrue(resp.context["background_refresh_started"])
+
+    def test_si_falla_dataverse_con_cache_previo_hace_fallback(self):
+        consulta_url = reverse("operaciones:consulta")
+        self.client.get(consulta_url, {"tab": "lotes"})
+
+        with patch(
+            "operaciones.views._consulta_dataverse_cache_refresh_now",
+            side_effect=RuntimeError("dataverse offline"),
+        ):
+            resp = self.client.get(
+                consulta_url,
+                {"tab": "lotes", "refresh": "1"},
+                follow=True,
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "LP-DVC-001")
+        mensajes = [str(m) for m in resp.context["messages"]]
+        self.assertTrue(
+            any("No fue posible sincronizar Dataverse" in m for m in mensajes),
+            "Debe mostrar warning de fallback cuando falla refresh manual.",
+        )
+
+    def test_exportaciones_csv_xlsx_reusan_dataset_cacheado(self):
+        self.client.get(reverse("operaciones:consulta"), {"tab": "lotes"})
+        calls_before = self.mock_lotes_list_recent.call_count
+
+        csv_resp = self.client.get(reverse("operaciones:exportar_consulta"), {"tab": "lotes"})
+        self.assertEqual(csv_resp.status_code, 200)
+        self.assertIn("LP-DVC-001", csv_resp.content.decode("utf-8-sig"))
+
+        self.assertEqual(
+            self.mock_lotes_list_recent.call_count,
+            calls_before,
+            "CSV sin refresh debe salir desde cache sin consultar Dataverse.",
+        )
+
+        try:
+            from openpyxl import load_workbook
+        except Exception:
+            return
+
+        xlsx_resp = self.client.get(
+            reverse("operaciones:exportar_consulta_excel"),
+            {"tab": "pallets"},
+        )
+        self.assertEqual(xlsx_resp.status_code, 200)
+        wb = load_workbook(filename=BytesIO(xlsx_resp.content))
+        ws = wb.active
+        headers = [c.value for c in ws[1]]
+        self.assertIn("Pallet (code)", headers)
+        self.assertIn("Lote relacionado", headers)
+        self.assertEqual(
+            self.mock_lotes_list_recent.call_count,
+            calls_before,
+            "Excel sin refresh debe salir desde cache sin consultar Dataverse.",
+        )
+

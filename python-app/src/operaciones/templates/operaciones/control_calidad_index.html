@@ -14,7 +14,7 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-bottom:1.5rem">
 
   <!-- Desverdizado -->
-  <a href="{% url 'operaciones:control_desverdizado' %}" style="text-decoration:none">
+  <a href="{% url 'operaciones:control_desverdizado' %}" style="text-decoration:none;color:var(--text-primary)">
     <div class="card" style="cursor:pointer;transition:border-color .2s;border:1px solid var(--border)"
          onmouseover="this.style.borderColor='var(--teal-400,#2dd4bf)'"
          onmouseout="this.style.borderColor='var(--border)'">
@@ -25,7 +25,7 @@
   </a>
 
   <!-- Packing Cítricos -->
-  <a href="{% url 'operaciones:control_packing' %}" style="text-decoration:none">
+  <a href="{% url 'operaciones:control_packing' %}" style="text-decoration:none;color:var(--text-primary)">
     <div class="card" style="cursor:pointer;transition:border-color .2s;border:1px solid var(--border)"
          onmouseover="this.style.borderColor='var(--teal-400,#2dd4bf)'"
          onmouseout="this.style.borderColor='var(--border)'">
@@ -36,7 +36,7 @@
   </a>
 
   <!-- Cámaras -->
-  <a href="{% url 'operaciones:control_camaras' %}" style="text-decoration:none">
+  <a href="{% url 'operaciones:control_camaras' %}" style="text-decoration:none;color:var(--text-primary)">
     <div class="card" style="cursor:pointer;transition:border-color .2s;border:1px solid var(--border)"
          onmouseover="this.style.borderColor='var(--teal-400,#2dd4bf)'"
          onmouseout="this.style.borderColor='var(--border)'">
@@ -47,7 +47,7 @@
   </a>
 
   <!-- Parámetros Proceso -->
-  <a href="{% url 'operaciones:control_proceso' %}" style="text-decoration:none">
+  <a href="{% url 'operaciones:control_proceso' %}" style="text-decoration:none;color:var(--text-primary)">
     <div class="card" style="cursor:pointer;transition:border-color .2s;border:1px solid var(--border);
          border-top:3px solid var(--border)"
          onmouseover="this.style.borderColor='var(--orange-400,#fb923c)'"

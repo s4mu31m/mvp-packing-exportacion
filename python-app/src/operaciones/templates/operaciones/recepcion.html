@@ -191,20 +191,46 @@
 
       <div id="bins-list" style="margin-top:.5rem">
         {% for bin in bins_del_lote %}
-          <div style="display:flex;justify-content:space-between;align-items:center;
-                      padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.82rem">
-            <div>
-              <span style="font-weight:600">{{ bin.bin_code }}</span><br>
-              <span style="color:var(--text-muted)">
-                C{{ bin.numero_cuartel|default:"?" }}
-                • {{ bin.hora_recepcion|default:"" }}
-              </span>
+          <div style="padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.82rem">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <span style="font-weight:600">{{ bin.bin_code }}</span><br>
+                <span style="color:var(--text-muted)">
+                  C{{ bin.numero_cuartel|default:"?" }}
+                  &bull; {{ bin.hora_recepcion|default:"" }}
+                </span>
+              </div>
+              <div style="text-align:right">
+                <span style="color:var(--teal-400);font-weight:600">
+                  {{ bin.kilos_neto_ingreso|floatformat:0|default:"—" }} kg
+                </span><br>
+                <span style="font-size:.75rem;color:var(--text-muted)">{{ bin.a_o_r|default:"" }}</span>
+              </div>
             </div>
-            <div style="text-align:right">
-              <span style="color:var(--teal-400);font-weight:600">
-                {{ bin.kilos_neto_ingreso|floatformat:0|default:"—" }} kg
-              </span><br>
-              <span style="font-size:.75rem;color:var(--text-muted)">{{ bin.a_o_r|default:"" }}</span>
+            <div style="display:flex;gap:.4rem;margin-top:.35rem">
+              <button type="button"
+                      class="btn btn-ghost"
+                      style="padding:3px 10px;font-size:.72rem"
+                      onclick="abrirModalEditar(
+                        '{{ bin.bin_code }}',
+                        '{{ bin.numero_cuartel|default:"" }}',
+                        '{{ bin.hora_recepcion|default:"" }}',
+                        '{{ bin.kilos_bruto_ingreso|default:"" }}',
+                        '{{ bin.kilos_neto_ingreso|default:"" }}',
+                        '{{ bin.a_o_r|default:"" }}',
+                        '{{ bin.observaciones|default:""|escapejs }}'
+                      )">Editar</button>
+              <form method="post" style="display:inline"
+                    onsubmit="return confirm('¿Eliminar bin {{ bin.bin_code }} del lote?')">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="eliminar_bin">
+                <input type="hidden" name="bin_code" value="{{ bin.bin_code }}">
+                <button type="submit"
+                        class="btn"
+                        style="padding:3px 10px;font-size:.72rem;background:var(--danger,#c0392b);color:#fff">
+                  Eliminar
+                </button>
+              </form>
             </div>
           </div>
         {% empty %}
@@ -230,6 +256,67 @@
   </div>
   {% endif %}
 
+<!-- ===== MODAL EDITAR BIN ===== -->
+{% if lote %}
+<div id="modal-editar-bin"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+            z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--bg-card,var(--surface-1));border:1px solid var(--border);
+              border-radius:var(--radius-lg);padding:24px;width:min(480px,92vw);
+              max-height:90vh;overflow-y:auto">
+    <div class="card-title" style="margin-bottom:1rem">
+      Editar bin: <span id="modal-bin-code-label" style="color:var(--teal-400)"></span>
+    </div>
+    <form method="post" id="form-editar-bin">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="editar_bin">
+      <input type="hidden" name="bin_code" id="modal-bin-code-input">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
+        <div class="form-group">
+          <label class="form-label">Cuartel</label>
+          <input type="text" name="numero_cuartel" id="modal-numero-cuartel"
+                 class="form-control" autocomplete="off" placeholder="C01">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hora recepcion</label>
+          <input type="time" name="hora_recepcion" id="modal-hora-recepcion"
+                 class="form-control campo-hora">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kilos bruto ingreso</label>
+          <input type="number" name="kilos_bruto_ingreso" id="modal-kilos-bruto"
+                 class="form-control" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kilos neto ingreso</label>
+          <input type="number" name="kilos_neto_ingreso" id="modal-kilos-neto"
+                 class="form-control" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">A/O/R</label>
+          <select name="a_o_r" id="modal-aor" class="form-control">
+            <option value="">---------</option>
+            <option value="aprobado">Aprobado</option>
+            <option value="objetado">Objetado</option>
+            <option value="rechazado">Rechazado</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:.6rem">
+        <label class="form-label">Observaciones</label>
+        <textarea name="observaciones" id="modal-observaciones"
+                  class="form-control" rows="2"></textarea>
+      </div>
+      <div class="flex-row mt-4">
+        <button type="button" class="btn btn-ghost"
+                onclick="cerrarModalEditar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary ml-auto">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 {% include "operaciones/includes/op_common_js.html" %}
 
 {% endblock %}
@@ -237,4 +324,27 @@
 {% block extra_js %}
 {# scan.js: lector de código de barras USB y simulación para E2E testing #}
 <script src="{% static 'js/scan.js' %}"></script>
+{% if lote %}
+<script>
+function abrirModalEditar(binCode, cuartel, hora, kgBruto, kgNeto, aor, obs) {
+  document.getElementById('modal-bin-code-label').textContent = binCode;
+  document.getElementById('modal-bin-code-input').value = binCode;
+  document.getElementById('modal-numero-cuartel').value = cuartel;
+  document.getElementById('modal-hora-recepcion').value = hora;
+  document.getElementById('modal-kilos-bruto').value = kgBruto;
+  document.getElementById('modal-kilos-neto').value = kgNeto;
+  var sel = document.getElementById('modal-aor');
+  for (var i = 0; i < sel.options.length; i++)
+    sel.options[i].selected = (sel.options[i].value === aor);
+  document.getElementById('modal-observaciones').value = obs;
+  document.getElementById('modal-editar-bin').style.display = 'flex';
+}
+function cerrarModalEditar() {
+  document.getElementById('modal-editar-bin').style.display = 'none';
+}
+document.getElementById('modal-editar-bin').addEventListener('click', function(e) {
+  if (e.target === this) cerrarModalEditar();
+});
+</script>
+{% endif %}
 {% endblock %}

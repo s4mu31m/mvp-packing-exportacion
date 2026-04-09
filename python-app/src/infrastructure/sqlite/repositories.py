@@ -186,10 +186,12 @@ def _desverdizado_to_record(obj) -> DesverdizadoRecord:
     return DesverdizadoRecord(
         id=obj.id,
         lote_id=obj.lote_id,
+        numero_camara=obj.numero_camara or "",
         fecha_ingreso=obj.fecha_ingreso,
         hora_ingreso=obj.hora_ingreso or "",
         fecha_salida=obj.fecha_salida,
         hora_salida=obj.hora_salida or "",
+        horas_desverdizado=obj.horas_desverdizado,
         kilos_enviados_terreno=obj.kilos_enviados_terreno,
         kilos_recepcionados=obj.kilos_recepcionados,
         kilos_procesados=obj.kilos_procesados,
@@ -388,6 +390,20 @@ class SqliteBinRepository(BinRepository):
         objs = list(Bin.objects.filter(id__in=bin_ids).order_by("id"))
         return [_bin_to_record(obj) for obj in objs]
 
+    def update(self, bin_id: Any, fields: dict) -> BinRecord:
+        from operaciones.models import Bin
+        _VARIABLE = {"numero_cuartel", "hora_recepcion", "kilos_bruto_ingreso",
+                     "kilos_neto_ingreso", "a_o_r", "observaciones"}
+        safe = {k: v for k, v in fields.items() if k in _VARIABLE}
+        if safe:
+            Bin.objects.filter(pk=bin_id).update(**safe)
+        obj = Bin.objects.get(pk=bin_id)
+        return _bin_to_record(obj)
+
+    def delete(self, bin_id: Any) -> None:
+        from operaciones.models import Bin
+        Bin.objects.filter(pk=bin_id).delete()
+
 
 class SqliteLoteRepository(LoteRepository):
 
@@ -512,6 +528,15 @@ class SqliteBinLoteRepository(BinLoteRepository):
         from operaciones.models import BinLote
         objs = list(BinLote.objects.filter(lote_id=lote_id).order_by("id"))
         return [_bin_lote_to_record(obj) for obj in objs]
+
+    def find_by_bin_and_lote(self, bin_id: Any, lote_id: Any) -> Optional[BinLoteRecord]:
+        from operaciones.models import BinLote
+        obj = BinLote.objects.filter(bin_id=bin_id, lote_id=lote_id).first()
+        return _bin_lote_to_record(obj) if obj else None
+
+    def delete(self, bin_lote_id: Any) -> None:
+        from operaciones.models import BinLote
+        BinLote.objects.filter(pk=bin_lote_id).delete()
 
 
 class SqlitePalletLoteRepository(PalletLoteRepository):

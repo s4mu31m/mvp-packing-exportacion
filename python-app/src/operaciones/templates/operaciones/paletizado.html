@@ -2,7 +2,7 @@
 
 {% block title %}Paletizado — CaliPro{% endblock %}
 {% block page_title %}Paletizado{% endblock %}
-{% block page_subtitle %}Control de calidad y cierre de pallet{% endblock %}
+{% block page_subtitle %}Convertir lote en pallet y registrar control de calidad{% endblock %}
 
 {% block page_body %}
 {% if messages %}
@@ -15,61 +15,100 @@
 
   <div class="flex-col" style="min-width:0">
 
-    <!-- Selector de pallet -->
-    <div class="card" style="margin-bottom:1rem">
-      <div class="card-title" style="margin-bottom:.8rem">Seleccionar pallet</div>
-      {% if pallets_pendientes %}
+    <!-- =====================================================================
+         SECCIÓN 1: PALETIZAR LOTE (acción primaria)
+         ===================================================================== -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <div class="card-title" style="margin-bottom:.8rem">Paletizar lote</div>
+
+      {% if lotes_para_paletizar %}
         <div class="form-group">
-          <label class="form-label">Pallets pendientes de calidad</label>
-          <select id="pallet-selector" class="form-control">
-            <option value="">— Seleccione un pallet —</option>
-            {% for p in pallets_pendientes %}
-              <option value="{{ p.pallet_code }}">{{ p.pallet_code }}</option>
+          <label class="form-label">Seleccionar lote</label>
+          <select id="lote-selector" class="form-control" onchange="seleccionarLote(this.value)">
+            <option value="">— Seleccione un lote —</option>
+            {% for lote in lotes_para_paletizar %}
+              <option value="{{ lote.lote_code }}">{{ lote.lote_code }}</option>
             {% endfor %}
           </select>
+          <small class="form-hint">Lotes con ingreso a packing pendientes de paletizar.</small>
         </div>
       {% else %}
-        <p style="color:var(--text-muted);font-size:.85rem">Sin pallets pendientes en temporada actual.</p>
+        <p style="color:var(--text-muted);font-size:.85rem;margin:0">
+          Sin lotes disponibles para paletizar en la temporada actual.
+        </p>
       {% endif %}
-      <div class="form-group" style="margin-top:.5rem">
-        <label class="form-label">Codigo de pallet</label>
-        <input type="text" class="form-control" id="pallet-code-input"
-               placeholder="Ej: PAL-2026-001" style="font-family:monospace">
+
+      <!-- Panel contexto del lote seleccionado -->
+      <div id="lote-context-panel" style="display:none;margin-top:.8rem;padding:.75rem;
+           background:var(--surface-0);border:1px solid var(--teal-400,#2dd4bf);border-radius:6px">
+        <div style="font-size:.78rem;font-weight:600;color:var(--teal-400,#2dd4bf);margin-bottom:.5rem">
+          Lote seleccionado
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:.3rem .8rem;font-size:.82rem">
+          <span style="color:var(--text-muted)">Productor</span><span id="ctx-productor">—</span>
+          <span style="color:var(--text-muted)">Variedad</span><span id="ctx-variedad">—</span>
+          <span style="color:var(--text-muted)">Color</span><span id="ctx-color">—</span>
+          <span style="color:var(--text-muted)">Tipo cultivo</span><span id="ctx-tipo">—</span>
+        </div>
       </div>
+
+      <!-- Formulario de cierre -->
+      <form method="post" style="margin-top:1rem">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="cerrar">
+        <input type="hidden" name="temporada" value="">
+        <input type="hidden" name="lote_code" id="lote-code-hidden" value="">
+        <div class="form-group">
+          <label class="form-label">Codigo operador</label>
+          <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
+        </div>
+        <div class="flex-row mt-4">
+          <button type="submit" class="btn btn-primary ml-auto" id="btn-cerrar-pallet"
+                  disabled style="min-width:160px">
+            Cerrar pallet
+          </button>
+        </div>
+        <p style="font-size:.75rem;color:var(--text-muted);margin-top:.5rem;text-align:right">
+          El codigo de pallet se genera automaticamente al confirmar el cierre.
+        </p>
+      </form>
     </div>
 
-    <!-- Panel contexto pallet -->
-    <div class="card" id="pallet-context-panel" style="margin-bottom:1rem;display:none;
-         background:var(--surface-0);border:1px solid var(--teal-400,#2dd4bf)">
-      <div class="card-title" style="font-size:.85rem;margin-bottom:.8rem;color:var(--teal-400,#2dd4bf)">
-        Contexto del pallet
-      </div>
-      <div style="display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;font-size:.82rem">
-        <span style="color:var(--text-muted)">Lote</span>
-        <span id="ctx-lote" style="font-family:monospace">—</span>
-        <span style="color:var(--text-muted)">Productor</span>
-        <span id="ctx-productor">—</span>
-        <span style="color:var(--text-muted)">Variedad</span>
-        <span id="ctx-variedad">—</span>
-      </div>
-      <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:.35rem .6rem;font-size:.82rem;margin-top:.5rem">
-        <span style="color:var(--text-muted)">Color</span><span id="ctx-color">—</span>
-        <span style="color:var(--text-muted)">Peso total</span>
-        <span id="ctx-peso" style="color:var(--teal-400,#2dd4bf);font-weight:600">—</span>
-      </div>
-    </div>
+    <!-- =====================================================================
+         SECCIÓN 2: CONTROL DE CALIDAD (acción secundaria, solo si hay pallets)
+         ===================================================================== -->
+    {% if pallets_pendientes %}
+    <div class="card">
+      <div class="card-title" style="margin-bottom:.8rem">Control de calidad pallet</div>
 
-    <div class="flex-row" style="gap:.5rem;margin-bottom:1rem">
-      <button type="button" class="btn btn-primary btn-sm" id="tab-btn-calidad"
-              onclick="showTab('calidad')">Calidad Pallet</button>
-      <button type="button" class="btn btn-ghost btn-sm" id="tab-btn-cerrar"
-              onclick="showTab('cerrar')">Cerrar Pallet</button>
-    </div>
+      <div class="form-group">
+        <label class="form-label">Seleccionar pallet</label>
+        <select id="pallet-selector" class="form-control" onchange="seleccionarPallet(this.value)">
+          <option value="">— Seleccione un pallet —</option>
+          {% for p in pallets_pendientes %}
+            <option value="{{ p.pallet_code }}">{{ p.pallet_code }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <!-- Calidad pallet -->
-    <div id="tab-calidad" class="card">
-      <div class="card-title" style="margin-bottom:1rem">Control de Calidad</div>
-      <form method="post">
+      <!-- Panel contexto pallet -->
+      <div id="pallet-context-panel" style="display:none;margin-top:.5rem;padding:.75rem;
+           background:var(--surface-0);border:1px solid var(--border);border-radius:6px;
+           font-size:.82rem">
+        <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:.3rem .8rem">
+          <span style="color:var(--text-muted)">Lote</span>
+          <span id="pctx-lote" style="font-family:monospace">—</span>
+          <span style="color:var(--text-muted)">Productor</span>
+          <span id="pctx-productor">—</span>
+          <span style="color:var(--text-muted)">Variedad</span>
+          <span id="pctx-variedad">—</span>
+          <span style="color:var(--text-muted)">Color</span>
+          <span id="pctx-color">—</span>
+        </div>
+      </div>
+
+      <!-- Formulario calidad -->
+      <form method="post" style="margin-top:1rem">
         {% csrf_token %}
         <input type="hidden" name="action" value="calidad">
         <input type="hidden" name="temporada" value="">
@@ -83,7 +122,7 @@
           </div>
         {% endfor %}
 
-        <!-- Muestras individuales (CalidadPalletMuestra) -->
+        <!-- Muestras individuales -->
         <div style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1rem">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
             <span style="font-weight:600;font-size:.9rem">Muestras individuales</span>
@@ -97,101 +136,80 @@
         </div>
 
         <div class="flex-row mt-4">
-          <button type="submit" class="btn btn-primary ml-auto">Registrar Calidad</button>
+          <button type="submit" class="btn btn-primary ml-auto">Registrar calidad</button>
         </div>
       </form>
     </div>
-
-    <!-- Cerrar pallet -->
-    <div id="tab-cerrar" class="card" style="display:none">
-      <div class="card-title" style="margin-bottom:1rem">Cerrar Pallet</div>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="cerrar">
-        <input type="hidden" name="temporada" value="">
-        <input type="hidden" name="pallet_code" id="pallet-code-cerrar" value="">
-        <input type="hidden" name="lote_code" id="lote-code-cerrar" value="">
-        <div class="form-group">
-          <label class="form-label">Lote asociado</label>
-          <input type="text" class="form-control" id="lote-code-display"
-                 placeholder="Se completa al seleccionar el pallet" readonly
-                 style="background:var(--surface-1);font-family:monospace">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Codigo operador</label>
-          <input type="text" class="form-control" value="{{ codigo_operador }}" disabled>
-        </div>
-        <div class="flex-row mt-4">
-          <button type="submit" class="btn btn-danger ml-auto">Cerrar Pallet</button>
-        </div>
-      </form>
-    </div>
+    {% endif %}
 
   </div>
 
   <!-- Sidebar -->
   <div class="op-sidebar-panel">
-    <div class="op-sidebar-title">Pallets pendientes</div>
+    <div class="op-sidebar-title">Lotes para paletizar</div>
+    {% for lote in lotes_para_paletizar %}
+      <div style="padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.82rem;cursor:pointer"
+           onclick="seleccionarLote('{{ lote.lote_code }}')">
+        <div style="font-weight:600;font-family:monospace">{{ lote.lote_code }}</div>
+      </div>
+    {% empty %}
+      <div class="empty-state"><div class="empty-state-desc">Sin lotes</div></div>
+    {% endfor %}
+
+    {% if pallets_pendientes %}
+    <div class="op-sidebar-title" style="margin-top:1.2rem">Pallets sin calidad</div>
     {% for p in pallets_pendientes %}
       <div style="padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.82rem;cursor:pointer"
            onclick="seleccionarPallet('{{ p.pallet_code }}')">
         <div style="font-weight:600;font-family:monospace">{{ p.pallet_code }}</div>
       </div>
-    {% empty %}
-      <div class="empty-state"><div class="empty-state-desc">Sin pallets</div></div>
     {% endfor %}
+    {% endif %}
   </div>
 
 </div>
 
 {% include "operaciones/includes/op_common_js.html" %}
 <script>
+const LOTES_DATA  = {{ lotes_data_json|safe }};
 const PALLETS_DATA = {{ pallets_data_json|safe }};
 
-function showTab(name) {
-  document.getElementById('tab-calidad').style.display = name === 'calidad' ? '' : 'none';
-  document.getElementById('tab-cerrar').style.display  = name === 'cerrar'  ? '' : 'none';
-  document.getElementById('tab-btn-calidad').className =
-    name === 'calidad' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
-  document.getElementById('tab-btn-cerrar').className =
-    name === 'cerrar' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
-}
-
-function setPalletCode(code) {
-  document.getElementById('pallet-code-calidad').value = code;
-  document.getElementById('pallet-code-cerrar').value  = code;
-  document.getElementById('pallet-code-input').value   = code;
-}
-
-function poblarContexto(code) {
-  const panel = document.getElementById('pallet-context-panel');
-  const d = PALLETS_DATA[code];
-  if (!d) { panel.style.display = 'none'; return; }
+// --- Seleccion de lote para paletizar ---
+function seleccionarLote(code) {
+  document.getElementById('lote-selector').value      = code;
+  document.getElementById('lote-code-hidden').value   = code;
+  const panel = document.getElementById('lote-context-panel');
+  const btn   = document.getElementById('btn-cerrar-pallet');
+  if (!code) {
+    panel.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+  const d = LOTES_DATA[code] || {};
+  document.getElementById('ctx-productor').textContent = d.productor    || '—';
+  document.getElementById('ctx-variedad').textContent  = d.variedad     || '—';
+  document.getElementById('ctx-color').textContent     = d.color        || '—';
+  document.getElementById('ctx-tipo').textContent      = d.tipo_cultivo || '—';
   panel.style.display = '';
-  document.getElementById('ctx-lote').textContent     = fmt(d.lote_code);
-  document.getElementById('ctx-productor').textContent = fmt(d.productor);
-  document.getElementById('ctx-variedad').textContent  = fmt(d.variedad);
-  document.getElementById('ctx-color').textContent     = fmt(d.color);
-  document.getElementById('ctx-peso').textContent      = d.peso_total != null ? d.peso_total.toFixed(0) + ' kg' : '—';
-  // Propagar lote_code al form cerrar
-  document.getElementById('lote-code-cerrar').value   = d.lote_code || '';
-  document.getElementById('lote-code-display').value  = d.lote_code || '';
 }
 
+// --- Seleccion de pallet para calidad ---
 function seleccionarPallet(code) {
-  setPalletCode(code);
-  document.getElementById('pallet-selector').value = code;
-  poblarContexto(code);
+  const sel = document.getElementById('pallet-selector');
+  if (sel) sel.value = code;
+  const inp = document.getElementById('pallet-code-calidad');
+  if (inp) inp.value = code;
+  const panel = document.getElementById('pallet-context-panel');
+  if (!panel) return;
+  if (!code) { panel.style.display = 'none'; return; }
+  const d = PALLETS_DATA[code] || {};
+  document.getElementById('pctx-lote').textContent     = d.lote_code  || '—';
+  document.getElementById('pctx-productor').textContent = d.productor || '—';
+  document.getElementById('pctx-variedad').textContent  = d.variedad  || '—';
+  document.getElementById('pctx-color').textContent     = d.color     || '—';
+  panel.style.display = '';
 }
-
-document.getElementById('pallet-selector').addEventListener('change', function() {
-  if (this.value) seleccionarPallet(this.value);
-});
-document.getElementById('pallet-code-input').addEventListener('input', function() {
-  const code = this.value.trim();
-  setPalletCode(code);
-  if (code) poblarContexto(code);
-});
 
 // --- Muestras individuales ---
 let muestraCount = 0;

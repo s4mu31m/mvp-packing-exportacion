@@ -413,6 +413,7 @@ class Desverdizado(AuditSourceModel):
         on_delete=models.PROTECT,
         related_name="desverdizado",
     )
+    numero_camara = models.CharField(max_length=50, blank=True, default="")
     fecha_ingreso = models.DateField(null=True, blank=True)
     hora_ingreso = models.CharField(max_length=5, blank=True, default="",
         help_text="Formato HH:mm")
