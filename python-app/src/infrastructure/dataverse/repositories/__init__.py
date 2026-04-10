@@ -458,6 +458,13 @@ class DataverseBinRepository(BinRepository):
         self._client = client
 
     def find_by_code(self, temporada: str, bin_code: str) -> Optional[BinRecord]:
+        from django.core.cache import caches
+        _cache = caches["dataverse"]
+        _key = f"bin_by_code:{bin_code}"
+        cached = _cache.get(_key)
+        if cached is not None:
+            return cached
+
         # temporada no existe en Dataverse; filtramos solo por bin_code
         f = f"{BIN_FIELDS['bin_code']} eq '{bin_code}'"
         result = self._client.list_rows(
@@ -467,7 +474,10 @@ class DataverseBinRepository(BinRepository):
             top=1,
         )
         rows = (result or {}).get("value", [])
-        return _row_to_bin(rows[0]) if rows else None
+        record = _row_to_bin(rows[0]) if rows else None
+        if record:
+            _cache.set(_key, record, timeout=30)
+        return record
 
     def create(
         self,
@@ -530,16 +540,21 @@ class DataverseBinRepository(BinRepository):
     def filter_by_codes(self, temporada: str, bin_codes: list[str]) -> list[BinRecord]:
         if not bin_codes:
             return []
-        codes_filter = " or ".join(
-            f"{BIN_FIELDS['bin_code']} eq '{c}'" for c in bin_codes
-        )
-        result = self._client.list_rows(
-            ENTITY_SET_BIN,
-            select=_BIN_SELECT,
-            filter_expr=f"({codes_filter})",
-            top=len(bin_codes) + 10,
-        )
-        return [_row_to_bin(r) for r in (result or {}).get("value", [])]
+        _CHUNK = 20
+        records = []
+        for i in range(0, len(bin_codes), _CHUNK):
+            chunk = bin_codes[i:i + _CHUNK]
+            codes_filter = " or ".join(
+                f"{BIN_FIELDS['bin_code']} eq '{c}'" for c in chunk
+            )
+            result = self._client.list_rows(
+                ENTITY_SET_BIN,
+                select=_BIN_SELECT,
+                filter_expr=f"({codes_filter})",
+                top=len(chunk) + 10,
+            )
+            records.extend(_row_to_bin(r) for r in (result or {}).get("value", []))
+        return records
 
     def list_by_lote(self, lote_id: Any) -> list[BinRecord]:
         """
@@ -669,8 +684,12 @@ class DataverseBinRepository(BinRepository):
                 v = AOR_DV.get(v, v)
             body[dv_field] = v
         if body:
-            self._client.update_row(ENTITY_SET_BIN, str(bin_id), body)
-        # Retornar el registro actualizado
+            row = self._client.update_row(
+                ENTITY_SET_BIN, str(bin_id), body, return_representation=True
+            )
+            if row:
+                return _row_to_bin(row)
+        # Fallback a GET (body vacío o sin cambios)
         result = self._client.list_rows(
             ENTITY_SET_BIN,
             select=_BIN_SELECT,
@@ -704,6 +723,13 @@ class DataverseLoteRepository(LoteRepository):
         return _row_to_lote(rows[0]) if rows else None
 
     def find_by_code(self, temporada: str, lote_code: str) -> Optional[LoteRecord]:
+        from django.core.cache import caches
+        _cache = caches["dataverse"]
+        _key = f"lote_by_code:{lote_code}"
+        cached = _cache.get(_key)
+        if cached is not None:
+            return cached
+
         # lote_code se almacena en crf21_id_lote_planta
         f = f"{LOTE_FIELDS['lote_code']} eq '{lote_code}'"
         result = self._client.list_rows(
@@ -718,6 +744,7 @@ class DataverseLoteRepository(LoteRepository):
             return None
         record = _row_to_lote(rows[0])
         record.temporada = temporada
+        _cache.set(_key, record, timeout=30)
         return record
 
     def create(
@@ -760,16 +787,20 @@ class DataverseLoteRepository(LoteRepository):
     def filter_by_codes(self, temporada: str, lote_codes: list[str]) -> list[LoteRecord]:
         if not lote_codes:
             return []
-        codes_filter = " or ".join(
-            f"{LOTE_FIELDS['lote_code']} eq '{c}'" for c in lote_codes
-        )
-        result = self._client.list_rows(
-            ENTITY_SET_LOTE,
-            select=_LOTE_SELECT,
-            filter_expr=f"({codes_filter})",
-            top=len(lote_codes) + 10,
-        )
-        records = [_row_to_lote(r) for r in (result or {}).get("value", [])]
+        _CHUNK = 20
+        records = []
+        for i in range(0, len(lote_codes), _CHUNK):
+            chunk = lote_codes[i:i + _CHUNK]
+            codes_filter = " or ".join(
+                f"{LOTE_FIELDS['lote_code']} eq '{c}'" for c in chunk
+            )
+            result = self._client.list_rows(
+                ENTITY_SET_LOTE,
+                select=_LOTE_SELECT,
+                filter_expr=f"({codes_filter})",
+                top=len(chunk) + 10,
+            )
+            records.extend(_row_to_lote(r) for r in (result or {}).get("value", []))
         for r in records:
             r.temporada = temporada
         return records
@@ -799,9 +830,13 @@ class DataverseLoteRepository(LoteRepository):
         # Campos no soportados en Dataverse: estado, temporada_codigo,
         # correlativo_temporada — se ignoran silenciosamente.
         if body:
-            self._client.update_row(ENTITY_SET_LOTE, str(lote_id), body)
+            row = self._client.update_row(
+                ENTITY_SET_LOTE, str(lote_id), body, return_representation=True
+            )
+            if row:
+                return _row_to_lote(row)
 
-        # Recuperar registro actualizado
+        # Fallback a GET (body vacío o sin cambios)
         result = self._client.list_rows(
             ENTITY_SET_LOTE,
             select=_LOTE_SELECT,
@@ -1352,6 +1387,38 @@ class DataverseDesverdizadoRepository(DesverdizadoRepository):
         rows = (result or {}).get("value", [])
         return _row_to_desverdizado(rows[0], lote_id) if rows else None
 
+    def list_by_lotes(self, lote_ids: list) -> dict:
+        """Batch fetch: retorna {lote_id: DesverdizadoRecord} en chunks de 20 GUIDs."""
+        if not lote_ids:
+            return {}
+        _CHUNK = 20
+        _select = [DESVERDIZADO_FIELDS[k] for k in (
+            "id", "lote_id_value", "numero_camara", "fecha_ingreso", "hora_ingreso",
+            "fecha_salida", "hora_salida", "horas_desverdizado",
+            "kilos_enviados_terreno", "kilos_recepcionados",
+            "kilos_bruto_salida", "kilos_neto_salida",
+            "color_salida", "proceso", "operator_code",
+        )]
+        resultado: dict = {}
+        lote_id_field = DESVERDIZADO_FIELDS["lote_id_value"]
+        for i in range(0, len(lote_ids), _CHUNK):
+            chunk = lote_ids[i:i + _CHUNK]
+            ids_filter = " or ".join(f"{lote_id_field} eq {lid}" for lid in chunk)
+            try:
+                result = self._client.list_rows(
+                    ENTITY_SET_DESVERDIZADO,
+                    select=_select,
+                    filter_expr=f"({ids_filter})",
+                    top=len(chunk) + 5,
+                )
+                for row in (result or {}).get("value", []):
+                    lid = row.get(lote_id_field)
+                    if lid and lid not in resultado:
+                        resultado[lid] = _row_to_desverdizado(row, lid)
+            except Exception:
+                logger.warning("list_by_lotes desverdizado chunk %d falló", i // _CHUNK)
+        return resultado
+
     def create(
         self,
         lote_id: Any,
@@ -1492,6 +1559,36 @@ class DataverseIngresoAPackingRepository(IngresoAPackingRepository):
         )
         rows = (result or {}).get("value", [])
         return _row_to_ingreso_packing(rows[0], lote_id) if rows else None
+
+    def list_by_lotes(self, lote_ids: list) -> dict:
+        """Batch fetch: retorna {lote_id: IngresoAPackingRecord} en chunks de 20 GUIDs."""
+        if not lote_ids:
+            return {}
+        _CHUNK = 20
+        _select = [INGRESO_PACKING_FIELDS[k] for k in (
+            "id", "lote_id_value", "fecha_ingreso", "hora_ingreso",
+            "kilos_bruto_ingreso_packing", "kilos_neto_ingreso_packing",
+            "via_desverdizado", "observaciones", "operator_code",
+        )]
+        resultado: dict = {}
+        lote_id_field = INGRESO_PACKING_FIELDS["lote_id_value"]
+        for i in range(0, len(lote_ids), _CHUNK):
+            chunk = lote_ids[i:i + _CHUNK]
+            ids_filter = " or ".join(f"{lote_id_field} eq {lid}" for lid in chunk)
+            try:
+                result = self._client.list_rows(
+                    ENTITY_SET_INGRESO_PACKING,
+                    select=_select,
+                    filter_expr=f"({ids_filter})",
+                    top=len(chunk) + 5,
+                )
+                for row in (result or {}).get("value", []):
+                    lid = row.get(lote_id_field)
+                    if lid and lid not in resultado:
+                        resultado[lid] = _row_to_ingreso_packing(row, lid)
+            except Exception:
+                logger.warning("list_by_lotes ingresos_packing chunk %d falló", i // _CHUNK)
+        return resultado
 
     def create(
         self,

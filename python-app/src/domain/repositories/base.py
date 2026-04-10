@@ -761,6 +761,20 @@ class DesverdizadoRepository(ABC):
     def find_by_lote(self, lote_id: Any) -> Optional[DesverdizadoRecord]:
         """Retorna el registro de desverdizado del lote, o None."""
 
+    def list_by_lotes(self, lote_ids: list) -> dict:
+        """Batch fetch: retorna {lote_id: DesverdizadoRecord} para una lista de ids.
+        Implementación por defecto con fallback a N llamadas individuales (para SQLite).
+        Las implementaciones Dataverse deben sobreescribir con una llamada batch real."""
+        result = {}
+        for lid in lote_ids:
+            try:
+                rec = self.find_by_lote(lid)
+                if rec:
+                    result[lid] = rec
+            except Exception:
+                pass
+        return result
+
     @abstractmethod
     def create(self, lote_id: Any, *, operator_code: str = "",
                source_system: str = "local", extra: Optional[dict] = None,
@@ -790,6 +804,20 @@ class IngresoAPackingRepository(ABC):
     @abstractmethod
     def find_by_lote(self, lote_id: Any) -> Optional[IngresoAPackingRecord]:
         """Retorna el registro de ingreso a packing del lote, o None."""
+
+    def list_by_lotes(self, lote_ids: list) -> dict:
+        """Batch fetch: retorna {lote_id: IngresoAPackingRecord} para una lista de ids.
+        Implementación por defecto con fallback a N llamadas individuales (para SQLite).
+        Las implementaciones Dataverse deben sobreescribir con una llamada batch real."""
+        result = {}
+        for lid in lote_ids:
+            try:
+                rec = self.find_by_lote(lid)
+                if rec:
+                    result[lid] = rec
+            except Exception:
+                pass
+        return result
 
     @abstractmethod
     def create(self, lote_id: Any, *, operator_code: str = "",

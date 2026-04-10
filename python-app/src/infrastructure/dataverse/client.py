@@ -144,11 +144,20 @@ class DataverseClient:
             headers={"Prefer": "return=representation"},
         )
 
-    def update_row(self, entity_set_name: str, row_id: str, payload: dict[str, Any]) -> None:
-        self._request(
+    def update_row(
+        self,
+        entity_set_name: str,
+        row_id: str,
+        payload: dict[str, Any],
+        *,
+        return_representation: bool = False,
+    ) -> Optional[dict[str, Any]]:
+        extra = {"Prefer": "return=representation"} if return_representation else None
+        return self._request(
             "PATCH",
             f"{entity_set_name}({row_id})",
             json=payload,
+            headers=extra,
         )
 
     def delete_row(self, entity_set_name: str, row_id: str) -> None:

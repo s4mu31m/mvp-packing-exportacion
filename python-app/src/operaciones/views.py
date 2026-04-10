@@ -229,14 +229,30 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     def _context_sqlite(self, temporada: str):
         """KPIs y lista de lotes desde SQLite ORM."""
         try:
-            lotes_qs = Lote.objects.filter(temporada=temporada, is_active=True)
-            lotes_abiertos = lotes_qs.filter(estado=LotePlantaEstado.ABIERTO)
-            lotes_cerrados = lotes_qs.filter(estado=LotePlantaEstado.CERRADO)
-            lotes_finalizados = lotes_qs.filter(estado=LotePlantaEstado.FINALIZADO)
-
+            from django.db.models import Count, Case, When, IntegerField
             from operaciones.models import BinLote
+
             hoy = datetime.date.today()
             bins_hoy = BinLote.objects.filter(created_at__date=hoy).count()
+
+            lotes_qs = Lote.objects.filter(temporada=temporada, is_active=True)
+
+            # Una sola query aggregate en lugar de 4 .count() separados
+            agg = lotes_qs.aggregate(
+                total_lotes=Count("id"),
+                lotes_abiertos=Count(Case(
+                    When(estado=LotePlantaEstado.ABIERTO, then=1),
+                    output_field=IntegerField(),
+                )),
+                lotes_cerrados=Count(Case(
+                    When(estado=LotePlantaEstado.CERRADO, then=1),
+                    output_field=IntegerField(),
+                )),
+                lotes_finalizados=Count(Case(
+                    When(estado=LotePlantaEstado.FINALIZADO, then=1),
+                    output_field=IntegerField(),
+                )),
+            )
 
             lotes_activos_qs = lotes_qs.exclude(
                 estado=LotePlantaEstado.FINALIZADO
@@ -252,10 +268,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 for lote in lotes_activos_qs
             ]
             kpis = {
-                "lotes_abiertos":    lotes_abiertos.count(),
-                "lotes_cerrados":    lotes_cerrados.count(),
-                "lotes_finalizados": lotes_finalizados.count(),
-                "total_lotes":       lotes_qs.count(),
+                "lotes_abiertos":    agg["lotes_abiertos"],
+                "lotes_cerrados":    agg["lotes_cerrados"],
+                "lotes_finalizados": agg["lotes_finalizados"],
+                "total_lotes":       agg["total_lotes"],
                 "bins_hoy":          bins_hoy,
             }
             return kpis, lotes_activos
@@ -2484,9 +2500,8 @@ def _campos_base_lote_prefetch(lote: Lote | None) -> dict:
         }
     primer_bin = None
     try:
-        for rel in lote.bin_lotes.all():
-            primer_bin = rel.bin
-            break
+        primer_rel = lote.bin_lotes.select_related("bin").first()
+        primer_bin = primer_rel.bin if primer_rel else None
     except Exception:
         primer_bin = None
     if not primer_bin:
@@ -2573,23 +2588,9 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
         lote_ids = [l.id for l in lotes if l.id]
         primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids) if lote_ids else {}
 
-        # Resolver kilos recientes para cada lote en un pase previo
-        desv_por_lote: dict = {}
-        ip_por_lote: dict = {}
-        for lote in lotes:
-            if lote.id:
-                try:
-                    d = repos.desverdizados.find_by_lote(lote.id)
-                    if d:
-                        desv_por_lote[lote.id] = d
-                except Exception:
-                    pass
-                try:
-                    ip = repos.ingresos_packing.find_by_lote(lote.id)
-                    if ip:
-                        ip_por_lote[lote.id] = ip
-                except Exception:
-                    pass
+        # Batch fetch: 2 llamadas en lugar de hasta 1,000 llamadas individuales
+        desv_por_lote: dict = repos.desverdizados.list_by_lotes(lote_ids) if lote_ids else {}
+        ip_por_lote: dict = repos.ingresos_packing.list_by_lotes(lote_ids) if lote_ids else {}
 
         resultado = []
         filtro_productor_lc = (filtro_productor or "").lower()
@@ -2649,10 +2650,7 @@ def _pallets_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estad
     resultado = []
     filtro_productor_lc = (filtro_productor or "").lower()
     for pallet in pallets:
-        relacion = None
-        for rel in pallet.pallet_lotes.all():
-            relacion = rel
-            break
+        relacion = pallet.pallet_lotes.first()
         lote = relacion.lote if relacion else None
         campos = _campos_base_lote_prefetch(lote)
 

@@ -52,6 +52,23 @@ CONSULTA_DATAVERSE_CACHE_FILE = os.getenv(
     str(BASE_DIR / ".cache" / "consulta_dataverse.json"),
 )
 
+# Django cache framework
+# Por defecto: LocMemCache (sin dependencias externas, válido para dev y procesos únicos).
+# Para producción multi-worker sobreescribir con Redis en settings/production.py:
+#   CACHES["dataverse"]["BACKEND"] = "django.core.cache.backends.redis.RedisCache"
+#   CACHES["dataverse"]["LOCATION"] = os.getenv("REDIS_URL", "redis://localhost:6379/1")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "calipro-default",
+    },
+    # Cache dedicado para lookups Dataverse (TTL corto, aislado del cache general)
+    "dataverse": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "calipro-dataverse",
+    },
+}
+
 # Backends de autenticación:
 #   - CaliProAuthBackend: fuente de verdad en ambos modos (SQLite y Dataverse)
 #   - ModelBackend: fallback SOLO en modo sqlite, para bootstrap via createsuperuser.
