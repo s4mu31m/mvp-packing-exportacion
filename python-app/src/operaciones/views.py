@@ -965,22 +965,31 @@ def _lotes_json_from_records(lotes, repos=None) -> str:
     """
     Serializa LoteRecord objects como JSON para autocomplete del template.
     Usado en modo Dataverse donde los lotes ya fueron cargados via repos.
-    Si se pasa repos, obtiene el primer bin de cada lote en batch (2 queries)
-    para poblar productor, variedad, color y fecha_cosecha.
+    Si se pasa repos, obtiene el primer bin, desverdizado e ingreso packing
+    de cada lote en batch (≤3 queries totales, sin N+1).
     """
     import logging
     _log = logging.getLogger(__name__)
 
-    # Batch: primer bin por lote en 2 queries (no N×2)
+    # Batch pre-load: 3 queries totales independientemente del número de lotes
     primer_bin_por_lote: dict = {}
+    desvs_map: dict = {}
+    ips_map: dict = {}
     if repos is not None and lotes:
+        lote_ids = [l.id for l in lotes if l.id]
+        _log.debug("_lotes_json_from_records: batch fetch para %d lotes", len(lote_ids))
         try:
-            lote_ids = [l.id for l in lotes if l.id]
-            _log.debug("_lotes_json_from_records: llamando first_bin_by_lotes con %d lote_ids", len(lote_ids))
             primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids)
-            _log.debug("_lotes_json_from_records: primer_bin_por_lote tiene %d entradas", len(primer_bin_por_lote))
         except Exception as exc:
-            _log.warning("_lotes_json_from_records: error al obtener bins en batch: %s", exc, exc_info=True)
+            _log.warning("_lotes_json_from_records: error first_bin_by_lotes: %s", exc, exc_info=True)
+        try:
+            desvs_map = repos.desverdizados.list_by_lotes(lote_ids)
+        except Exception as exc:
+            _log.warning("_lotes_json_from_records: error desverdizados.list_by_lotes: %s", exc, exc_info=True)
+        try:
+            ips_map = repos.ingresos_packing.list_by_lotes(lote_ids)
+        except Exception as exc:
+            _log.warning("_lotes_json_from_records: error ingresos_packing.list_by_lotes: %s", exc, exc_info=True)
 
     data = {}
     for lote in lotes:
@@ -995,26 +1004,19 @@ def _lotes_json_from_records(lotes, repos=None) -> str:
         # Resolver kilos mas recientes: conformacion → desverdizado salida → ingreso packing
         kilos_bruto = float(lote.kilos_bruto_conformacion) if lote.kilos_bruto_conformacion else None
         kilos_neto = float(lote.kilos_neto_conformacion) if lote.kilos_neto_conformacion else None
-        if repos is not None:
-            try:
-                desv = repos.desverdizados.find_by_lote(lote.id)
-                if desv:
-                    if desv.kilos_bruto_salida is not None:
-                        kilos_bruto = float(desv.kilos_bruto_salida)
-                    if desv.kilos_neto_salida is not None:
-                        kilos_neto = float(desv.kilos_neto_salida)
-                    via_desv = True
-            except Exception:
-                pass
-            try:
-                ip = repos.ingresos_packing.find_by_lote(lote.id)
-                if ip:
-                    if ip.kilos_bruto_ingreso_packing is not None:
-                        kilos_bruto = float(ip.kilos_bruto_ingreso_packing)
-                    if ip.kilos_neto_ingreso_packing is not None:
-                        kilos_neto = float(ip.kilos_neto_ingreso_packing)
-            except Exception:
-                pass
+        desv = desvs_map.get(lote.id)
+        if desv:
+            if desv.kilos_bruto_salida is not None:
+                kilos_bruto = float(desv.kilos_bruto_salida)
+            if desv.kilos_neto_salida is not None:
+                kilos_neto = float(desv.kilos_neto_salida)
+            via_desv = True
+        ip = ips_map.get(lote.id)
+        if ip:
+            if ip.kilos_bruto_ingreso_packing is not None:
+                kilos_bruto = float(ip.kilos_bruto_ingreso_packing)
+            if ip.kilos_neto_ingreso_packing is not None:
+                kilos_neto = float(ip.kilos_neto_ingreso_packing)
 
         data[lote.lote_code] = {
             "lote_code": lote.lote_code,

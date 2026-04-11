@@ -22,15 +22,21 @@
   white-space: nowrap;
 }
 .btn-primary {
-  background: var(--teal-600);
+  background: var(--teal-700); /* WCAG AA: ratio ~5.50:1 con texto blanco ✓ */
   color: #fff;
 }
 .btn-primary:hover {
-  background: var(--teal-500);
+  background: var(--teal-600);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(20, 184, 166, 0.3);
 }
 .btn-primary:active { transform: translateY(0); }
+
+/* ---- Focus visible (accesibilidad teclado) ---- */
+.btn:focus-visible {
+  outline: 2px solid var(--teal-400);
+  outline-offset: 2px;
+}
 
 .btn-ghost {
   background: transparent;
@@ -101,9 +107,12 @@
   outline: none;
   width: 100%;
 }
-.form-input:focus {
+.form-input:focus,
+.form-input:focus-visible {
   border-color: var(--teal-500);
   box-shadow: 0 0 0 3px var(--teal-glow);
+  outline: 2px solid var(--teal-400);
+  outline-offset: 1px;
 }
 .form-input::placeholder { color: var(--text-dim); }
 
@@ -123,9 +132,12 @@
   width: 100%;
   cursor: pointer;
 }
-.form-select:focus {
+.form-select:focus,
+.form-select:focus-visible {
   border-color: var(--teal-500);
   box-shadow: 0 0 0 3px var(--teal-glow);
+  outline: 2px solid var(--teal-400);
+  outline-offset: 1px;
 }
 .form-select option {
   background: var(--bg-card);
@@ -356,7 +368,7 @@ thead th {
   text-align: left;
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--text-dim);
+  color: var(--text-muted); /* WCAG AA: #94a3b8 sobre #162032 = 6.98:1 ✓ (era text-dim = 3.54:1 ✗) */
   text-transform: uppercase;
   letter-spacing: 0.07em;
   border-bottom: 1px solid var(--border);

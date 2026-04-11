@@ -3,10 +3,10 @@
 
 {% block content %}
 <!-- TOPNAV -->
-<nav class="topnav">
+<nav class="topnav" aria-label="Navegación principal">
   <div class="topnav-logo">
     <a href="{% url 'operaciones:dashboard' %}" class="topnav-logo-link">
-      <div class="topnav-logo-icon">🍋</div>
+      <div class="topnav-logo-icon" aria-hidden="true">🍋</div>
       <div>
         <div class="topnav-title">{{ page_title|default:"Producción Packing" }}</div>
         <div class="topnav-subtitle">{{ planta_seleccionada.nombre }}</div>
@@ -16,7 +16,7 @@
   <div class="topnav-actions">
     <span class="badge badge-teal badge-dot">En línea</span>
     <div class="topnav-user">
-      <div class="user-avatar">{{ request.user.username|slice:":2"|upper }}</div>
+      <div class="user-avatar" aria-hidden="true">{{ request.user.username|slice:":2"|upper }}</div>
       <div>
         <div class="user-name">{{ request.user.get_full_name|default:request.user.username }}</div>
         <div class="user-role">
@@ -29,21 +29,24 @@
     </div>
     <form method="post" action="{% url 'usuarios:logout' %}" style="display:inline;">
       {% csrf_token %}
-      <button type="submit" class="btn btn-ghost btn-sm" title="Cerrar sesión">⎋</button>
+      <button type="submit" class="btn btn-ghost btn-sm" aria-label="Cerrar sesión" title="Cerrar sesión">
+        <span aria-hidden="true">⎋</span>
+      </button>
     </form>
   </div>
 </nav>
 
 <div class="layout">
   <!-- SIDEBAR — generado desde context processor -->
-  <nav class="sidebar">
+  <nav class="sidebar" aria-label="Menú lateral">
     {% for section in nav_sections %}
       <div class="sidebar-section">
         <div class="sidebar-section-label">{{ section.label }}</div>
         {% for item in section.items %}
           <a href="{{ item.url }}"
-             class="sidebar-item {% if request.resolver_match.url_name == item.url_name %}active{% endif %}">
-            <span class="icon">{{ item.icon }}</span>
+             class="sidebar-item {% if request.resolver_match.url_name == item.url_name %}active{% endif %}"
+             {% if request.resolver_match.url_name == item.url_name %}aria-current="page"{% endif %}>
+            <span class="icon" aria-hidden="true">{{ item.icon }}</span>
             {{ item.name }}
             {% if item.badge %}
               <span class="badge-count">{{ item.badge }}</span>
@@ -51,12 +54,12 @@
           </a>
         {% endfor %}
       </div>
-      {% if not forloop.last %}<div class="sidebar-divider"></div>{% endif %}
+      {% if not forloop.last %}<div class="sidebar-divider" role="separator"></div>{% endif %}
     {% endfor %}
   </nav>
 
   <!-- CONTENIDO PRINCIPAL -->
-  <main class="main-content">
+  <main class="main-content" id="main-content" tabindex="-1">
     <div class="page-header">
       <div>
         <div class="page-title">{% block page_title %}{% endblock %}</div>
@@ -74,12 +77,13 @@
 </div>
 
 <!-- MOBILE NAV -->
-<div class="mobile-nav">
+<nav class="mobile-nav" aria-label="Navegación móvil">
   {% for item in mobile_nav_items %}
     <a href="{{ item.url }}"
-       class="mobile-nav-item {% if request.resolver_match.url_name == item.url_name %}active{% endif %}">
-      <span class="icon">{{ item.icon }}</span>{{ item.name }}
+       class="mobile-nav-item {% if request.resolver_match.url_name == item.url_name %}active{% endif %}"
+       {% if request.resolver_match.url_name == item.url_name %}aria-current="page"{% endif %}>
+      <span class="icon" aria-hidden="true">{{ item.icon }}</span>{{ item.name }}
     </a>
   {% endfor %}
-</div>
+</nav>
 {% endblock %}

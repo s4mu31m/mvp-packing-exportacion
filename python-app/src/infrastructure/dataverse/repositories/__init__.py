@@ -605,6 +605,13 @@ class DataverseBinRepository(BinRepository):
         if not lote_ids:
             return {}
 
+        from django.core.cache import caches
+        _cache = caches["dataverse"]
+        _key = "first_bin_by_lotes:" + ":".join(sorted(str(i) for i in lote_ids))
+        cached = _cache.get(_key)
+        if cached is not None:
+            return cached
+
         _log = logging.getLogger(__name__)
         _log.debug("first_bin_by_lotes: buscando primer bin para %d lotes: %s",
                    len(lote_ids), lote_ids)
@@ -664,6 +671,7 @@ class DataverseBinRepository(BinRepository):
             if bid in bin_by_id
         }
         _log.debug("first_bin_by_lotes: resultado final tiene %d entradas", len(resultado))
+        _cache.set(_key, resultado, timeout=60)
         return resultado
 
     def update(self, bin_id: Any, fields: dict) -> BinRecord:
@@ -854,13 +862,21 @@ class DataverseLoteRepository(LoteRepository):
         Usado por DashboardView en modo Dataverse para mostrar KPIs reales.
         temporada no existe en Dataverse: se retorna temporada="" en todos los records.
         """
+        from django.core.cache import caches
+        _cache = caches["dataverse"]
+        _key = f"lotes_list_recent:{limit}"
+        cached = _cache.get(_key)
+        if cached is not None:
+            return cached
         result = self._client.list_rows(
             ENTITY_SET_LOTE,
             select=_LOTE_SELECT,
             orderby="createdon desc",
             top=limit,
         )
-        return [_row_to_lote(r) for r in (result or {}).get("value", [])]
+        records = [_row_to_lote(r) for r in (result or {}).get("value", [])]
+        _cache.set(_key, records, timeout=30)
+        return records
 
 
 # ---------------------------------------------------------------------------
@@ -890,13 +906,21 @@ class DataversePalletRepository(PalletRepository):
 
     def list_recent(self, limit: int = 30) -> list[PalletRecord]:
         """Retorna los pallets mas recientes ordenados por fecha de creacion descendente."""
+        from django.core.cache import caches
+        _cache = caches["dataverse"]
+        _key = f"pallets_list_recent:{limit}"
+        cached = _cache.get(_key)
+        if cached is not None:
+            return cached
         result = self._client.list_rows(
             ENTITY_SET_PALLET,
             select=_PALLET_SELECT,
             orderby="createdon desc",
             top=limit,
         )
-        return [_row_to_pallet(r) for r in (result or {}).get("value", [])]
+        records = [_row_to_pallet(r) for r in (result or {}).get("value", [])]
+        _cache.set(_key, records, timeout=30)
+        return records
 
     def get_or_create(
         self,

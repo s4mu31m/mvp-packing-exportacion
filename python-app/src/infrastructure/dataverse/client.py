@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 import requests
 from django.conf import settings
 
 from .auth import DataverseTokenProvider
+from .telemetry import record_dv_call
 
 
 class DataverseAPIError(RuntimeError):
@@ -74,6 +76,7 @@ class DataverseClient:
             )
 
         auth_headers = self._authorized_headers(headers)
+        _t0 = time.monotonic()
         response = send(auth_headers)
 
         if response.status_code == 401:
@@ -83,6 +86,8 @@ class DataverseClient:
             if headers:
                 refreshed_headers.update(headers)
             response = send(refreshed_headers)
+
+        record_dv_call((time.monotonic() - _t0) * 1000)
 
         if not response.ok:
             try:

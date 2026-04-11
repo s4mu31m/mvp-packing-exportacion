@@ -22,7 +22,8 @@ function showToast(msg, type = 'info', ms = 3000) {
   const icons = { success: '✅', info: 'ℹ️', warning: '⚠️', error: '❌' };
   const toast = document.createElement('div');
   toast.className = 'toast ' + type;
-  toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${msg}</span>`;
+  // aria-hidden en el icono decorativo para que lectores de pantalla solo lean el mensaje
+  toast.innerHTML = `<span aria-hidden="true">${icons[type] || 'ℹ️'}</span><span>${msg}</span>`;
   container.appendChild(toast);
 
   setTimeout(() => {
@@ -131,5 +132,6 @@ document.addEventListener('submit', e => {
   if (!btn || btn.disabled) return;
 
   btn.disabled = true;
-  btn.innerHTML = '<span class="btn-spinner"></span> Enviando\u2026';
+  btn.setAttribute('aria-busy', 'true');
+  btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span> Enviando\u2026';
 });

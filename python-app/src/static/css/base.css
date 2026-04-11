@@ -104,7 +104,7 @@
 .layout {
   display: flex;
   flex: 1;
-  min-height: calc(100vh - 58px);
+  height: calc(100vh - 58px);
 }
 
 /* ============ SIDEBAR ============ */
@@ -128,7 +128,7 @@
 .sidebar-section-label {
   font-size: 0.67rem;
   font-weight: 700;
-  color: var(--text-dim);
+  color: var(--text-muted); /* WCAG AA: #94a3b8 sobre #162032 = 6.98:1 ✓ (era text-dim = 3.54:1 ✗) */
   text-transform: uppercase;
   letter-spacing: 0.1em;
   padding: 8px 4px 4px;
@@ -279,4 +279,32 @@
 
 @media (max-width: 768px) {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* ============ SKIP NAVIGATION (accesibilidad teclado) ============ */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 8px;
+  z-index: 9999;
+  background: var(--teal-700);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.2s ease;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* ============ MOTION REDUCTION (accesibilidad) ============ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in   { animation: none; opacity: 1; transform: none; }
+  .btn           { transition: none; }
+  .toast         { animation: none; }
+  .sidebar-item  { transition: none; }
+  .skip-link     { transition: none; }
 }

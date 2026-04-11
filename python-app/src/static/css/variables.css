@@ -22,6 +22,7 @@
   --teal-500:     #14b8a6;
   --teal-400:     #2dd4bf;
   --teal-600:     #0d9488;
+  --teal-700:     #0f766e;  /* WCAG AA: blanco sobre este = 5.50:1 ✓ */
   --teal-800:     #0f5a52;
   --teal-glow:    rgba(20, 184, 166, 0.15);
 
@@ -59,8 +60,12 @@
 }
 
 /* ============ BASE ============ */
-html, body {
+html {
   height: 100%;
+}
+body {
+  height: 100%;
+  overflow: hidden;
   font-family: var(--font-sans);
   background: var(--bg-base);
   color: var(--text-primary);

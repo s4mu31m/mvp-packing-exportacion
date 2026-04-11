@@ -4,15 +4,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {# SEO: meta description por página, con valor por defecto #}
+  <meta name="description" content="{% block meta_description %}CaliPro — Sistema de gestión de packing y exportación de fruta{% endblock %}">
   <title>{% block title %}CaliPro Packing{% endblock %}</title>
+  {# Fonts: preconnect a ambos dominios (gstatic requiere crossorigin) #}
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  {# Carga no bloqueante: media=print trick → onload cambia a all #}
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap">
+  </noscript>
   <link rel="stylesheet" href="{% static 'css/variables.css' %}">
   <link rel="stylesheet" href="{% static 'css/base.css' %}">
   <link rel="stylesheet" href="{% static 'css/components.css' %}">
   {% block extra_css %}{% endblock %}
 </head>
 <body>
+  {# Skip navigation: visible al presionar Tab, apunta a #main-content #}
+  <a class="skip-link" href="#main-content">Ir al contenido principal</a>
+
   {% if messages %}
     <div id="django-messages" style="display:none">
       {% for message in messages %}
@@ -23,7 +34,8 @@
 
   {% block content %}{% endblock %}
 
-  <div id="toast-container"></div>
+  {# Toast container: role=status + aria-live anuncia mensajes a lectores de pantalla #}
+  <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
   <script src="{% static 'js/forms.js' %}"></script>
   {% block extra_js %}{% endblock %}
 </body>
