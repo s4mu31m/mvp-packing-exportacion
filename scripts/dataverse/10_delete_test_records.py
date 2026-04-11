@@ -98,7 +98,8 @@ def main(dry_run: bool) -> dict:
         filter_expr=(
             f"{OPERATOR_CODE_FIELD} eq '{TEST_OPERATOR_CODES[0]}' or "
             f"{OPERATOR_CODE_FIELD} eq '{TEST_OPERATOR_CODES[1]}' or "
-            f"{SOURCE_SYSTEM_FIELD} eq 'test'"
+            f"{SOURCE_SYSTEM_FIELD} eq 'test' or "
+            f"{SOURCE_SYSTEM_FIELD} eq 'e2e_dataverse'"
         ),
     )
 
