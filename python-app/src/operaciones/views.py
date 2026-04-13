@@ -229,7 +229,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     def _context_sqlite(self, temporada: str):
         """KPIs y lista de lotes desde SQLite ORM."""
         try:
-            from django.db.models import Count, Case, When, IntegerField
             from operaciones.models import BinLote
 
             hoy = datetime.date.today()
@@ -237,22 +236,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
             lotes_qs = Lote.objects.filter(temporada=temporada, is_active=True)
 
-            # Una sola query aggregate en lugar de 4 .count() separados
-            agg = lotes_qs.aggregate(
-                total_lotes=Count("id"),
-                lotes_abiertos=Count(Case(
-                    When(estado=LotePlantaEstado.ABIERTO, then=1),
-                    output_field=IntegerField(),
-                )),
-                lotes_cerrados=Count(Case(
-                    When(estado=LotePlantaEstado.CERRADO, then=1),
-                    output_field=IntegerField(),
-                )),
-                lotes_finalizados=Count(Case(
-                    When(estado=LotePlantaEstado.FINALIZADO, then=1),
-                    output_field=IntegerField(),
-                )),
-            )
+            lotes_desverdizado = lotes_qs.filter(
+                desverdizado__isnull=False,
+                ingreso_packing__isnull=True,
+            ).count()
+
+            lotes_packing = lotes_qs.filter(
+                ingreso_packing__isnull=False,
+            ).count()
 
             lotes_activos_qs = lotes_qs.exclude(
                 estado=LotePlantaEstado.FINALIZADO
@@ -268,11 +259,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 for lote in lotes_activos_qs
             ]
             kpis = {
-                "lotes_abiertos":    agg["lotes_abiertos"],
-                "lotes_cerrados":    agg["lotes_cerrados"],
-                "lotes_finalizados": agg["lotes_finalizados"],
-                "total_lotes":       agg["total_lotes"],
-                "bins_hoy":          bins_hoy,
+                "lotes_desverdizado": lotes_desverdizado,
+                "lotes_packing":      lotes_packing,
+                "total_lotes":        lotes_qs.count(),
+                "bins_hoy":           bins_hoy,
             }
             return kpis, lotes_activos
         except Exception:
@@ -283,43 +273,43 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         KPIs y lista de lotes desde Dataverse.
 
         Usa crf21_etapa_actual como fuente principal de etapa (disponible desde 2026-03-31).
-        Para lotes antiguos con etapa_actual=null, retorna 'Recepcion' como fallback
-        conservador (sin queries adicionales para no afectar rendimiento del dashboard).
-
-        Limitaciones residuales del modelo Dataverse:
-        - 'estado' (ABIERTO/CERRADO/FINALIZADO) no existe en Dataverse.
-          lotes_cerrados y lotes_finalizados se derivan por etapa: si etapa != 'Recepcion'
-          se considera cerrado (recepcion completada).
-        - 'bins_hoy' usa suma de bins de lotes recientes como aproximacion.
+        Para lotes sin etapa_actual, resolve_etapa_lote retorna "Recepcion" como fallback.
+        bins_hoy filtra por createdon = hoy en Dataverse (OData date-range filter).
         """
         try:
             from infrastructure.repository_factory import get_repositories
             from infrastructure.dataverse.repositories import resolve_etapa_lote
+
             repos = get_repositories()
             lotes = repos.lotes.list_recent(limit=50)
 
+            _PACKING_ETAPAS = {
+                "Ingreso Packing", "Packing / Proceso", "Paletizado",
+                "Calidad Pallet", "Camara Frio", "Temperatura Salida",
+            }
+
             lotes_activos = []
-            lotes_en_recepcion = 0
-            lotes_post_recepcion = 0
+            lotes_desverdizado = 0
+            lotes_packing = 0
+
             for l in lotes:
-                etapa = resolve_etapa_lote(l)   # usa etapa_actual persistida; fallback "Recepcion"
-                if etapa == "Recepcion":
-                    lotes_en_recepcion += 1
-                else:
-                    lotes_post_recepcion += 1
+                etapa = resolve_etapa_lote(l)
+                if etapa == "Desverdizado":
+                    lotes_desverdizado += 1
+                elif etapa in _PACKING_ETAPAS:
+                    lotes_packing += 1
                 lotes_activos.append({
                     "codigo": l.lote_code,
                     "bins":   l.cantidad_bins,
                     "etapa":  etapa,
-                    "estado": l.estado,    # siempre "abierto" (campo no existe en DV)
+                    "estado": l.estado,
                 })
 
             kpis = {
-                "lotes_abiertos":    lotes_en_recepcion,
-                "lotes_cerrados":    lotes_post_recepcion,
-                "lotes_finalizados": 0,             # sin equivalente directo en Dataverse
-                "total_lotes":       len(lotes),
-                "bins_hoy":          sum(l.cantidad_bins for l in lotes),
+                "lotes_desverdizado": lotes_desverdizado,
+                "lotes_packing":      lotes_packing,
+                "total_lotes":        len(lotes),
+                "bins_hoy":           repos.lotes.count_bins_today(),
             }
             return kpis, lotes_activos
         except Exception as exc:
@@ -1432,6 +1422,11 @@ class ControlProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
 
         cd = form.cleaned_data
         lote_code = request.POST.get("lote_code", "").strip()
+
+        def _dec(key):
+            v = cd.get(key)
+            return float(v) if v is not None else None
+
         payload = {
             "temporada": _temporada(request),
             "lote_code": lote_code,
@@ -1441,11 +1436,35 @@ class ControlProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 "fecha": _serialize_form_value(cd["fecha"]) if cd.get("fecha") else None,
                 "hora": _serialize_form_value(cd["hora"]) if cd.get("hora") else None,
                 "n_bins_procesados": cd.get("n_bins_procesados"),
-                "temp_agua_tina": float(cd["temp_agua_tina"]) if cd.get("temp_agua_tina") else None,
-                "ph_agua": float(cd["ph_agua"]) if cd.get("ph_agua") else None,
+                "velocidad_volcador": _dec("velocidad_volcador"),
+                "obs_volcador": cd.get("obs_volcador"),
+                "temp_agua_tina": _dec("temp_agua_tina"),
+                "cloro_libre_ppm": _dec("cloro_libre_ppm"),
+                "ph_agua": _dec("ph_agua"),
+                "tiempo_inmersion_seg": cd.get("tiempo_inmersion_seg"),
                 "recambio_agua": cd.get("recambio_agua"),
-                "rendimiento_lote_pct": float(cd["rendimiento_lote_pct"]) if cd.get("rendimiento_lote_pct") else None,
+                "temp_aire_secado": _dec("temp_aire_secado"),
+                "velocidad_ventiladores": _dec("velocidad_ventiladores"),
+                "fruta_sale_seca": cd.get("fruta_sale_seca"),
+                "tipo_cera": cd.get("tipo_cera"),
+                "dosis_cera_ml_min": _dec("dosis_cera_ml_min"),
+                "temp_cera": _dec("temp_cera"),
+                "cobertura_uniforme": cd.get("cobertura_uniforme"),
+                "n_operarios_seleccion": cd.get("n_operarios_seleccion"),
+                "fruta_dano_condicion_kg": _dec("fruta_dano_condicion_kg"),
+                "fruta_dano_calidad_kg": _dec("fruta_dano_calidad_kg"),
+                "fruta_pudricion_kg": _dec("fruta_pudricion_kg"),
+                "merma_total_seleccion_kg": _dec("merma_total_seleccion_kg"),
+                "equipo_calibrador": cd.get("equipo_calibrador"),
+                "calibre_predominante": cd.get("calibre_predominante"),
+                "pct_calibre_export": _dec("pct_calibre_export"),
+                "pct_calibres_menores": _dec("pct_calibres_menores"),
+                "tipo_caja": cd.get("tipo_caja"),
+                "peso_promedio_caja_kg": _dec("peso_promedio_caja_kg"),
+                "n_cajas_producidas": cd.get("n_cajas_producidas"),
+                "rendimiento_lote_pct": _dec("rendimiento_lote_pct"),
                 "observaciones_generales": cd.get("observaciones_generales"),
+                "rol": cd.get("rol"),
             },
         }
         result = registrar_control_proceso_packing(payload)
@@ -1790,8 +1809,6 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "Paletizado"
-        ctx["form_calidad"] = CalidadPalletForm()
-        ctx["form_muestra"] = CalidadPalletMuestraForm()
         temporada = (
             self.request.session.get("temporada_activa")
             or str(datetime.date.today().year)
@@ -1799,130 +1816,29 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         # Lotes listos para convertirse en pallet (accion primaria)
         lotes = _lotes_para_paletizar(temporada)
         ctx["lotes_para_paletizar"] = lotes
-        # Pallets ya cerrados pendientes de control de calidad (accion secundaria)
-        pallets = _pallets_pendientes_calidad(temporada)
-        ctx["pallets_pendientes"] = pallets
         from django.conf import settings
         backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
         if backend == "dataverse":
             from infrastructure.repository_factory import get_repositories
             repos = get_repositories()
             ctx["lotes_data_json"] = _lotes_json_from_records(lotes, repos)
-            ctx["pallets_data_json"] = _pallets_json_from_records(pallets, repos)
         else:
             ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
-            ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
         return ctx
 
-    def _save_muestras(self, request, pallet, operator_code):
-        """
-        Guarda muestras individuales de calidad enviadas desde el template.
-        Cada muestra llega como muestra_N_<campo> en el POST.
-        Persiste via repositorio (SQLite o Dataverse segun PERSISTENCE_BACKEND).
-        Retorna el numero de muestras guardadas exitosamente.
-        """
-        import logging
-        logger = logging.getLogger(__name__)
-        saved = 0
-        for i in range(1, 4):  # maximo 3 muestras por sesion
-            prefix = f"muestra_{i}_"
-            temp = request.POST.get(f"{prefix}temperatura_fruta", "").strip()
-            peso = request.POST.get(f"{prefix}peso_caja_muestra", "").strip()
-            n_frutos = request.POST.get(f"{prefix}n_frutos", "").strip()
-            aprobado_raw = request.POST.get(f"{prefix}aprobado", "")
-            obs = request.POST.get(f"{prefix}observaciones", "").strip()
-
-            # Solo guardar si al menos un campo de medicion tiene dato
-            if not any([temp, peso, n_frutos]):
-                continue
-
-            aprobado = None
-            if aprobado_raw == "true":
-                aprobado = True
-            elif aprobado_raw == "false":
-                aprobado = False
-
-            result = guardar_muestra_calidad_pallet({
-                "pallet_id": pallet.id,
-                "operator_code": operator_code,
-                "source_system": "web",
-                "extra": {
-                    "numero_muestra":    i,
-                    "temperatura_fruta": float(temp) if temp else None,
-                    "peso_caja_muestra": float(peso) if peso else None,
-                    "n_frutos":          int(n_frutos) if n_frutos else None,
-                    "aprobado":          aprobado,
-                    "observaciones":     obs,
-                    "rol": request.session.get("crf21_rol", ""),
-                },
-            })
-            if result.ok:
-                saved += 1
-            else:
-                logger.warning(
-                    "Muestra %s no guardada para pallet %s: [%s] %s",
-                    i, pallet.id, result.code, result.message,
-                )
-        return saved
-
     def post(self, request, *args, **kwargs):
-        action = request.POST.get("action", "calidad")
         temporada = _temporada(request)
+        lote_code = request.POST.get("lote_code", "").strip()
         pallet_code = request.POST.get("pallet_code", "").strip()
-
-        if action == "calidad":
-            form = CalidadPalletForm(request.POST)
-            if form.is_valid():
-                cd = form.cleaned_data
-                payload = {
-                    "temporada": temporada,
-                    "pallet_code": pallet_code,
-                    "operator_code": request.session.get("crf21_codigooperador", ""),
-                    "source_system": "web",
-                    "extra": {
-                        "fecha": _serialize_form_value(cd["fecha"]) if cd.get("fecha") else None,
-                        "hora": _serialize_form_value(cd["hora"]) if cd.get("hora") else None,
-                        "temperatura_fruta": float(cd["temperatura_fruta"]) if cd.get("temperatura_fruta") else None,
-                        "peso_caja_muestra": float(cd["peso_caja_muestra"]) if cd.get("peso_caja_muestra") else None,
-                        "estado_visual_fruta": cd.get("estado_visual_fruta"),
-                        "presencia_defectos": cd.get("presencia_defectos"),
-                        "aprobado": cd.get("aprobado"),
-                        "observaciones": cd.get("observaciones"),
-                    },
-                }
-                result = registrar_calidad_pallet(payload)
-                _handle_result(request, result)
-
-                # Guardar muestras individuales
-                if result.ok and pallet_code:
-                    try:
-                        from infrastructure.repository_factory import get_repositories
-                        pallet = get_repositories().pallets.find_by_code(temporada, pallet_code)
-                        if pallet:
-                            n = self._save_muestras(
-                                request, pallet, request.session.get("crf21_codigooperador", ""),
-                            )
-                            if n:
-                                messages.info(
-                                    request, f"{n} muestra(s) de calidad registrada(s).",
-                                )
-                    except Exception:
-                        pass
-            else:
-                messages.error(request, "Formulario de calidad invalido.")
-
-        elif action == "cerrar":
-            lote_code = request.POST.get("lote_code", "").strip()
-            payload = {
-                "temporada": temporada,
-                "lote_codes": [lote_code] if lote_code else [],
-                "pallet_code": pallet_code,
-                "operator_code": request.session.get("crf21_codigooperador", ""),
-                "source_system": "web",
-            }
-            result = cerrar_pallet(payload)
-            _handle_result(request, result)
-
+        payload = {
+            "temporada": temporada,
+            "lote_codes": [lote_code] if lote_code else [],
+            "pallet_code": pallet_code,
+            "operator_code": request.session.get("crf21_codigooperador", ""),
+            "source_system": "web",
+        }
+        result = cerrar_pallet(payload)
+        _handle_result(request, result)
         return redirect("operaciones:paletizado")
 
 
@@ -2849,6 +2765,44 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
             "tipo_cultivo": b.tipo_cultivo or "",
         })
 
+    # Desverdizado (opcional)
+    desv_data = {}
+    try:
+        desv = lote.desverdizado
+        desv_data = {
+            "numero_camara": desv.numero_camara or "",
+            "fecha_ingreso": desv.fecha_ingreso,
+            "hora_ingreso": desv.hora_ingreso or "",
+            "horas_desverdizado": desv.horas_desverdizado,
+            "color_salida": desv.color_salida or "",
+            "kilos_bruto_salida": _float_or_none(desv.kilos_bruto_salida),
+            "kilos_neto_salida": _float_or_none(desv.kilos_neto_salida),
+        }
+    except Exception:
+        pass
+
+    # Ingreso a packing (obligatorio una vez en packing)
+    ip_data = {}
+    try:
+        ip = lote.ingreso_packing
+        ip_data = {
+            "fecha_ingreso_packing": ip.fecha_ingreso,
+            "hora_ingreso_packing": ip.hora_ingreso or "",
+            "kilos_bruto_ingreso_packing": _float_or_none(ip.kilos_bruto_ingreso_packing),
+            "kilos_neto_ingreso_packing": _float_or_none(ip.kilos_neto_ingreso_packing),
+        }
+    except Exception:
+        pass
+
+    # Pallet relacionado (primer pallet activo del lote)
+    pallet_code = None
+    try:
+        pallet_lote = lote.pallet_lotes.select_related("pallet").order_by("-created_at").first()
+        if pallet_lote:
+            pallet_code = pallet_lote.pallet.pallet_code
+    except Exception:
+        pass
+
     return {
         "lote_code": lote.lote_code,
         "estado": lote.estado,
@@ -2866,6 +2820,9 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
         "fecha_cosecha": info.get("fecha_cosecha", ""),
         "fecha_conformacion": lote.fecha_conformacion,
         "bins": bins_data,
+        "desverdizado": desv_data,
+        "ingreso_packing": ip_data,
+        "pallet_code": pallet_code,
     }
 
 

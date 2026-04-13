@@ -91,15 +91,24 @@ def entity_exists(client: DataverseClient, logical_name: str) -> bool:
 def get_entity_attribute_names(client: DataverseClient, logical_name: str) -> set[str]:
     """
     Retorna el conjunto de nombres logicos de todos los atributos de la entidad.
+    Sigue paginacion @odata.nextLink para obtener todos (Dataverse pagina a ~100).
     Retorna set() si la entidad no existe.
     """
+    names: set[str] = set()
     try:
         result = client._request(
             "GET",
             f"EntityDefinitions(LogicalName='{logical_name}')/Attributes",
             params={"$select": "LogicalName"},
         )
-        return {attr["LogicalName"] for attr in (result or {}).get("value", [])}
+        while result:
+            for attr in result.get("value", []):
+                names.add(attr["LogicalName"])
+            next_link = result.get("@odata.nextLink")
+            if not next_link:
+                break
+            result = client._request("GET", next_link)
+        return names
     except DataverseAPIError as exc:
         err = str(exc)
         if "404" in err or "0x80040217" in err or "Does Not Exist" in err:

@@ -57,32 +57,36 @@
   </form>
 </div>
 
-<div style="display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.82rem;color:var(--text-muted)">
-  {% if tab_actual == 'pallets' %}
-    <span>{{ pallets_count }} pallet{{ pallets_count|pluralize:"s" }} mostrado{{ pallets_count|pluralize:"s" }}</span>
-  {% else %}
-    <span>{{ lotes_count }} lote{{ lotes_count|pluralize:"s" }} mostrado{{ lotes_count|pluralize:"s" }}</span>
-  {% endif %}
-  {% if filtro_productor or filtro_estado %}
-    <span>-</span>
-    <span style="color:var(--teal-400,#2dd4bf)">Filtros activos</span>
-  {% endif %}
-  {% if is_dataverse_backend %}
-    <span>-</span>
-    <span>
-      Cache Dataverse:
-      {% if cache_last_updated_display %}
-        actualizada {{ cache_last_updated_display }}
-      {% else %}
-        sin inicializar
+<div style="margin-bottom:1rem">
+  <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;font-size:.82rem;color:var(--text-muted)">
+    {% if tab_actual == 'pallets' %}
+      <span>{{ pallets_count }} pallet{{ pallets_count|pluralize:"s" }} mostrado{{ pallets_count|pluralize:"s" }}</span>
+      {% if pallets_count >= 500 %}
+        <span class="badge badge-warning" style="font-size:.72rem" title="El resultado está limitado a 500 registros. Use filtros para acotar la búsqueda.">⚠ Límite 500</span>
       {% endif %}
-    </span>
-    {% if cache_is_stale %}
-      <span style="color:var(--warning,#f59e0b)">usando cache vencido</span>
+    {% else %}
+      <span>{{ lotes_count }} lote{{ lotes_count|pluralize:"s" }} mostrado{{ lotes_count|pluralize:"s" }}</span>
+      {% if lotes_count >= 500 %}
+        <span class="badge badge-warning" style="font-size:.72rem" title="El resultado está limitado a 500 registros. Use filtros para acotar la búsqueda.">⚠ Límite 500</span>
+      {% endif %}
     {% endif %}
-    {% if background_refresh_started %}
-      <span style="color:var(--teal-400,#2dd4bf)">refrescando en segundo plano...</span>
+    {% if filtro_productor or filtro_estado %}
+      <span style="color:var(--text-dim)">·</span>
+      <span style="color:var(--teal-400,#2dd4bf)">Filtros activos</span>
     {% endif %}
+  </div>
+  {% if is_dataverse_backend %}
+    <div style="margin-top:.3rem;font-size:.78rem;color:var(--text-dim);display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <span>Cache Dataverse:
+        {% if cache_last_updated_display %}actualizada {{ cache_last_updated_display }}{% else %}sin inicializar{% endif %}
+      </span>
+      {% if cache_is_stale %}
+        <span style="color:var(--warning,#f59e0b)">· cache vencido</span>
+      {% endif %}
+      {% if background_refresh_started %}
+        <span style="color:var(--teal-400,#2dd4bf)">· refrescando...</span>
+      {% endif %}
+    </div>
   {% endif %}
 </div>
 
@@ -225,21 +229,44 @@
 </div>
 
 {% if tab_actual == 'lotes' %}
-  <div style="margin-top:1rem;font-size:.78rem;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:.5rem 1.2rem">
-    <span style="font-weight:600">Etapas:</span>
-    <span>Recepcion</span>
-    <span>-></span>
-    <span>Pesado / Pendiente</span>
-    <span>-></span>
-    <span>Mantencion / Desv.</span>
-    <span>-></span>
-    <span>Ingreso Packing</span>
-    <span>-></span>
-    <span>Packing / Proceso</span>
-    <span>-></span>
-    <span>Pallet Cerrado</span>
-    <span>-></span>
-    <span>Camara Frio</span>
+  <div style="margin-top:1.2rem">
+    <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.5rem">Flujo de etapas</div>
+    <div class="pipeline" style="margin-bottom:0">
+      <div class="pipeline-stage">
+        <div class="pipeline-stage-icon">📥</div>
+        <div class="pipeline-stage-name">Recepcion</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-stage-icon">⚖️</div>
+        <div class="pipeline-stage-name">Pesado</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-stage-icon">🌿</div>
+        <div class="pipeline-stage-name">Desv. / Mant.</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-stage-icon">🏭</div>
+        <div class="pipeline-stage-name">Ingreso Packing</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-stage-icon">📦</div>
+        <div class="pipeline-stage-name">Packing / Proceso</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-stage-icon">🎁</div>
+        <div class="pipeline-stage-name">Pallet Cerrado</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-stage-icon">❄️</div>
+        <div class="pipeline-stage-name">Camara Frio</div>
+      </div>
+    </div>
   </div>
 {% endif %}
 

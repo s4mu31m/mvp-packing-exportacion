@@ -11,16 +11,16 @@
 
   <div class="card" style="text-align:center;padding:1.2rem">
     <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
-      {{ kpis.lotes_abiertos|default:"0" }}
+      {{ kpis.lotes_desverdizado|default:"0" }}
     </div>
-    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes en recepcion</div>
+    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes en desverdizado</div>
   </div>
 
   <div class="card" style="text-align:center;padding:1.2rem">
     <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
-      {{ kpis.lotes_cerrados|default:"0" }}
+      {{ kpis.lotes_packing|default:"0" }}
     </div>
-    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes cerrados / en proceso</div>
+    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes en packing</div>
   </div>
 
   <div class="card" style="text-align:center;padding:1.2rem">

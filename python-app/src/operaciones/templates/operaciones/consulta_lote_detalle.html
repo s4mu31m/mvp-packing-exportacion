@@ -11,22 +11,69 @@
 {% block page_body %}
 
 <div class="card" style="margin-bottom:1rem">
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem;font-size:.88rem">
-    <div><strong>Codigo lote</strong><br><span style="font-family:monospace">{{ detalle.lote_code }}</span></div>
-    <div><strong>Estado</strong><br>{{ detalle.estado_display|default:"-" }}</div>
-    <div><strong>Etapa actual</strong><br>{{ detalle.etapa|default:"-" }}</div>
-    <div><strong>Productor</strong><br>{{ detalle.productor|default:"-" }}</div>
-    <div><strong>Variedad</strong><br>{{ detalle.variedad|default:"-" }}</div>
-    <div><strong>Tipo cultivo</strong><br>{{ detalle.tipo_cultivo|default:"-" }}</div>
-    <div><strong>Color</strong><br>{{ detalle.color|default:"-" }}</div>
-    <div><strong>Fecha cosecha</strong><br>{{ detalle.fecha_cosecha|default:"-" }}</div>
-    <div><strong>Fecha conformacion</strong><br>{{ detalle.fecha_conformacion|date:"d/m/Y"|default:"-" }}</div>
-    <div><strong>Cantidad bins</strong><br>{{ detalle.cantidad_bins|default:"0" }}</div>
-    <div><strong>Kilos bruto</strong><br>{% if detalle.kilos_bruto %}{{ detalle.kilos_bruto|floatformat:2 }} kg{% else %}-{% endif %}</div>
-    <div><strong>Kilos neto</strong><br>{% if detalle.kilos_neto %}{{ detalle.kilos_neto|floatformat:2 }} kg{% else %}-{% endif %}</div>
-    <div><strong>Via desverdizado</strong><br>{% if detalle.via_desverdizado %}Si{% else %}No{% endif %}</div>
+
+  {# ── Identificación del lote ── #}
+  <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.6rem">Identificación</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.7rem .9rem;font-size:.88rem;margin-bottom:1rem">
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Codigo lote</span><span style="font-family:monospace;font-weight:600">{{ detalle.lote_code }}</span></div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Estado</span>{{ detalle.estado_display|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Etapa actual</span>{{ detalle.etapa|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Fecha conformacion</span>{{ detalle.fecha_conformacion|date:"d/m/Y"|default:"-" }}</div>
+  </div>
+
+  <div class="section-divider" style="margin:.4rem 0 .8rem"></div>
+
+  {# ── Fruta ── #}
+  <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.6rem">Fruta</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem .9rem;font-size:.88rem;margin-bottom:1rem">
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Productor</span>{{ detalle.productor|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Variedad</span>{{ detalle.variedad|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Tipo cultivo</span>{{ detalle.tipo_cultivo|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Color</span>{{ detalle.color|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Fecha cosecha</span>{{ detalle.fecha_cosecha|default:"-" }}</div>
+  </div>
+
+  <div class="section-divider" style="margin:.4rem 0 .8rem"></div>
+
+  {# ── Pesos y bins ── #}
+  <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.6rem">Pesos y bins</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.7rem .9rem;font-size:.88rem">
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Bins</span>{{ detalle.cantidad_bins|default:"0" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Kg bruto</span>{% if detalle.kilos_bruto %}<strong>{{ detalle.kilos_bruto|floatformat:2 }} kg</strong>{% else %}-{% endif %}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Kg neto</span>{% if detalle.kilos_neto %}<strong style="color:var(--teal-400,#2dd4bf)">{{ detalle.kilos_neto|floatformat:2 }} kg</strong>{% else %}-{% endif %}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Via desverdizado</span>{% if detalle.via_desverdizado %}Sí{% else %}No{% endif %}</div>
+    {% if detalle.pallet_code %}
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Pallet</span><span style="font-family:monospace;font-weight:600;color:var(--teal-400,#2dd4bf)">{{ detalle.pallet_code }}</span></div>
+    {% endif %}
   </div>
 </div>
+
+{% if detalle.desverdizado %}
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-title" style="margin-bottom:.8rem">Desverdizado</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem .9rem;font-size:.88rem">
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Camara</span>{{ detalle.desverdizado.numero_camara|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Fecha ingreso</span>{{ detalle.desverdizado.fecha_ingreso|date:"d/m/Y"|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Hora ingreso</span>{{ detalle.desverdizado.hora_ingreso|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Horas desverdizado</span>{% if detalle.desverdizado.horas_desverdizado %}{{ detalle.desverdizado.horas_desverdizado }} h{% else %}-{% endif %}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Color salida</span>{{ detalle.desverdizado.color_salida|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Kg bruto salida</span>{% if detalle.desverdizado.kilos_bruto_salida %}{{ detalle.desverdizado.kilos_bruto_salida|floatformat:2 }} kg{% else %}-{% endif %}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Kg neto salida</span>{% if detalle.desverdizado.kilos_neto_salida %}<strong style="color:var(--teal-400,#2dd4bf)">{{ detalle.desverdizado.kilos_neto_salida|floatformat:2 }} kg</strong>{% else %}-{% endif %}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if detalle.ingreso_packing %}
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-title" style="margin-bottom:.8rem">Ingreso a Packing</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem .9rem;font-size:.88rem">
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Fecha ingreso</span>{{ detalle.ingreso_packing.fecha_ingreso_packing|date:"d/m/Y"|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Hora ingreso</span>{{ detalle.ingreso_packing.hora_ingreso_packing|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Kg bruto</span>{% if detalle.ingreso_packing.kilos_bruto_ingreso_packing %}{{ detalle.ingreso_packing.kilos_bruto_ingreso_packing|floatformat:2 }} kg{% else %}-{% endif %}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Kg neto</span>{% if detalle.ingreso_packing.kilos_neto_ingreso_packing %}<strong style="color:var(--teal-400,#2dd4bf)">{{ detalle.ingreso_packing.kilos_neto_ingreso_packing|floatformat:2 }} kg</strong>{% else %}-{% endif %}</div>
+  </div>
+</div>
+{% endif %}
 
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">

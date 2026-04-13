@@ -254,24 +254,84 @@ class ControlProcesoPackingForm(forms.Form):
         required=False, label="Hora",
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
     )
-    n_bins_procesados = forms.IntegerField(required=False, label="N bins procesados")
+    # --- Volcador ---
+    n_bins_procesados = forms.IntegerField(required=False, label="N° bins procesados")
+    velocidad_volcador = forms.DecimalField(
+        max_digits=6, decimal_places=2, required=False, label="Velocidad volcador (bins/h)",
+    )
+    obs_volcador = forms.CharField(
+        max_length=200, required=False, label="Observacion volcador",
+    )
+    # --- Tina de agua ---
     temp_agua_tina = forms.DecimalField(
         max_digits=5, decimal_places=2, required=False, label="Temp agua tina (°C)",
+    )
+    cloro_libre_ppm = forms.DecimalField(
+        max_digits=6, decimal_places=2, required=False, label="Cloro libre (ppm)",
     )
     ph_agua = forms.DecimalField(
         max_digits=4, decimal_places=2, required=False, label="pH agua",
     )
-    recambio_agua = forms.NullBooleanField(
-        required=False, label="Recambio agua",
+    tiempo_inmersion_seg = forms.IntegerField(required=False, label="Tiempo inmersion (seg)")
+    recambio_agua = forms.NullBooleanField(required=False, label="Recambio agua")
+    # --- Secado ---
+    temp_aire_secado = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Temp aire secado (°C)",
     )
+    velocidad_ventiladores = forms.DecimalField(
+        max_digits=6, decimal_places=2, required=False, label="Velocidad ventiladores",
+    )
+    fruta_sale_seca = forms.NullBooleanField(required=False, label="Fruta sale seca")
+    # --- Cera ---
+    tipo_cera = forms.CharField(max_length=50, required=False, label="Tipo cera")
+    dosis_cera_ml_min = forms.DecimalField(
+        max_digits=7, decimal_places=2, required=False, label="Dosis cera (ml/min)",
+    )
+    temp_cera = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Temp cera (°C)",
+    )
+    cobertura_uniforme = forms.NullBooleanField(required=False, label="Cobertura uniforme")
+    # --- Seleccion ---
+    n_operarios_seleccion = forms.IntegerField(required=False, label="N° operarios seleccion")
+    fruta_dano_condicion_kg = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=False, label="Fruta daño condicion (kg)",
+    )
+    fruta_dano_calidad_kg = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=False, label="Fruta daño calidad (kg)",
+    )
+    fruta_pudricion_kg = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=False, label="Fruta pudricion (kg)",
+    )
+    merma_total_seleccion_kg = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=False, label="Merma total seleccion (kg)",
+    )
+    # --- Calibrador ---
+    equipo_calibrador = forms.CharField(max_length=50, required=False, label="Equipo calibrador")
+    calibre_predominante = forms.CharField(max_length=20, required=False, label="Calibre predominante")
+    pct_calibre_export = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False,
+        label="% calibre export", help_text="Rango 0-100",
+    )
+    pct_calibres_menores = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False,
+        label="% calibres menores", help_text="Rango 0-100",
+    )
+    # --- Cajas ---
+    tipo_caja = forms.CharField(max_length=50, required=False, label="Tipo caja")
+    peso_promedio_caja_kg = forms.DecimalField(
+        max_digits=7, decimal_places=3, required=False, label="Peso promedio caja (kg)",
+    )
+    n_cajas_producidas = forms.IntegerField(required=False, label="N° cajas producidas")
     rendimiento_lote_pct = forms.DecimalField(
         max_digits=5, decimal_places=2, required=False,
         label="Rendimiento lote (%)", help_text="Rango 0-100",
     )
+    # --- General ---
     observaciones_generales = forms.CharField(
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones generales",
     )
+    rol = forms.CharField(max_length=50, required=False, label="Responsable turno")
 
 
 class CalidadPalletForm(forms.Form):

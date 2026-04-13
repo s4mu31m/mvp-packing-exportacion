@@ -337,20 +337,44 @@ def _row_to_registro_packing(row: dict, lote_id: Any = None) -> RegistroPackingR
 
 
 def _row_to_control_proceso(row: dict, lote_id: Any = None) -> ControlProcesoPackingRecord:
+    def _f(k): return row.get(CONTROL_PROCESO_PACKING_FIELDS[k])
     return ControlProcesoPackingRecord(
-        id=row.get(CONTROL_PROCESO_PACKING_FIELDS["id"]),
-        lote_id=lote_id or row.get(CONTROL_PROCESO_PACKING_FIELDS["lote_id_value"]),
-        fecha=_parse_date(row.get(CONTROL_PROCESO_PACKING_FIELDS["fecha"])),
-        hora=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["hora"])),
-        n_bins_procesados=row.get(CONTROL_PROCESO_PACKING_FIELDS["n_bins_procesados"]),
-        temp_agua_tina=_parse_decimal(row.get(CONTROL_PROCESO_PACKING_FIELDS["temp_agua_tina"])),
-        ph_agua=_parse_decimal(row.get(CONTROL_PROCESO_PACKING_FIELDS["ph_agua"])),
-        recambio_agua=row.get(CONTROL_PROCESO_PACKING_FIELDS["recambio_agua"]),
-        rendimiento_lote_pct=_parse_decimal(row.get(CONTROL_PROCESO_PACKING_FIELDS["rendimiento_lote_pct"])),
-        observaciones_generales=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["observaciones_generales"])),
-        operator_code=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["operator_code"])),
+        id=_f("id"),
+        lote_id=lote_id or _f("lote_id_value"),
+        fecha=_parse_date(_f("fecha")),
+        hora=_str(_f("hora")),
+        n_bins_procesados=_f("n_bins_procesados"),
+        temp_agua_tina=_parse_decimal(_f("temp_agua_tina")),
+        ph_agua=_parse_decimal(_f("ph_agua")),
+        recambio_agua=_f("recambio_agua"),
+        rendimiento_lote_pct=_parse_decimal(_f("rendimiento_lote_pct")),
+        observaciones_generales=_str(_f("observaciones_generales")),
+        velocidad_volcador=_parse_decimal(_f("velocidad_volcador")),
+        obs_volcador=_str(_f("obs_volcador")),
+        cloro_libre_ppm=_parse_decimal(_f("cloro_libre_ppm")),
+        tiempo_inmersion_seg=_f("tiempo_inmersion_seg"),
+        temp_aire_secado=_parse_decimal(_f("temp_aire_secado")),
+        velocidad_ventiladores=_parse_decimal(_f("velocidad_ventiladores")),
+        fruta_sale_seca=_f("fruta_sale_seca"),
+        tipo_cera=_str(_f("tipo_cera")),
+        dosis_cera_ml_min=_parse_decimal(_f("dosis_cera_ml_min")),
+        temp_cera=_parse_decimal(_f("temp_cera")),
+        cobertura_uniforme=_f("cobertura_uniforme"),
+        n_operarios_seleccion=_f("n_operarios_seleccion"),
+        fruta_dano_condicion_kg=_parse_decimal(_f("fruta_dano_condicion_kg")),
+        fruta_dano_calidad_kg=_parse_decimal(_f("fruta_dano_calidad_kg")),
+        fruta_pudricion_kg=_parse_decimal(_f("fruta_pudricion_kg")),
+        merma_total_seleccion_kg=_parse_decimal(_f("merma_total_seleccion_kg")),
+        equipo_calibrador=_str(_f("equipo_calibrador")),
+        calibre_predominante=_str(_f("calibre_predominante")),
+        pct_calibre_export=_parse_decimal(_f("pct_calibre_export")),
+        pct_calibres_menores=_parse_decimal(_f("pct_calibres_menores")),
+        tipo_caja=_str(_f("tipo_caja")),
+        peso_promedio_caja_kg=_parse_decimal(_f("peso_promedio_caja_kg")),
+        n_cajas_producidas=_f("n_cajas_producidas"),
+        operator_code=_str(_f("operator_code")),
         source_system="dataverse",
-        rol=_str(row.get(CONTROL_PROCESO_PACKING_FIELDS["rol"])),
+        rol=_str(_f("rol")),
     )
 
 
@@ -877,6 +901,29 @@ class DataverseLoteRepository(LoteRepository):
         records = [_row_to_lote(r) for r in (result or {}).get("value", [])]
         _cache.set(_key, records, timeout=30)
         return records
+
+    def count_bins_today(self) -> int:
+        """
+        Retorna la suma de crf21_cantidad_bins para lotes creados hoy (UTC).
+        Filtra por createdon en Dataverse en vez de sumar lotes recientes.
+        Sin cache: dato en tiempo real para el dashboard.
+        """
+        import datetime as _dt
+        today = _dt.date.today()
+        tomorrow = today + _dt.timedelta(days=1)
+        filter_expr = (
+            f"createdon ge {today.isoformat()}T00:00:00Z "
+            f"and createdon lt {tomorrow.isoformat()}T00:00:00Z"
+        )
+        result = self._client.list_rows(
+            ENTITY_SET_LOTE,
+            select=[LOTE_FIELDS["cantidad_bins"]],
+            filter_expr=filter_expr,
+            top=500,
+        )
+        rows = (result or {}).get("value", [])
+        cantidad_field = LOTE_FIELDS["cantidad_bins"]
+        return sum(int(r.get(cantidad_field) or 0) for r in rows)
 
 
 # ---------------------------------------------------------------------------
@@ -1733,16 +1780,18 @@ class DataverseControlProcesoPackingRepository(ControlProcesoPackingRepository):
             f"{CONTROL_PROCESO_PACKING_FIELDS['lote_id']}@odata.bind": odata_bind(ENTITY_SET_LOTE, str(lote_id)),
             CONTROL_PROCESO_PACKING_FIELDS["operator_code"]: operator_code,
         }
-        _extra_map = {
-            "fecha":                  CONTROL_PROCESO_PACKING_FIELDS["fecha"],
-            "hora":                   CONTROL_PROCESO_PACKING_FIELDS["hora"],
-            "n_bins_procesados":      CONTROL_PROCESO_PACKING_FIELDS["n_bins_procesados"],
-            "temp_agua_tina":         CONTROL_PROCESO_PACKING_FIELDS["temp_agua_tina"],
-            "ph_agua":                CONTROL_PROCESO_PACKING_FIELDS["ph_agua"],
-            "recambio_agua":          CONTROL_PROCESO_PACKING_FIELDS["recambio_agua"],
-            "rendimiento_lote_pct":   CONTROL_PROCESO_PACKING_FIELDS["rendimiento_lote_pct"],
-            "observaciones_generales":CONTROL_PROCESO_PACKING_FIELDS["observaciones_generales"],
-        }
+        _extra_map = {k: CONTROL_PROCESO_PACKING_FIELDS[k] for k in (
+            "fecha", "hora", "n_bins_procesados", "temp_agua_tina", "ph_agua",
+            "recambio_agua", "rendimiento_lote_pct", "observaciones_generales",
+            "velocidad_volcador", "obs_volcador", "cloro_libre_ppm",
+            "tiempo_inmersion_seg", "temp_aire_secado", "velocidad_ventiladores",
+            "fruta_sale_seca", "tipo_cera", "dosis_cera_ml_min", "temp_cera",
+            "cobertura_uniforme", "n_operarios_seleccion", "fruta_dano_condicion_kg",
+            "fruta_dano_calidad_kg", "fruta_pudricion_kg", "merma_total_seleccion_kg",
+            "equipo_calibrador", "calibre_predominante", "pct_calibre_export",
+            "pct_calibres_menores", "tipo_caja", "peso_promedio_caja_kg",
+            "n_cajas_producidas", "rol",
+        )}
         for domain_key, dv_field in _extra_map.items():
             v = (extra or {}).get(domain_key)
             if v not in (None, ""):
@@ -1761,9 +1810,17 @@ class DataverseControlProcesoPackingRepository(ControlProcesoPackingRepository):
         result = self._client.list_rows(
             ENTITY_SET_CONTROL_PROCESO_PACKING,
             select=[CONTROL_PROCESO_PACKING_FIELDS[k] for k in (
-                "id", "lote_id_value", "fecha", "hora",
-                "n_bins_procesados", "temp_agua_tina", "ph_agua", "recambio_agua",
-                "rendimiento_lote_pct", "observaciones_generales", "operator_code",
+                "id", "lote_id_value", "fecha", "hora", "n_bins_procesados",
+                "temp_agua_tina", "ph_agua", "recambio_agua",
+                "rendimiento_lote_pct", "observaciones_generales",
+                "velocidad_volcador", "obs_volcador", "cloro_libre_ppm",
+                "tiempo_inmersion_seg", "temp_aire_secado", "velocidad_ventiladores",
+                "fruta_sale_seca", "tipo_cera", "dosis_cera_ml_min", "temp_cera",
+                "cobertura_uniforme", "n_operarios_seleccion", "fruta_dano_condicion_kg",
+                "fruta_dano_calidad_kg", "fruta_pudricion_kg", "merma_total_seleccion_kg",
+                "equipo_calibrador", "calibre_predominante", "pct_calibre_export",
+                "pct_calibres_menores", "tipo_caja", "peso_promedio_caja_kg",
+                "n_cajas_producidas", "operator_code", "rol",
             )],
             filter_expr=f,
             orderby="createdon desc",
