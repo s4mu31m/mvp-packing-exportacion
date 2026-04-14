@@ -82,6 +82,7 @@ from operaciones.models import (
     Lote,
     LotePlantaEstado,
     Pallet,
+    RegistroPacking,
 )
 
 def _temporada(request) -> str:
@@ -230,20 +231,26 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         """KPIs y lista de lotes desde SQLite ORM."""
         try:
             from operaciones.models import BinLote
+            from django.db.models import Sum
 
             hoy = datetime.date.today()
             bins_hoy = BinLote.objects.filter(created_at__date=hoy).count()
 
             lotes_qs = Lote.objects.filter(temporada=temporada, is_active=True)
 
-            lotes_desverdizado = lotes_qs.filter(
+            lotes_desverdizado_qs = lotes_qs.filter(
                 desverdizado__isnull=False,
                 ingreso_packing__isnull=True,
-            ).count()
-
-            lotes_packing = lotes_qs.filter(
+            )
+            lotes_packing_qs = lotes_qs.filter(
                 ingreso_packing__isnull=False,
-            ).count()
+            )
+            lotes_recepcion_qs = lotes_qs.filter(
+                estado=LotePlantaEstado.ABIERTO,
+            )
+
+            def _kg(qs):
+                return float(qs.aggregate(total=Sum("kilos_neto_conformacion"))["total"] or 0)
 
             lotes_activos_qs = lotes_qs.exclude(
                 estado=LotePlantaEstado.FINALIZADO
@@ -259,10 +266,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 for lote in lotes_activos_qs
             ]
             kpis = {
-                "lotes_desverdizado": lotes_desverdizado,
-                "lotes_packing":      lotes_packing,
+                "lotes_desverdizado": lotes_desverdizado_qs.count(),
+                "lotes_packing":      lotes_packing_qs.count(),
                 "total_lotes":        lotes_qs.count(),
                 "bins_hoy":           bins_hoy,
+                "kg_recepcion":       _kg(lotes_recepcion_qs),
+                "kg_desverdizado":    _kg(lotes_desverdizado_qs),
+                "kg_packing":         _kg(lotes_packing_qs),
             }
             return kpis, lotes_activos
         except Exception:
@@ -291,13 +301,23 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             lotes_activos = []
             lotes_desverdizado = 0
             lotes_packing = 0
+            lotes_recepcion = 0
+            kg_recepcion = 0.0
+            kg_desverdizado = 0.0
+            kg_packing = 0.0
 
             for l in lotes:
                 etapa = resolve_etapa_lote(l)
-                if etapa == "Desverdizado":
+                kn = float(l.kilos_neto_conformacion or 0)
+                if etapa in ("Recepcion", "Pesaje"):
+                    lotes_recepcion += 1
+                    kg_recepcion += kn
+                elif etapa == "Desverdizado":
                     lotes_desverdizado += 1
+                    kg_desverdizado += kn
                 elif etapa in _PACKING_ETAPAS:
                     lotes_packing += 1
+                    kg_packing += kn
                 lotes_activos.append({
                     "codigo": l.lote_code,
                     "bins":   l.cantidad_bins,
@@ -310,6 +330,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "lotes_packing":      lotes_packing,
                 "total_lotes":        len(lotes),
                 "bins_hoy":           repos.lotes.count_bins_today(),
+                "kg_recepcion":       kg_recepcion,
+                "kg_desverdizado":    kg_desverdizado,
+                "kg_packing":         kg_packing,
             }
             return kpis, lotes_activos
         except Exception as exc:
@@ -1041,6 +1064,8 @@ def _build_pallet_context_map_from_records(pallets, repos=None) -> dict:
             "tipo_caja": p.tipo_caja or "",
             "peso_total": float(p.peso_total_kg) if p.peso_total_kg else None,
             "productor": "",
+            "codigo_sag_csg": "",
+            "codigo_sag_csp": "",
             "tipo_cultivo": "",
             "variedad": "",
             "color": "",
@@ -1095,6 +1120,8 @@ def _build_pallet_context_map_from_records(pallets, repos=None) -> dict:
         data[pallet.pallet_code].update({
             "lote_code": lote.lote_code if lote else "",
             "productor": (primer_bin.codigo_productor if primer_bin else None) or (getattr(lote, "codigo_productor", "") if lote else ""),
+            "codigo_sag_csg": (getattr(primer_bin, "codigo_sag_csg", None) or "") if primer_bin else "",
+            "codigo_sag_csp": (getattr(primer_bin, "codigo_sag_csp", None) or "") if primer_bin else "",
             "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
             "variedad": primer_bin.variedad_fruta if primer_bin else "",
             "color": primer_bin.color if primer_bin else "",
@@ -1938,11 +1965,17 @@ CONSULTA_COLUMNAS_LOTES = [
     ("Lote (code)", "lote_code"),
     ("Estado", "estado_display"),
     ("Etapa actual", "etapa"),
-    ("Productor", "productor"),
+    ("Productor (SAC)", "productor"),
+    ("CSG", "codigo_sag_csg"),
+    ("CSP", "codigo_sag_csp"),
+    ("SDP", "codigo_sdp"),
+    ("N° Cuartel", "numero_cuartel"),
+    ("Nombre Cuartel", "nombre_cuartel"),
     ("Tipo cultivo", "tipo_cultivo"),
     ("Variedad", "variedad"),
     ("Bins", "cantidad_bins"),
     ("Kg neto", "kilos_neto"),
+    ("Cajas producidas", "cajas_producidas"),
     ("Fecha", "fecha"),
 ]
 
@@ -1953,6 +1986,8 @@ CONSULTA_COLUMNAS_PALLETS = [
     ("Tipo caja", "tipo_caja"),
     ("Peso total (kg)", "peso_total"),
     ("Productor", "productor"),
+    ("CSG", "codigo_sag_csg"),
+    ("CSP", "codigo_sag_csp"),
     ("Variedad", "variedad"),
 ]
 
@@ -2195,14 +2230,24 @@ def _consulta_dataset(
     filtro_productor: str,
     filtro_estado: str,
     *,
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
     force_refresh: bool = False,
 ) -> tuple[list, list, dict]:
     from django.conf import settings
     backend = getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip()
     if backend != "dataverse":
-        return (
+        lotes = _filtrar_por_fecha(
             _lotes_enriquecidos_qs(temporada, filtro_productor, filtro_estado),
+            fecha_desde, fecha_hasta,
+        )
+        pallets = _filtrar_por_fecha(
             _pallets_enriquecidos_qs(temporada, filtro_productor, filtro_estado),
+            fecha_desde, fecha_hasta,
+        )
+        return (
+            lotes,
+            pallets,
             {
                 "is_dataverse_backend": False,
                 "cache_source": "none",
@@ -2236,8 +2281,8 @@ def _consulta_dataset(
             meta["cache_last_updated"] = updated_at
             meta["cache_is_stale"] = False
             meta["refreshed_now"] = True
-            lotes = _filtrar_lotes_consulta(live_data.get("lotes", []), filtro_productor, filtro_estado)
-            pallets = _filtrar_pallets_consulta(live_data.get("pallets", []), filtro_productor, filtro_estado)
+            lotes = _filtrar_por_fecha(_filtrar_lotes_consulta(live_data.get("lotes", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
+            pallets = _filtrar_por_fecha(_filtrar_pallets_consulta(live_data.get("pallets", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
             return lotes, pallets, meta
         except Exception as exc:
             logging.getLogger(__name__).warning("Refresco manual consulta fallo: %s", exc)
@@ -2245,8 +2290,8 @@ def _consulta_dataset(
                 meta["warning_message"] = (
                     "No fue posible sincronizar Dataverse. Se muestra cache disponible."
                 )
-                lotes = _filtrar_lotes_consulta(cache_rows.get("lotes", []), filtro_productor, filtro_estado)
-                pallets = _filtrar_pallets_consulta(cache_rows.get("pallets", []), filtro_productor, filtro_estado)
+                lotes = _filtrar_por_fecha(_filtrar_lotes_consulta(cache_rows.get("lotes", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
+                pallets = _filtrar_por_fecha(_filtrar_pallets_consulta(cache_rows.get("pallets", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
                 return lotes, pallets, meta
             meta["warning_message"] = (
                 "No fue posible sincronizar Dataverse y no existe cache disponible."
@@ -2254,14 +2299,14 @@ def _consulta_dataset(
             return [], [], meta
 
     if cache_rows and cache_is_fresh:
-        lotes = _filtrar_lotes_consulta(cache_rows.get("lotes", []), filtro_productor, filtro_estado)
-        pallets = _filtrar_pallets_consulta(cache_rows.get("pallets", []), filtro_productor, filtro_estado)
+        lotes = _filtrar_por_fecha(_filtrar_lotes_consulta(cache_rows.get("lotes", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
+        pallets = _filtrar_por_fecha(_filtrar_pallets_consulta(cache_rows.get("pallets", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
         return lotes, pallets, meta
 
     if cache_rows and not cache_is_fresh:
         meta["background_refresh_started"] = _consulta_dataverse_cache_refresh_background(temporada)
-        lotes = _filtrar_lotes_consulta(cache_rows.get("lotes", []), filtro_productor, filtro_estado)
-        pallets = _filtrar_pallets_consulta(cache_rows.get("pallets", []), filtro_productor, filtro_estado)
+        lotes = _filtrar_por_fecha(_filtrar_lotes_consulta(cache_rows.get("lotes", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
+        pallets = _filtrar_por_fecha(_filtrar_pallets_consulta(cache_rows.get("pallets", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
         return lotes, pallets, meta
 
     try:
@@ -2269,8 +2314,8 @@ def _consulta_dataset(
         meta["cache_source"] = "live"
         meta["cache_last_updated"] = updated_at
         meta["cache_is_stale"] = False
-        lotes = _filtrar_lotes_consulta(live_data.get("lotes", []), filtro_productor, filtro_estado)
-        pallets = _filtrar_pallets_consulta(live_data.get("pallets", []), filtro_productor, filtro_estado)
+        lotes = _filtrar_por_fecha(_filtrar_lotes_consulta(live_data.get("lotes", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
+        pallets = _filtrar_por_fecha(_filtrar_pallets_consulta(live_data.get("pallets", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
         return lotes, pallets, meta
     except Exception as exc:
         logging.getLogger(__name__).warning("Carga inicial Dataverse para consulta fallo: %s", exc)
@@ -2340,6 +2385,8 @@ def _query_consulta(
     filtro_productor: str,
     filtro_estado: str,
     *,
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
     refresh: bool = False,
 ) -> str:
     params = {"tab": _normalizar_tab_consulta(tab)}
@@ -2347,6 +2394,10 @@ def _query_consulta(
         params["productor"] = filtro_productor
     if filtro_estado:
         params["estado"] = filtro_estado
+    if fecha_desde:
+        params["fecha_desde"] = fecha_desde
+    if fecha_hasta:
+        params["fecha_hasta"] = fecha_hasta
     if refresh:
         params["refresh"] = "1"
     return urlencode(params)
@@ -2357,10 +2408,12 @@ def _url_consulta(
     filtro_productor: str = "",
     filtro_estado: str = "",
     *,
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
     refresh: bool = False,
 ) -> str:
     base = reverse("operaciones:consulta")
-    qs = _query_consulta(tab, filtro_productor, filtro_estado, refresh=refresh)
+    qs = _query_consulta(tab, filtro_productor, filtro_estado, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, refresh=refresh)
     return f"{base}?{qs}" if qs else base
 
 
@@ -2369,6 +2422,41 @@ def _filtros_consulta_request(request, default_tab: str = CONSULTA_TAB_DEFAULT) 
     filtro_productor = request.GET.get("productor", "").strip()
     filtro_estado = request.GET.get("estado", "").strip()
     return tab, filtro_productor, filtro_estado
+
+
+def _fechas_consulta_request(request) -> tuple[str, str]:
+    """Extrae fecha_desde y fecha_hasta (YYYY-MM-DD) del request GET. Devuelve ('', '') si no están."""
+    def _clean_date(raw: str) -> str:
+        raw = (raw or "").strip()
+        if not raw:
+            return ""
+        try:
+            datetime.date.fromisoformat(raw)
+            return raw
+        except ValueError:
+            return ""
+    return _clean_date(request.GET.get("fecha_desde", "")), _clean_date(request.GET.get("fecha_hasta", ""))
+
+
+def _filtrar_por_fecha(rows: list, fecha_desde: str, fecha_hasta: str) -> list:
+    """Filtra una lista de dicts con clave 'fecha' (date|datetime|None) por rango de fechas."""
+    if not fecha_desde and not fecha_hasta:
+        return rows
+    desde = datetime.date.fromisoformat(fecha_desde) if fecha_desde else None
+    hasta = datetime.date.fromisoformat(fecha_hasta) if fecha_hasta else None
+    resultado = []
+    for item in rows:
+        f = item.get("fecha")
+        if f is None:
+            continue
+        if isinstance(f, datetime.datetime):
+            f = f.date()
+        if desde and f < desde:
+            continue
+        if hasta and f > hasta:
+            continue
+        resultado.append(item)
+    return resultado
 
 
 def _refresh_consulta_request(request) -> bool:
@@ -2407,15 +2495,23 @@ def _export_cell_value(value):
     return value
 
 
+_CAMPOS_BASE_LOTE_VACIO = {
+    "productor": "",
+    "tipo_cultivo": "",
+    "variedad": "",
+    "color": "",
+    "fecha_cosecha": "",
+    "codigo_sag_csg": "",
+    "codigo_sag_csp": "",
+    "codigo_sdp": "",
+    "numero_cuartel": "",
+    "nombre_cuartel": "",
+}
+
+
 def _campos_base_lote_prefetch(lote: Lote | None) -> dict:
     if not lote:
-        return {
-            "productor": "",
-            "tipo_cultivo": "",
-            "variedad": "",
-            "color": "",
-            "fecha_cosecha": "",
-        }
+        return dict(_CAMPOS_BASE_LOTE_VACIO)
     primer_bin = None
     try:
         primer_rel = lote.bin_lotes.select_related("bin").first()
@@ -2423,19 +2519,18 @@ def _campos_base_lote_prefetch(lote: Lote | None) -> dict:
     except Exception:
         primer_bin = None
     if not primer_bin:
-        return {
-            "productor": "",
-            "tipo_cultivo": "",
-            "variedad": "",
-            "color": "",
-            "fecha_cosecha": "",
-        }
+        return dict(_CAMPOS_BASE_LOTE_VACIO)
     return {
         "productor": primer_bin.codigo_productor or "",
         "tipo_cultivo": primer_bin.tipo_cultivo or "",
         "variedad": primer_bin.variedad_fruta or "",
         "color": primer_bin.color or "",
         "fecha_cosecha": str(primer_bin.fecha_cosecha) if primer_bin.fecha_cosecha else "",
+        "codigo_sag_csg": getattr(primer_bin, "codigo_sag_csg", None) or "",
+        "codigo_sag_csp": getattr(primer_bin, "codigo_sag_csp", None) or "",
+        "codigo_sdp": getattr(primer_bin, "codigo_sdp", None) or "",
+        "numero_cuartel": getattr(primer_bin, "numero_cuartel", None) or "",
+        "nombre_cuartel": getattr(primer_bin, "nombre_cuartel", None) or "",
     }
 
 def _es_jefatura(user) -> bool:
@@ -2457,12 +2552,24 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
     if backend == "dataverse":
         return _lotes_enriquecidos_dataverse(filtro_productor, filtro_estado)
 
+    from django.db.models import Sum
     lotes_raw = list(
         Lote.objects
         .filter(temporada=temporada, is_active=True)
         .prefetch_related("desverdizado", "ingreso_packing", "bin_lotes__bin")
         .order_by("-created_at")[:500]
     )
+    lote_ids = [l.id for l in lotes_raw]
+    cajas_por_lote: dict = {}
+    if lote_ids:
+        cajas_por_lote = dict(
+            RegistroPacking.objects
+            .filter(lote_id__in=lote_ids)
+            .values("lote_id")
+            .annotate(total=Sum("cantidad_cajas_producidas"))
+            .values_list("lote_id", "total")
+        )
+
     resultado = []
     filtro_productor_lc = (filtro_productor or "").lower()
     for lote in lotes_raw:
@@ -2484,7 +2591,13 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
             "etapa": etapa,
             "cantidad_bins": lote.cantidad_bins,
             "kilos_neto": kilos_neto,
+            "cajas_producidas": cajas_por_lote.get(lote.id),
             "productor": productor,
+            "codigo_sag_csg": campos["codigo_sag_csg"],
+            "codigo_sag_csp": campos["codigo_sag_csp"],
+            "codigo_sdp": campos["codigo_sdp"],
+            "numero_cuartel": campos["numero_cuartel"],
+            "nombre_cuartel": campos["nombre_cuartel"],
             "variedad": campos["variedad"],
             "tipo_cultivo": campos["tipo_cultivo"],
             "color": campos["color"],
@@ -2538,7 +2651,13 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
                 "etapa": etapa,
                 "cantidad_bins": lote.cantidad_bins,
                 "kilos_neto": _kn,
+                "cajas_producidas": None,
                 "productor": productor,
+                "codigo_sag_csg": (getattr(primer_bin, "codigo_sag_csg", None) or "") if primer_bin else "",
+                "codigo_sag_csp": (getattr(primer_bin, "codigo_sag_csp", None) or "") if primer_bin else "",
+                "codigo_sdp": (getattr(primer_bin, "codigo_sdp", None) or "") if primer_bin else "",
+                "numero_cuartel": (getattr(primer_bin, "numero_cuartel", None) or "") if primer_bin else "",
+                "nombre_cuartel": (getattr(primer_bin, "nombre_cuartel", None) or "") if primer_bin else "",
                 "variedad": primer_bin.variedad_fruta if primer_bin else "",
                 "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
                 "color": primer_bin.color if primer_bin else "",
@@ -2606,6 +2725,8 @@ def _pallets_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estad
             "tipo_caja": pallet.tipo_caja or "",
             "peso_total": _float_or_none(pallet.peso_total_kg),
             "productor": productor,
+            "codigo_sag_csg": campos["codigo_sag_csg"],
+            "codigo_sag_csp": campos["codigo_sag_csp"],
             "variedad": campos["variedad"],
             "color": campos["color"],
             "fecha_cosecha": campos["fecha_cosecha"],
@@ -2676,6 +2797,8 @@ def _pallets_enriquecidos_dataverse(temporada: str, filtro_productor: str, filtr
                 "tipo_caja": pallet.tipo_caja or "",
                 "peso_total": _float_or_none(pallet.peso_total_kg),
                 "productor": productor,
+                "codigo_sag_csg": base.get("codigo_sag_csg", ""),
+                "codigo_sag_csp": base.get("codigo_sag_csp", ""),
                 "variedad": base.get("variedad", ""),
                 "color": base.get("color", ""),
                 "fecha_cosecha": base.get("fecha_cosecha", ""),
@@ -2927,6 +3050,8 @@ def _consulta_export_bundle(
     filtro_productor: str,
     filtro_estado: str,
     *,
+    fecha_desde: str = "",
+    fecha_hasta: str = "",
     force_refresh: bool = False,
 ) -> tuple[list[tuple[str, str]], list[dict], str, dict]:
     tab_norm = _normalizar_tab_consulta(tab)
@@ -2934,6 +3059,8 @@ def _consulta_export_bundle(
         temporada,
         filtro_productor,
         filtro_estado,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
         force_refresh=force_refresh,
     )
     if tab_norm == CONSULTA_TAB_PALLETS:
@@ -2980,20 +3107,25 @@ class ConsultaJefaturaView(LoginRequiredMixin, JefaturaRequiredMixin, TemplateVi
             self.request,
             CONSULTA_TAB_DEFAULT,
         )
+        fecha_desde, fecha_hasta = _fechas_consulta_request(self.request)
         force_refresh = _refresh_consulta_request(self.request)
 
         lotes, pallets, cache_meta = _consulta_dataset(
             temporada,
             filtro_productor,
             filtro_estado,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
             force_refresh=force_refresh,
         )
-        query_consulta = _query_consulta(tab_actual, filtro_productor, filtro_estado)
+        query_consulta = _query_consulta(tab_actual, filtro_productor, filtro_estado, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
 
-        ctx["page_title"] = "Consulta Jefatura"
+        ctx["page_title"] = "Control de Gestion"
         ctx["temporada"] = temporada
         ctx["filtro_productor"] = filtro_productor
         ctx["filtro_estado"] = filtro_estado
+        ctx["fecha_desde"] = fecha_desde
+        ctx["fecha_hasta"] = fecha_hasta
         ctx["tab_actual"] = tab_actual
         ctx["lotes"] = lotes
         ctx["pallets"] = pallets
@@ -3001,12 +3133,14 @@ class ConsultaJefaturaView(LoginRequiredMixin, JefaturaRequiredMixin, TemplateVi
         ctx["pallets_count"] = len(pallets)
         ctx["estados_choices"] = _consulta_estado_choices()
         ctx["query_consulta"] = query_consulta
-        ctx["tab_lotes_url"] = _url_consulta(CONSULTA_TAB_LOTES, filtro_productor, filtro_estado)
-        ctx["tab_pallets_url"] = _url_consulta(CONSULTA_TAB_PALLETS, filtro_productor, filtro_estado)
+        ctx["tab_lotes_url"] = _url_consulta(CONSULTA_TAB_LOTES, filtro_productor, filtro_estado, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+        ctx["tab_pallets_url"] = _url_consulta(CONSULTA_TAB_PALLETS, filtro_productor, filtro_estado, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
         ctx["refresh_url"] = _url_consulta(
             tab_actual,
             filtro_productor,
             filtro_estado,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
             refresh=True,
         )
         ctx["export_csv_url"] = f"{reverse('operaciones:exportar_consulta')}?{query_consulta}"
@@ -3114,12 +3248,15 @@ class ExportarConsultaCSVView(LoginRequiredMixin, JefaturaRequiredMixin, View):
             request,
             CONSULTA_TAB_DEFAULT,
         )
+        fecha_desde, fecha_hasta = _fechas_consulta_request(request)
         force_refresh = _refresh_consulta_request(request)
         columnas, rows, tab_norm, _ = _consulta_export_bundle(
             temporada,
             tab,
             filtro_productor,
             filtro_estado,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
             force_refresh=force_refresh,
         )
 
@@ -3146,12 +3283,15 @@ class ExportarConsultaExcelView(LoginRequiredMixin, JefaturaRequiredMixin, View)
             request,
             CONSULTA_TAB_DEFAULT,
         )
+        fecha_desde, fecha_hasta = _fechas_consulta_request(request)
         force_refresh = _refresh_consulta_request(request)
         columnas, rows, tab_norm, _ = _consulta_export_bundle(
             temporada,
             tab,
             filtro_productor,
             filtro_estado,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
             force_refresh=force_refresh,
         )
 

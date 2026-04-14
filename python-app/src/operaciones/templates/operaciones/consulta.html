@@ -1,7 +1,7 @@
 {% extends "layout_app.html" %}
 
-{% block title %}Consulta Jefatura - CaliPro{% endblock %}
-{% block page_title %}Consulta Jefatura{% endblock %}
+{% block title %}Control de Gestion - CaliPro{% endblock %}
+{% block page_title %}Control de Gestion{% endblock %}
 {% block page_subtitle %}Trazabilidad y estado - Temporada {{ temporada }}{% endblock %}
 
 {% block page_actions %}
@@ -49,6 +49,16 @@
         </select>
       </div>
 
+      <div class="form-group" style="margin-bottom:0;min-width:140px">
+        <label class="form-label">Fecha desde</label>
+        <input type="date" class="form-control" name="fecha_desde" value="{{ fecha_desde }}">
+      </div>
+
+      <div class="form-group" style="margin-bottom:0;min-width:140px">
+        <label class="form-label">Fecha hasta</label>
+        <input type="date" class="form-control" name="fecha_hasta" value="{{ fecha_hasta }}">
+      </div>
+
       <div style="display:flex;gap:.5rem;padding-bottom:1px">
         <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
         <a href="{% url 'operaciones:consulta' %}?tab={{ tab_actual }}" class="btn btn-ghost btn-sm">Limpiar</a>
@@ -70,7 +80,7 @@
         <span class="badge badge-warning" style="font-size:.72rem" title="El resultado está limitado a 500 registros. Use filtros para acotar la búsqueda.">⚠ Límite 500</span>
       {% endif %}
     {% endif %}
-    {% if filtro_productor or filtro_estado %}
+    {% if filtro_productor or filtro_estado or fecha_desde or fecha_hasta %}
       <span style="color:var(--text-dim)">·</span>
       <span style="color:var(--teal-400,#2dd4bf)">Filtros activos</span>
     {% endif %}

@@ -6,35 +6,39 @@
 
 {% block page_body %}
 
-<!-- KPIs -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem">
+<!-- KPIs por etapa -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem">
 
-  <div class="card" style="text-align:center;padding:1.2rem">
-    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
-      {{ kpis.lotes_desverdizado|default:"0" }}
+  <div class="card" style="padding:1.2rem">
+    <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">Recepcion</div>
+    <div style="font-size:1.6rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+      {% if kpis.kg_recepcion %}{{ kpis.kg_recepcion|floatformat:0 }} kg{% else %}— kg{% endif %}
     </div>
-    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes en desverdizado</div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin-top:.2rem">{{ kpis.bins_hoy|default:"0" }} bins hoy</div>
   </div>
 
-  <div class="card" style="text-align:center;padding:1.2rem">
-    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
-      {{ kpis.lotes_packing|default:"0" }}
+  <div class="card" style="padding:1.2rem">
+    <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">Desverdizado</div>
+    <div style="font-size:1.6rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+      {% if kpis.kg_desverdizado %}{{ kpis.kg_desverdizado|floatformat:0 }} kg{% else %}— kg{% endif %}
     </div>
-    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Lotes en packing</div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin-top:.2rem">{{ kpis.lotes_desverdizado|default:"0" }} lotes</div>
   </div>
 
-  <div class="card" style="text-align:center;padding:1.2rem">
-    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
-      {{ kpis.bins_hoy|default:"0" }}
+  <div class="card" style="padding:1.2rem">
+    <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">Packing</div>
+    <div style="font-size:1.6rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+      {% if kpis.kg_packing %}{{ kpis.kg_packing|floatformat:0 }} kg{% else %}— kg{% endif %}
     </div>
-    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Bins recibidos hoy</div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin-top:.2rem">{{ kpis.lotes_packing|default:"0" }} lotes</div>
   </div>
 
-  <div class="card" style="text-align:center;padding:1.2rem">
-    <div style="font-size:2rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
+  <div class="card" style="padding:1.2rem">
+    <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">Temporada</div>
+    <div style="font-size:1.6rem;font-weight:700;color:var(--teal-400,#2dd4bf)">
       {{ kpis.total_lotes|default:"0" }}
     </div>
-    <div style="font-size:.82rem;color:var(--text-muted);margin-top:.3rem">Total lotes temporada</div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin-top:.2rem">lotes registrados</div>
   </div>
 
 </div>

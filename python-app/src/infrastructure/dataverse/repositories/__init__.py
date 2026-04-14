@@ -188,6 +188,8 @@ def _row_to_bin(row: dict) -> BinRecord:
         sector=_str(row.get(BIN_FIELDS["sector"])),
         kilos_bruto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_bruto_ingreso"])),
         kilos_neto_ingreso=_parse_decimal(row.get(BIN_FIELDS["kilos_neto_ingreso"])),
+        cantidad_bins_grupo=int(row[BIN_FIELDS["cantidad_bins_grupo"]]) if row.get(BIN_FIELDS["cantidad_bins_grupo"]) is not None else None,
+        tara_bin=_parse_decimal(row.get(BIN_FIELDS["tara_bin"])),
         codigo_productor=_str(row.get(BIN_FIELDS["codigo_productor"])),
         color=_str(row.get(BIN_FIELDS["color"])),
         fecha_cosecha=_parse_date(row.get(BIN_FIELDS["fecha_cosecha"])),
@@ -865,6 +867,16 @@ class DataverseLoteRepository(LoteRepository):
             row = self._client.update_row(
                 ENTITY_SET_LOTE, str(lote_id), body, return_representation=True
             )
+            # Invalidar cachés de list_recent para que el cambio de etapa_actual
+            # sea visible de inmediato sin esperar el TTL de 30s.
+            # Se invalidan todos los límites conocidos (dashboard=50, desverdizado=200).
+            try:
+                from django.core.cache import caches
+                _dv_cache = caches["dataverse"]
+                _dv_cache.delete("lotes_list_recent:50")
+                _dv_cache.delete("lotes_list_recent:200")
+            except Exception:
+                pass
             if row:
                 return _row_to_lote(row)
 

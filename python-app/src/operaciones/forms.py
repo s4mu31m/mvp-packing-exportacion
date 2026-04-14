@@ -2,6 +2,8 @@
 Formularios web para el flujo operativo de packing.
 Cada formulario corresponde a una etapa del flujo.
 """
+from decimal import Decimal
+
 from django import forms
 from operaciones.models import DisponibilidadCamara, AOR
 
@@ -77,11 +79,25 @@ class BinForm(forms.Form):
     )
     kilos_bruto_ingreso = forms.DecimalField(
         max_digits=10, decimal_places=2, required=True,
-        label="Kilos bruto ingreso",
+        label="Kilos bruto total",
+        help_text="Peso bruto total del grupo de bins",
+    )
+    cantidad_bins_grupo = forms.IntegerField(
+        required=True, min_value=1, label="Cantidad de bins",
+        help_text="Cantidad de bins del mismo tipo en este pesaje",
+        widget=forms.NumberInput(attrs={"id": "id-cantidad-bins-grupo", "min": "1", "inputmode": "numeric"}),
+    )
+    tara_bin = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=True, min_value=Decimal("0.01"),
+        label="Tara bin (kg)",
+        help_text="Tara especifica del tipo de bin (kg)",
+        widget=forms.NumberInput(attrs={"id": "id-tara-bin", "step": "0.01", "min": "0.01"}),
     )
     kilos_neto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True,
-        label="Kilos neto ingreso",
+        max_digits=10, decimal_places=2, required=False,
+        label="Kilos neto ingreso (calculado)",
+        help_text="bruto − (cantidad × tara)",
+        widget=forms.NumberInput(attrs={"id": "id-kilos-neto-ingreso", "readonly": "readonly", "step": "0.01"}),
     )
     a_o_r = forms.ChoiceField(
         choices=[("", "---------")] + list(AOR.choices),
@@ -104,10 +120,21 @@ class EditBinVariableForm(forms.Form):
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
     )
     kilos_bruto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True, label="Kilos bruto ingreso",
+        max_digits=10, decimal_places=2, required=True, label="Kilos bruto total",
+    )
+    cantidad_bins_grupo = forms.IntegerField(
+        required=False, min_value=1, label="Cantidad de bins",
+        widget=forms.NumberInput(attrs={"id": "edit-cantidad-bins-grupo", "min": "1", "inputmode": "numeric"}),
+    )
+    tara_bin = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=False, min_value=Decimal("0.01"),
+        label="Tara bin (kg)",
+        widget=forms.NumberInput(attrs={"id": "edit-tara-bin", "step": "0.01", "min": "0.01"}),
     )
     kilos_neto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True, label="Kilos neto ingreso",
+        max_digits=10, decimal_places=2, required=False, label="Kilos neto ingreso (calculado)",
+        help_text="bruto − (cantidad × tara)",
+        widget=forms.NumberInput(attrs={"id": "edit-kilos-neto-ingreso", "readonly": "readonly", "step": "0.01"}),
     )
     a_o_r = forms.ChoiceField(
         choices=[("", "---------")] + list(AOR.choices),
@@ -239,8 +266,23 @@ class RegistroPackingForm(forms.Form):
     )
     merma_seleccion_pct = forms.DecimalField(
         max_digits=5, decimal_places=2, required=False,
-        label="Merma seleccion (%)",
-        help_text="Rango 0-100",
+        label="Merma seleccion (%) — deprecated",
+        help_text="Usar merma_seleccion_kg",
+    )
+    merma_seleccion_kg = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=False,
+        label="Merma seleccion (kg)",
+        help_text="Kilos descartados por seleccion",
+    )
+    kilos_fruta_comercial = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=False,
+        label="Kilos fruta comercial",
+        help_text="Kilos disponibles para venta comercial",
+    )
+    kilos_descarte_local = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=False,
+        label="Kilos descarte / local",
+        help_text="Kilos destinados a consumo local o descarte definitivo",
     )
 
 

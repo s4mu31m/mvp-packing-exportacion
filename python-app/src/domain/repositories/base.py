@@ -41,6 +41,8 @@ class BinRecord:
     color: str = ""
     kilos_bruto_ingreso: Optional[Decimal] = None
     kilos_neto_ingreso: Optional[Decimal] = None
+    cantidad_bins_grupo: Optional[int] = None
+    tara_bin: Optional[Decimal] = None
     codigo_productor: str = ""
 
 

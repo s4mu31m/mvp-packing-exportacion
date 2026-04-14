@@ -321,6 +321,29 @@
 
 {% include "operaciones/includes/op_common_js.html" %}
 
+<script>
+(function() {
+  /* Auto-calculo: kilos_neto = kilos_bruto - (cantidad_bins × tara_bin) */
+  function calcularNetoIngreso() {
+    var bruto = parseFloat(document.querySelector('[name="kilos_bruto_ingreso"]')?.value) || 0;
+    var cantidad = parseInt(document.getElementById('id-cantidad-bins-grupo')?.value) || 0;
+    var tara = parseFloat(document.getElementById('id-tara-bin')?.value) || 0;
+    var neto = document.getElementById('id-kilos-neto-ingreso');
+    if (!neto) return;
+    if (bruto > 0 && cantidad > 0 && tara > 0) {
+      var resultado = bruto - (cantidad * tara);
+      neto.value = resultado > 0 ? resultado.toFixed(2) : '0.00';
+    } else {
+      neto.value = '';
+    }
+  }
+  ['[name="kilos_bruto_ingreso"]', '#id-cantidad-bins-grupo', '#id-tara-bin'].forEach(function(sel) {
+    var el = document.querySelector(sel);
+    if (el) el.addEventListener('input', calcularNetoIngreso);
+  });
+})();
+</script>
+
 {% endblock %}
 
 {% block extra_js %}

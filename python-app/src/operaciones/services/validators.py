@@ -279,7 +279,9 @@ def validate_registro_packing_payload(payload: dict) -> dict:
             for k in [
                 "fecha", "hora_inicio", "linea_proceso", "categoria_calidad",
                 "calibre", "tipo_envase", "cantidad_cajas_producidas",
-                "peso_promedio_caja_kg", "merma_seleccion_pct", "rol",
+                "peso_promedio_caja_kg", "merma_seleccion_pct",
+                "merma_seleccion_kg", "kilos_fruta_comercial", "kilos_descarte_local",
+                "rol",
             ]
             if k in values and values[k] not in [None, ""]
         },

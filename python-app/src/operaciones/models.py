@@ -129,6 +129,12 @@ class Bin(MaestroOperacionalModel):
         max_digits=10, decimal_places=2, null=True, blank=True)
     kilos_neto_ingreso = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True)
+    cantidad_bins_grupo = models.IntegerField(
+        null=True, blank=True,
+        help_text="Cantidad de bins del mismo tipo en el grupo pesado")
+    tara_bin = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text="Tara especifica del tipo de bin (kg)")
     n_cajas_campo = models.IntegerField(null=True, blank=True)
     observaciones = models.TextField(blank=True, default="")
 
@@ -571,7 +577,16 @@ class RegistroPacking(AuditSourceModel):
         max_digits=8, decimal_places=3, null=True, blank=True)
     merma_seleccion_pct = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True,
-        help_text="Rango 0-100")
+        help_text="(%) — deprecated, usar merma_seleccion_kg")
+    merma_seleccion_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Merma de seleccion en kilos")
+    kilos_fruta_comercial = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Kilos disponibles para venta comercial")
+    kilos_descarte_local = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Kilos descartados o destinados a consumo local")
     rol = models.CharField(max_length=50, blank=True, default="")
 
     class Meta:

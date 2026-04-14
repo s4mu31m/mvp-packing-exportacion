@@ -105,6 +105,8 @@ BIN_FIELDS = {
     "hora_recepcion":       "crf21_hora_recepcion",
     "kilos_bruto_ingreso":  "crf21_kilos_bruto_ingreso",
     "kilos_neto_ingreso":   "crf21_kilos_neto_ingreso",
+    "cantidad_bins_grupo":  "crf21_cantidad_bins_grupo",
+    "tara_bin":             "crf21_tara_bin",
     "n_cajas_campo":        "crf21_n_cajas_campo",
     "observaciones":        "crf21_observaciones",
     # Trazabilidad de transporte
