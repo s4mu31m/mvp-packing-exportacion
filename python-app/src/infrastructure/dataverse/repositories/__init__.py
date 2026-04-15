@@ -484,13 +484,15 @@ _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
     "kilos_neto_conformacion", "requiere_desverdizado",
     "disponibilidad_camara_desverdizado", "etapa_actual", "codigo_productor",
-    "ultimo_cambio_estado_at",
+    # ultimo_cambio_estado_at excluido de $select: OData metadata cache de Dataverse
+    # puede tardar minutos en propagar el campo aunque PublishXml haya respondido OK.
+    # El campo existe en Dataverse pero no es necesario para el flujo de Recepcion.
 )]
 _BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
 _PALLET_SELECT = [PALLET_FIELDS[k] for k in (
     "id", "id_pallet", "pallet_code", "operator_code",
     "fecha", "tipo_caja", "cajas_por_pallet", "peso_total_kg", "destino_mercado",
-    "ultimo_cambio_estado_at",
+    # ultimo_cambio_estado_at excluido por la misma razon que en _LOTE_SELECT.
 )]
 
 
@@ -825,7 +827,7 @@ class DataverseLoteRepository(LoteRepository):
             body[LOTE_FIELDS["etapa_actual"]] = str(extra["etapa_actual"])
 
         row = self._client.create_row(ENTITY_SET_LOTE, body) or {}
-        return LoteRecord(
+        record = LoteRecord(
             id=row.get(LOTE_FIELDS["id"]),
             temporada=temporada,
             lote_code=lote_code,
@@ -837,6 +839,15 @@ class DataverseLoteRepository(LoteRepository):
             correlativo_temporada=None,
             etapa_actual=extra.get("etapa_actual"),
         )
+        # Warm the cache immediately so find_by_code returns this record on the
+        # very next request, bypassing Dataverse eventual-consistency delay
+        # (newly-created rows are not always queryable via OData for 1-3 seconds).
+        try:
+            from django.core.cache import caches
+            caches["dataverse"].set(f"lote_by_code:{lote_code}", record, timeout=30)
+        except Exception:
+            pass
+        return record
 
     def filter_by_codes(self, temporada: str, lote_codes: list[str]) -> list[LoteRecord]:
         if not lote_codes:
@@ -872,8 +883,8 @@ class DataverseLoteRepository(LoteRepository):
             "etapa_actual":                         LOTE_FIELDS["etapa_actual"],
             # codigo_productor: campo crf21_codigo_productor agregado 2026-04-04
             "codigo_productor":                     LOTE_FIELDS["codigo_productor"],
-            # ultimo_cambio_estado_at: timestamp de ultima transicion real de etapa
-            "ultimo_cambio_estado_at":              LOTE_FIELDS["ultimo_cambio_estado_at"],
+            # ultimo_cambio_estado_at omitido de PATCH: OData metadata cache de Dataverse
+            # puede tardar minutos en reconocer el campo en escrituras aunque exista.
         }
         body = {}
         for domain_key, dv_field in _updatable.items():
@@ -900,9 +911,18 @@ class DataverseLoteRepository(LoteRepository):
             except Exception:
                 pass
             if row:
-                return _row_to_lote(row)
+                record = _row_to_lote(row)
+                # Actualizar lote_by_code cache para que find_by_code subsiguiente
+                # obtenga el estado real (cantidad_bins actualizado, etc.) y no
+                # reintente un PATCH sin cambios que fuerza el fallback GET.
+                try:
+                    if record.lote_code:
+                        _dv_cache.set(f"lote_by_code:{record.lote_code}", record, timeout=30)
+                except Exception:
+                    pass
+                return record
 
-        # Fallback a GET (body vacío o sin cambios)
+        # Fallback a GET (body vacío o PATCH sin cambios → 204)
         result = self._client.list_rows(
             ENTITY_SET_LOTE,
             select=_LOTE_SELECT,
@@ -910,9 +930,17 @@ class DataverseLoteRepository(LoteRepository):
             top=1,
         )
         rows = (result or {}).get("value", [])
-        return _row_to_lote(rows[0]) if rows else LoteRecord(
-            id=lote_id, temporada="", lote_code="",
-        )
+        if not rows:
+            return LoteRecord(id=lote_id, temporada="", lote_code="")
+        record = _row_to_lote(rows[0])
+        # Calentar cache para que la siguiente find_by_code no reintente un GET redundante.
+        try:
+            from django.core.cache import caches
+            if record.lote_code:
+                caches["dataverse"].set(f"lote_by_code:{record.lote_code}", record, timeout=30)
+        except Exception:
+            pass
+        return record
 
     def list_recent(self, limit: int = 50) -> list[LoteRecord]:
         """
@@ -1021,8 +1049,9 @@ class DataversePalletRepository(PalletRepository):
             PALLET_FIELDS["operator_code"]: operator_code,
         }
         extra = extra or {}
+        # ultimo_cambio_estado_at omitido: OData metadata propagation delay en Dataverse.
         for domain_key in ("fecha", "tipo_caja", "cajas_por_pallet", "peso_total_kg",
-                           "destino_mercado", "ultimo_cambio_estado_at"):
+                           "destino_mercado"):
             v = extra.get(domain_key)
             if v not in (None, ""):
                 body[PALLET_FIELDS[domain_key]] = v

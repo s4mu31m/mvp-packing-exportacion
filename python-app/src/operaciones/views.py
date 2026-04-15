@@ -389,8 +389,15 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         """
         Resuelve el lote activo consultando Dataverse via repositorio.
         Usa etapa_actual para validar que el lote siga en 'Recepcion'.
-        Si etapa_actual != 'Recepcion' (o distinto de null), el lote ya
-        fue cerrado y no se permite agregar bins — se limpia la sesion.
+
+        Politica de sesion:
+          - Si el lote NO se encuentra (None): NO se limpia la sesion.
+            Puede ser una inconsistencia temporal de Dataverse (el lote fue
+            recien creado y aun no es queryable via OData). La sesion se
+            preserva para que el proximo request intente de nuevo.
+          - Si el lote se encuentra pero etapa_actual != 'Recepcion': se limpia
+            la sesion, porque tenemos evidencia positiva de que el lote ya no
+            corresponde a la etapa de recepcion.
         """
         try:
             from infrastructure.repository_factory import get_repositories
@@ -398,8 +405,9 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             repos = get_repositories()
             lote = repos.lotes.find_by_code(temporada, lote_code)
             if not lote:
-                request.session.pop("lote_activo_code", None)
-                request.session.pop("lote_activo_campos_base", None)
+                # No destruir la sesion — puede ser eventual consistency de Dataverse.
+                # El lote fue recien creado y la cache fue precalentada en create(),
+                # pero en caso de fallo de cache este path actua como resguardo conservador.
                 return None
             # Validar que el lote siga en etapa Recepcion
             etapa = resolve_etapa_lote(lote)
@@ -488,6 +496,18 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         return redirect("operaciones:recepcion")
 
     def _handle_iniciar(self, request):
+        # Guard: si ya existe un lote activo en Dataverse, no crear otro.
+        # Evita generar lotes vacíos en cadena cuando el usuario pulsa "Iniciar"
+        # repetidamente mientras el backend aún está procesando el primero.
+        existing_lote = self._lote_activo(request)
+        if existing_lote:
+            messages.warning(
+                request,
+                f"Ya existe un lote activo ({existing_lote.lote_code}). "
+                "Complete o cierre el lote actual antes de iniciar uno nuevo.",
+            )
+            return redirect("operaciones:recepcion")
+
         form = IniciarLoteForm(request.POST)
         if not form.is_valid():
             messages.error(request, "Formulario invalido para iniciar lote.")
