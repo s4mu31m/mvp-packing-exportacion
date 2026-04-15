@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 
-FieldType = Literal["String", "Memo", "Integer", "Decimal", "Boolean", "DateTime", "Lookup"]
+FieldType = Literal["String", "Memo", "Integer", "Decimal", "Boolean", "DateTime", "DateTimeWithTime", "Lookup"]
 
 
 @dataclass
@@ -98,9 +98,17 @@ def _bool(logical: str, label: str) -> FieldSpec:
 
 
 def _dt(logical: str, label: str) -> FieldSpec:
+    """Campo fecha sin hora (DateOnly). Para timestamps con hora usar _timestamp."""
     parts = logical.removeprefix("crf21_").split("_")
     schema = "crf21_" + "".join(p.capitalize() for p in parts)
     return FieldSpec(logical, schema, label, "DateTime")
+
+
+def _timestamp(logical: str, label: str) -> FieldSpec:
+    """Campo DateTime con hora, comportamiento TimeZoneIndependent (almacena UTC tal cual)."""
+    parts = logical.removeprefix("crf21_").split("_")
+    schema = "crf21_" + "".join(p.capitalize() for p in parts)
+    return FieldSpec(logical, schema, label, "DateTimeWithTime")
 
 
 def _lookup(logical: str, label: str, target_entity: str, relationship_schema: str) -> FieldSpec:
@@ -178,6 +186,9 @@ REQUIRED_SCHEMA: list[EntitySpec] = [
             _str("crf21_disponibilidad_camara_desverdizado", "Disponibilidad Camara Desverdizado", max_length=50),
             _str("crf21_etapa_actual", "Etapa Actual", max_length=100),
             _str("crf21_codigo_productor", "Codigo Productor", max_length=100),
+            # Timestamp de la ultima transicion real de etapa operativa.
+            # Fuente oficial para dashboard, consulta jefatura, filtros y exportaciones.
+            _timestamp("crf21_ultimo_cambio_estado_at", "Ultimo Cambio Estado"),
             *_common_control_fields(),
         ],
     ),
@@ -199,6 +210,8 @@ REQUIRED_SCHEMA: list[EntitySpec] = [
             _int("crf21_cajas_por_pallet", "Cajas por Pallet", min_val=0, max_val=9999),
             _dec("crf21_peso_total_kg", "Peso Total Kg", min_val=0, max_val=999999),
             _str("crf21_destino_mercado", "Destino Mercado", max_length=100),
+            # Timestamp de la ultima transicion real de etapa del pallet.
+            _timestamp("crf21_ultimo_cambio_estado_at", "Ultimo Cambio Estado"),
             *_common_control_fields(),
         ],
     ),

@@ -5,6 +5,7 @@ from operaciones.application.exceptions import PayloadValidationError
 from operaciones.models import TipoEvento
 from operaciones.services.validators import validate_camara_frio_payload
 from operaciones.services.event_builder import build_event_key
+from operaciones.services.timestamps import ahora_utc
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
 
@@ -60,10 +61,11 @@ def registrar_camara_frio(
 
     # Actualizar etapa del lote asociado al pallet (si la relacion es accesible)
     # find_by_pallet: no-op en SQLite (retorna None), implementado en Dataverse.
+    _ts = ahora_utc()
     try:
         pl = repos.pallet_lotes.find_by_pallet(pallet.id)
         if pl and pl.lote_id:
-            repos.lotes.update(pl.lote_id, {"etapa_actual": "Camara Frio"})
+            repos.lotes.update(pl.lote_id, {"etapa_actual": "Camara Frio", "ultimo_cambio_estado_at": _ts})
     except Exception:
         pass  # no bloquear el flujo si falla la actualizacion de etapa
 

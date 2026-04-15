@@ -41,6 +41,7 @@ from django.utils import timezone
 from operaciones.forms import (
     IniciarLoteForm,
     CerrarLoteForm,
+    PesajeParcialCierreForm,
     BinForm,
     EditBinVariableForm,
     CamaraMantencionForm,
@@ -319,10 +320,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                     lotes_packing += 1
                     kg_packing += kn
                 lotes_activos.append({
-                    "codigo": l.lote_code,
-                    "bins":   l.cantidad_bins,
-                    "etapa":  etapa,
-                    "estado": l.estado,
+                    "codigo":         l.lote_code,
+                    "bins":           l.cantidad_bins,
+                    "etapa":          etapa,
+                    "estado":         l.estado,
+                    # Fallback: fecha_conformacion para registros sin crf21_ultimo_cambio_estado_at
+                    "ultimo_cambio":  l.ultimo_cambio_estado_at or l.fecha_conformacion,
                 })
 
             kpis = {
@@ -443,6 +446,11 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             bins = self._bins_de_lote(lote)
             total_peso_neto = sum((b.kilos_neto_ingreso or 0) for b in bins)
 
+        # Pesajes parciales de cierre (acumulados en sesion)
+        pesajes_cierre = request.session.get("pesajes_cierre", [])
+        bins_pesados = sum(p["cantidad_bins"] for p in pesajes_cierre)
+        bins_pendientes = (lote.cantidad_bins - bins_pesados) if lote else 0
+
         ctx = {
             "page_title": "Recepcion de Bins",
             "lote": lote,
@@ -452,6 +460,10 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "form_iniciar": IniciarLoteForm(),
             "form_bin": form_bin,
             "form_cerrar": CerrarLoteForm(),
+            "form_pesaje_parcial": PesajeParcialCierreForm(),
+            "pesajes_cierre": pesajes_cierre,
+            "bins_pesados": bins_pesados,
+            "bins_pendientes": bins_pendientes,
             "campos_base_keys": self.CAMPOS_BASE,
         }
         return render(request, self.template_name, ctx)
@@ -462,6 +474,10 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             return self._handle_iniciar(request)
         if action == "agregar_bin":
             return self._handle_agregar_bin(request)
+        if action == "agregar_pesaje_cierre":
+            return self._handle_agregar_pesaje_cierre(request)
+        if action == "eliminar_pesaje_cierre":
+            return self._handle_eliminar_pesaje_cierre(request)
         if action == "cerrar":
             return self._handle_cerrar(request)
         if action == "eliminar_bin":
@@ -486,6 +502,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         if result.ok:
             request.session["lote_activo_code"] = result.data["lote_code"]
             request.session.pop("lote_activo_campos_base", None)
+            request.session.pop("pesajes_cierre", None)
             messages.success(
                 request,
                 f"Lote {result.data['lote_code']} iniciado. Agregue los bins.",
@@ -545,6 +562,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "hora_recepcion": _serialize_form_value(cd["hora_recepcion"]) if cd.get("hora_recepcion") else "",
             "kilos_bruto_ingreso": float(cd["kilos_bruto_ingreso"]) if cd.get("kilos_bruto_ingreso") else None,
             "kilos_neto_ingreso": float(cd["kilos_neto_ingreso"]) if cd.get("kilos_neto_ingreso") else None,
+            # cantidad_bins_grupo y tara_bin ya no se ingresan por bin individual
             "a_o_r": cd.get("a_o_r") or None,
             "observaciones": cd.get("observaciones") or "",
         }
@@ -568,10 +586,85 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 messages.error(request, err)
         return redirect("operaciones:recepcion")
 
+    def _handle_agregar_pesaje_cierre(self, request):
+        lote = self._lote_activo(request)
+        if not lote:
+            messages.error(request, "No hay lote abierto.")
+            return redirect("operaciones:recepcion")
+
+        form = PesajeParcialCierreForm(request.POST)
+        if not form.is_valid():
+            for errs in form.errors.values():
+                for e in errs:
+                    messages.error(request, e)
+            return redirect("operaciones:recepcion")
+
+        cd = form.cleaned_data
+        cantidad = cd["cantidad_bins"]
+        kilos_brutos = float(cd["kilos_brutos_grupo"])
+        tara = float(cd["tara"])
+        kilos_netos = float(cd["kilos_netos_grupo"])
+
+        pesajes_cierre = list(request.session.get("pesajes_cierre", []))
+        bins_pesados = sum(p["cantidad_bins"] for p in pesajes_cierre)
+        bins_pendientes = lote.cantidad_bins - bins_pesados
+
+        if cantidad > bins_pendientes:
+            messages.error(
+                request,
+                f"No puede registrar {cantidad} bin(s): solo quedan {bins_pendientes} pendiente(s) de pesar.",
+            )
+            return redirect("operaciones:recepcion")
+
+        pesajes_cierre.append({
+            "cantidad_bins": cantidad,
+            "kilos_brutos": kilos_brutos,
+            "tara": tara,
+            "kilos_netos": round(kilos_netos, 2),
+        })
+        request.session["pesajes_cierre"] = pesajes_cierre
+        messages.success(
+            request,
+            f"Pesaje registrado: {cantidad} bin(s) — {kilos_netos:.2f} kg netos.",
+        )
+        return redirect("operaciones:recepcion")
+
+    def _handle_eliminar_pesaje_cierre(self, request):
+        try:
+            idx = int(request.POST.get("pesaje_idx", -1))
+        except (ValueError, TypeError):
+            idx = -1
+
+        pesajes_cierre = list(request.session.get("pesajes_cierre", []))
+        if 0 <= idx < len(pesajes_cierre):
+            pesajes_cierre.pop(idx)
+            request.session["pesajes_cierre"] = pesajes_cierre
+            messages.success(request, "Pesaje eliminado.")
+        else:
+            messages.error(request, "Pesaje no encontrado.")
+        return redirect("operaciones:recepcion")
+
     def _handle_cerrar(self, request):
         lote_code = request.session.get("lote_activo_code")
         if not lote_code:
             messages.error(request, "No hay lote abierto para cerrar.")
+            return redirect("operaciones:recepcion")
+
+        lote = self._lote_activo(request)
+        if not lote:
+            messages.error(request, "No hay lote abierto.")
+            return redirect("operaciones:recepcion")
+
+        # Validar que todos los bins del lote hayan sido pesados
+        pesajes_cierre = request.session.get("pesajes_cierre", [])
+        bins_pesados = sum(p["cantidad_bins"] for p in pesajes_cierre)
+        if bins_pesados != lote.cantidad_bins:
+            pendientes = lote.cantidad_bins - bins_pesados
+            messages.error(
+                request,
+                f"Quedan {pendientes} bin(s) pendientes de pesar. "
+                "Complete el pesaje antes de cerrar el lote.",
+            )
             return redirect("operaciones:recepcion")
 
         form = CerrarLoteForm(request.POST)
@@ -580,6 +673,12 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             return redirect("operaciones:recepcion")
 
         cd = form.cleaned_data
+
+        # Calcular totales desde pesajes parciales
+        from decimal import Decimal as D
+        kilos_bruto_total = sum(D(str(p["kilos_brutos"])) for p in pesajes_cierre)
+        kilos_neto_total = sum(D(str(p["kilos_netos"])) for p in pesajes_cierre)
+
         payload = {
             "temporada": _temporada(request),
             "lote_code": lote_code,
@@ -587,13 +686,14 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "source_system": "web",
             "requiere_desverdizado": cd.get("requiere_desverdizado") or False,
             "disponibilidad_camara_desverdizado": cd.get("disponibilidad_camara_desverdizado") or None,
-            "kilos_bruto_conformacion": float(cd["kilos_bruto_conformacion"]) if cd.get("kilos_bruto_conformacion") else None,
-            "kilos_neto_conformacion": float(cd["kilos_neto_conformacion"]) if cd.get("kilos_neto_conformacion") else None,
+            "kilos_bruto_conformacion": float(kilos_bruto_total),
+            "kilos_neto_conformacion": float(kilos_neto_total),
         }
         result = cerrar_lote_recepcion(payload)
         if result.ok:
             request.session.pop("lote_activo_code", None)
             request.session.pop("lote_activo_campos_base", None)
+            request.session.pop("pesajes_cierre", None)
             messages.success(request, result.message)
         else:
             for err in result.errors:
@@ -1976,7 +2076,7 @@ CONSULTA_COLUMNAS_LOTES = [
     ("Bins", "cantidad_bins"),
     ("Kg neto", "kilos_neto"),
     ("Cajas producidas", "cajas_producidas"),
-    ("Fecha", "fecha"),
+    ("Últ. Cambio Etapa", "fecha"),
 ]
 
 CONSULTA_COLUMNAS_PALLETS = [
@@ -2661,7 +2761,10 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
                 "variedad": primer_bin.variedad_fruta if primer_bin else "",
                 "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
                 "color": primer_bin.color if primer_bin else "",
-                "fecha": lote.fecha_conformacion,
+                # "fecha" es la fuente oficial para filtros, exportaciones y consulta jefatura.
+                # Usa ultimo_cambio_estado_at (timestamp de transicion real de etapa).
+                # Fallback para registros historicos: fecha_conformacion.
+                "fecha": lote.ultimo_cambio_estado_at or lote.fecha_conformacion,
             })
         return resultado
     except Exception as exc:

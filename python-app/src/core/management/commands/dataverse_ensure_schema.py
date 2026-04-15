@@ -263,6 +263,18 @@ def create_field(
             "Format": "DateOnly",
             "DateTimeBehavior": {"Value": "DateOnly"},
         }
+    elif spec.field_type == "DateTimeWithTime":
+        # Timestamp completo (fecha + hora). TimeZoneIndependent almacena UTC tal cual,
+        # sin conversion por timezone del usuario — ideal para timestamps operativos.
+        payload = {
+            "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+            "SchemaName": spec.schema_name,
+            "LogicalName": spec.logical_name,
+            "DisplayName": _label(spec.display_label),
+            "RequiredLevel": _req_level("None"),
+            "Format": "DateAndTime",
+            "DateTimeBehavior": {"Value": "TimeZoneIndependent"},
+        }
     else:
         raise ValueError(f"Tipo de campo no soportado: {spec.field_type}")
 

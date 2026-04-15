@@ -20,6 +20,7 @@ from operaciones.models import TipoEvento, LotePlantaEstado
 from operaciones.services.validators import require_fields
 from operaciones.services.normalizers import normalize_code, normalize_temporada, normalize_operator_code
 from operaciones.services.event_builder import build_event_key
+from operaciones.services.timestamps import ahora_utc
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
 
@@ -82,8 +83,9 @@ def cerrar_lote_recepcion(payload: dict, *, repos: Repositories | None = None) -
 
     # Campos a actualizar al cerrar
     campos_update: dict = {
-        "estado":        LotePlantaEstado.CERRADO,
-        "etapa_actual":  "Pesaje",   # persiste etapa en Dataverse desde 2026-03-31
+        "estado":                  LotePlantaEstado.CERRADO,
+        "etapa_actual":            "Pesaje",   # persiste etapa en Dataverse desde 2026-03-31
+        "ultimo_cambio_estado_at": ahora_utc(),
     }
     for campo in ["requiere_desverdizado", "disponibilidad_camara_desverdizado",
                   "kilos_bruto_conformacion", "kilos_neto_conformacion"]:

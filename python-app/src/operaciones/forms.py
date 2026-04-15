@@ -18,7 +18,10 @@ class IniciarLoteForm(forms.Form):
 
 
 class CerrarLoteForm(forms.Form):
-    """Cierra el lote abierto — ya no se pueden agregar mas bins."""
+    """
+    Confirma el cierre del lote. Los kilos de conformacion se calculan
+    automaticamente desde los pesajes parciales registrados en sesion.
+    """
     requiere_desverdizado = forms.BooleanField(
         required=False, label="Requiere desverdizado",
     )
@@ -27,19 +30,55 @@ class CerrarLoteForm(forms.Form):
         required=False, label="Disponibilidad camara desverdizado",
         help_text="Solo si requiere desverdizado",
     )
-    kilos_bruto_conformacion = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True, label="Kilos bruto total lote",
+
+
+class PesajeParcialCierreForm(forms.Form):
+    """
+    Registro de un pesaje parcial durante el cierre del lote.
+    Permite pesar grupos de bins del mismo tipo (misma tara) de forma incremental.
+    kilos_netos se calcula: kilos_brutos - (cantidad_bins x tara).
+    """
+    cantidad_bins = forms.IntegerField(
+        min_value=1, required=True, label="Cantidad de bins",
+        widget=forms.NumberInput(attrs={
+            "id": "id-pesaje-cantidad-bins",
+            "min": "1",
+            "inputmode": "numeric",
+            "autocomplete": "off",
+        }),
     )
-    kilos_neto_conformacion = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True, label="Kilos neto total lote",
+    kilos_brutos_grupo = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True, label="Kilos brutos del grupo",
+        widget=forms.NumberInput(attrs={
+            "id": "id-pesaje-kilos-brutos",
+            "step": "0.01",
+            "min": "0.01",
+        }),
+    )
+    tara = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=True,
+        min_value=Decimal("0.01"), label="Tara del tipo de bin (kg)",
+        widget=forms.NumberInput(attrs={
+            "id": "id-pesaje-tara",
+            "step": "0.01",
+            "min": "0.01",
+        }),
     )
 
     def clean(self):
         cleaned = super().clean()
-        kb = cleaned.get("kilos_bruto_conformacion")
-        kn = cleaned.get("kilos_neto_conformacion")
-        if kb is not None and kn is not None and kn > kb:
-            raise forms.ValidationError("Kilos neto no puede superar kilos bruto.")
+        cantidad = cleaned.get("cantidad_bins")
+        brutos = cleaned.get("kilos_brutos_grupo")
+        tara = cleaned.get("tara")
+        if cantidad and brutos is not None and tara is not None:
+            from decimal import Decimal as D
+            netos = brutos - D(str(cantidad)) * tara
+            if netos < 0:
+                raise forms.ValidationError(
+                    "Los kilos netos resultan negativos con estos valores. "
+                    "Verifique kilos brutos y tara."
+                )
+            cleaned["kilos_netos_grupo"] = netos
         return cleaned
 
 
@@ -79,25 +118,13 @@ class BinForm(forms.Form):
     )
     kilos_bruto_ingreso = forms.DecimalField(
         max_digits=10, decimal_places=2, required=True,
-        label="Kilos bruto total",
-        help_text="Peso bruto total del grupo de bins",
-    )
-    cantidad_bins_grupo = forms.IntegerField(
-        required=True, min_value=1, label="Cantidad de bins",
-        help_text="Cantidad de bins del mismo tipo en este pesaje",
-        widget=forms.NumberInput(attrs={"id": "id-cantidad-bins-grupo", "min": "1", "inputmode": "numeric"}),
-    )
-    tara_bin = forms.DecimalField(
-        max_digits=8, decimal_places=2, required=True, min_value=Decimal("0.01"),
-        label="Tara bin (kg)",
-        help_text="Tara especifica del tipo de bin (kg)",
-        widget=forms.NumberInput(attrs={"id": "id-tara-bin", "step": "0.01", "min": "0.01"}),
+        label="Kilos brutos ingreso",
+        widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.01"}),
     )
     kilos_neto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False,
-        label="Kilos neto ingreso (calculado)",
-        help_text="bruto − (cantidad × tara)",
-        widget=forms.NumberInput(attrs={"id": "id-kilos-neto-ingreso", "readonly": "readonly", "step": "0.01"}),
+        max_digits=10, decimal_places=2, required=True,
+        label="Kilos netos ingreso",
+        widget=forms.NumberInput(attrs={"id": "id-kilos-neto-ingreso", "step": "0.01", "min": "0"}),
     )
     a_o_r = forms.ChoiceField(
         choices=[("", "---------")] + list(AOR.choices),
@@ -120,21 +147,12 @@ class EditBinVariableForm(forms.Form):
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
     )
     kilos_bruto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True, label="Kilos bruto total",
-    )
-    cantidad_bins_grupo = forms.IntegerField(
-        required=False, min_value=1, label="Cantidad de bins",
-        widget=forms.NumberInput(attrs={"id": "edit-cantidad-bins-grupo", "min": "1", "inputmode": "numeric"}),
-    )
-    tara_bin = forms.DecimalField(
-        max_digits=8, decimal_places=2, required=False, min_value=Decimal("0.01"),
-        label="Tara bin (kg)",
-        widget=forms.NumberInput(attrs={"id": "edit-tara-bin", "step": "0.01", "min": "0.01"}),
+        max_digits=10, decimal_places=2, required=True, label="Kilos brutos ingreso",
+        widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.01"}),
     )
     kilos_neto_ingreso = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=False, label="Kilos neto ingreso (calculado)",
-        help_text="bruto − (cantidad × tara)",
-        widget=forms.NumberInput(attrs={"id": "edit-kilos-neto-ingreso", "readonly": "readonly", "step": "0.01"}),
+        max_digits=10, decimal_places=2, required=False, label="Kilos netos ingreso",
+        widget=forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
     )
     a_o_r = forms.ChoiceField(
         choices=[("", "---------")] + list(AOR.choices),

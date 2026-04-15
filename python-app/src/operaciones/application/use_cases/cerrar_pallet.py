@@ -11,6 +11,7 @@ from operaciones.services.normalizers import (
 )
 from operaciones.services.code_generators import build_pallet_code
 from operaciones.services.event_builder import build_event_key
+from operaciones.services.timestamps import ahora_utc
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
 
@@ -79,12 +80,14 @@ def cerrar_pallet(payload: dict, *, repos: Repositories | None = None) -> UseCas
             errors=[f"Lotes no encontrados: {', '.join(missing_codes)}"],
         )
 
+    _ts = ahora_utc()
     pallet_record, pallet_created = repos.pallets.get_or_create(
         temporada,
         pallet_code,
         operator_code=operator_code,
         source_system=source_system,
         source_event_id=source_event_id,
+        extra={"ultimo_cambio_estado_at": _ts},
     )
 
     pallet_created_event = False
@@ -119,7 +122,7 @@ def cerrar_pallet(payload: dict, *, repos: Repositories | None = None) -> UseCas
         if relation_created:
             relaciones_nuevas += 1
             # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
-            repos.lotes.update(lote_record.id, {"etapa_actual": "Paletizado"})
+            repos.lotes.update(lote_record.id, {"etapa_actual": "Paletizado", "ultimo_cambio_estado_at": _ts})
             repos.registros.get_or_create(
                 event_key=build_event_key(
                     temporada, "PALLET", pallet_code, "LOTE", lote_code, "ASIGNADO"

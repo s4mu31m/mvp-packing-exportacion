@@ -5,6 +5,7 @@ from operaciones.application.exceptions import PayloadValidationError
 from operaciones.models import TipoEvento, DisponibilidadCamara
 from operaciones.services.validators import validate_desverdizado_payload
 from operaciones.services.event_builder import build_event_key
+from operaciones.services.timestamps import ahora_utc
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
 
@@ -83,7 +84,7 @@ def registrar_desverdizado(
     )
 
     # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
-    repos.lotes.update(lote.id, {"etapa_actual": "Desverdizado"})
+    repos.lotes.update(lote.id, {"etapa_actual": "Desverdizado", "ultimo_cambio_estado_at": ahora_utc()})
 
     event_key = build_event_key(temporada, "LOTE", lote_code, TipoEvento.DESVERDIZADO_INGRESO)
     repos.registros.get_or_create(

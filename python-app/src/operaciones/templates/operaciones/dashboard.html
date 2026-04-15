@@ -61,6 +61,7 @@
             <th>Bins</th>
             <th>Etapa actual</th>
             <th>Estado</th>
+            <th>Últ. cambio</th>
           </tr>
         </thead>
         <tbody>
@@ -83,6 +84,13 @@
                   <span style="color:var(--success,#22c55e)">✓ Finalizado</span>
                 {% else %}
                   {{ lote.estado }}
+                {% endif %}
+              </td>
+              <td style="color:var(--text-muted);font-size:.8rem;white-space:nowrap">
+                {% if lote.ultimo_cambio %}
+                  {{ lote.ultimo_cambio|date:"d/m/Y H:i" }}
+                {% else %}
+                  —
                 {% endif %}
               </td>
             </tr>

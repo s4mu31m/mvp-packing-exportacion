@@ -5,6 +5,7 @@ from operaciones.application.exceptions import PayloadValidationError
 from operaciones.models import TipoEvento, DisponibilidadCamara
 from operaciones.services.validators import validate_camara_mantencion_payload
 from operaciones.services.event_builder import build_event_key
+from operaciones.services.timestamps import ahora_utc
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
 
@@ -77,7 +78,7 @@ def registrar_camara_mantencion(
     )
 
     # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
-    repos.lotes.update(lote.id, {"etapa_actual": "Mantencion"})
+    repos.lotes.update(lote.id, {"etapa_actual": "Mantencion", "ultimo_cambio_estado_at": ahora_utc()})
 
     event_key = build_event_key(temporada, "LOTE", lote_code, TipoEvento.CAMARA_MANTENCION)
     repos.registros.get_or_create(

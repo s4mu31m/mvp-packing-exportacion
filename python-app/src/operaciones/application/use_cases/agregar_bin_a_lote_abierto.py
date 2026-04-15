@@ -84,20 +84,6 @@ def agregar_bin_a_lote_abierto(payload: dict, *, repos: Repositories | None = No
         fecha_cosecha=payload.get("fecha_cosecha"),
     )
 
-    # Calcular kilos_neto_ingreso server-side si no viene en el payload o viene vacío.
-    # Formula: neto = bruto - (cantidad_bins_grupo × tara_bin)
-    try:
-        _bruto = payload.get("kilos_bruto_ingreso")
-        _cantidad = payload.get("cantidad_bins_grupo")
-        _tara = payload.get("tara_bin")
-        _neto = payload.get("kilos_neto_ingreso")
-        if (not _neto) and _bruto and _cantidad and _tara:
-            from decimal import Decimal as _D
-            payload = dict(payload)
-            payload["kilos_neto_ingreso"] = float(_D(str(_bruto)) - _D(str(_cantidad)) * _D(str(_tara)))
-    except Exception:
-        pass
-
     # Construir extra con todos los atributos del bin
     campos_bin = [
         "fecha_cosecha", "codigo_productor", "nombre_productor",
@@ -106,7 +92,6 @@ def agregar_bin_a_lote_abierto(payload: dict, *, repos: Repositories | None = No
         "a_o_r", "n_guia", "transporte", "capataz", "codigo_contratista",
         "nombre_contratista", "hora_recepcion",
         "kilos_bruto_ingreso", "kilos_neto_ingreso",
-        "cantidad_bins_grupo", "tara_bin",
         "n_cajas_campo", "observaciones", "rol",
     ]
     extra = {

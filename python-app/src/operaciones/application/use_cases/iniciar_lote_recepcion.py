@@ -21,6 +21,7 @@ from operaciones.services.normalizers import normalize_temporada, normalize_oper
 from operaciones.services.season import resolve_temporada_codigo
 from operaciones.services.code_generators import next_lote_correlativo
 from operaciones.services.event_builder import build_event_key
+from operaciones.services.timestamps import ahora_utc
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
 
@@ -69,6 +70,7 @@ def iniciar_lote_recepcion(payload: dict, *, repos: Repositories | None = None) 
         "correlativo_temporada": correlativo,
         "estado":                LotePlantaEstado.ABIERTO,
         "etapa_actual":          "Recepcion",   # persiste en Dataverse desde 2026-03-31
+        "ultimo_cambio_estado_at": ahora_utc(),
     }
     # Propagar campos opcionales de conformacion
     for campo in ["fecha_conformacion", "requiere_desverdizado",

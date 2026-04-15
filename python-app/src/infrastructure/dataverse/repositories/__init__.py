@@ -151,6 +151,20 @@ def _parse_date(val: Any) -> Optional[datetime.date]:
         return None
 
 
+def _parse_datetime(val: Any) -> Optional[datetime.datetime]:
+    """Convierte un string OData de datetime a datetime.datetime (aware UTC). Retorna None si falla."""
+    if not val:
+        return None
+    try:
+        s = str(val).strip()
+        # Normalizar zona horaria: "2026-04-15T10:30:00Z" → aware UTC
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        return datetime.datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+
+
 def _parse_decimal(val: Any) -> Optional[Decimal]:
     """Convierte un numero OData a Decimal. Retorna None si falla."""
     if val is None:
@@ -223,6 +237,8 @@ def _row_to_lote(row: dict) -> LoteRecord:
         etapa_actual=_str(row.get(LOTE_FIELDS["etapa_actual"])) or None,
         # codigo_productor disponible si el campo crf21_codigo_productor existe en Dataverse.
         codigo_productor=_str(row.get(LOTE_FIELDS["codigo_productor"])),
+        # ultimo_cambio_estado_at: None hasta que crf21_ultimo_cambio_estado_at exista en Dataverse.
+        ultimo_cambio_estado_at=_parse_datetime(row.get(LOTE_FIELDS["ultimo_cambio_estado_at"])),
     )
 
 
@@ -241,6 +257,8 @@ def _row_to_pallet(row: dict) -> PalletRecord:
         cajas_por_pallet=int(row.get(PALLET_FIELDS["cajas_por_pallet"]) or 0) or None,
         peso_total_kg=_parse_decimal(row.get(PALLET_FIELDS["peso_total_kg"])),
         destino_mercado=_str(row.get(PALLET_FIELDS["destino_mercado"])),
+        # ultimo_cambio_estado_at: None hasta que crf21_ultimo_cambio_estado_at exista en Dataverse.
+        ultimo_cambio_estado_at=_parse_datetime(row.get(PALLET_FIELDS["ultimo_cambio_estado_at"])),
     )
 
 
@@ -466,11 +484,13 @@ _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
     "kilos_neto_conformacion", "requiere_desverdizado",
     "disponibilidad_camara_desverdizado", "etapa_actual", "codigo_productor",
+    "ultimo_cambio_estado_at",
 )]
 _BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
 _PALLET_SELECT = [PALLET_FIELDS[k] for k in (
     "id", "id_pallet", "pallet_code", "operator_code",
     "fecha", "tipo_caja", "cajas_por_pallet", "peso_total_kg", "destino_mercado",
+    "ultimo_cambio_estado_at",
 )]
 
 
@@ -852,6 +872,8 @@ class DataverseLoteRepository(LoteRepository):
             "etapa_actual":                         LOTE_FIELDS["etapa_actual"],
             # codigo_productor: campo crf21_codigo_productor agregado 2026-04-04
             "codigo_productor":                     LOTE_FIELDS["codigo_productor"],
+            # ultimo_cambio_estado_at: timestamp de ultima transicion real de etapa
+            "ultimo_cambio_estado_at":              LOTE_FIELDS["ultimo_cambio_estado_at"],
         }
         body = {}
         for domain_key, dv_field in _updatable.items():
@@ -999,7 +1021,8 @@ class DataversePalletRepository(PalletRepository):
             PALLET_FIELDS["operator_code"]: operator_code,
         }
         extra = extra or {}
-        for domain_key in ("fecha", "tipo_caja", "cajas_por_pallet", "peso_total_kg", "destino_mercado"):
+        for domain_key in ("fecha", "tipo_caja", "cajas_por_pallet", "peso_total_kg",
+                           "destino_mercado", "ultimo_cambio_estado_at"):
             v = extra.get(domain_key)
             if v not in (None, ""):
                 body[PALLET_FIELDS[domain_key]] = v

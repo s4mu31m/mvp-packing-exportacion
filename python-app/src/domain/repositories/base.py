@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -78,6 +78,11 @@ class LoteRecord:
     # En Dataverse se lee desde crf21_codigo_productor (campo agregado 2026-04-04).
     # Vacio si el lote no tiene bins o fue creado antes de la migracion.
     codigo_productor: str = ""
+    # ultimo_cambio_estado_at: timestamp UTC del ultimo cambio real de etapa.
+    # Se escribe en cada use case que transiciona etapa_actual.
+    # None para registros anteriores al deploy del campo en Dataverse.
+    # Fallback en vistas: fecha_conformacion.
+    ultimo_cambio_estado_at: Optional[datetime] = None
 
 
 @dataclass
@@ -97,6 +102,8 @@ class PalletRecord:
     cajas_por_pallet: Optional[int] = None
     peso_total_kg: Optional[Decimal] = None
     destino_mercado: str = ""
+    # ultimo_cambio_estado_at: timestamp UTC del ultimo cambio de etapa del pallet.
+    ultimo_cambio_estado_at: Optional[datetime] = None
 
 
 @dataclass

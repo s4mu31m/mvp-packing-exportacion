@@ -5,6 +5,7 @@ from operaciones.application.exceptions import PayloadValidationError
 from operaciones.models import TipoEvento
 from operaciones.services.validators import validate_ingreso_packing_payload
 from operaciones.services.event_builder import build_event_key
+from operaciones.services.timestamps import ahora_utc
 from infrastructure.repository_factory import get_repositories
 from domain.repositories.base import Repositories
 
@@ -67,7 +68,7 @@ def registrar_ingreso_packing(
     )
 
     # Persiste etapa en Dataverse; no-op en SQLite (campo desconocido ignorado)
-    repos.lotes.update(lote.id, {"etapa_actual": "Ingreso Packing"})
+    repos.lotes.update(lote.id, {"etapa_actual": "Ingreso Packing", "ultimo_cambio_estado_at": ahora_utc()})
 
     event_key = build_event_key(temporada, "LOTE", lote_code, TipoEvento.INGRESO_PACKING)
     repos.registros.get_or_create(

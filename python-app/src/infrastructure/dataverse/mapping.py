@@ -159,6 +159,12 @@ LOTE_PLANTA_FIELDS = {
     # Registros anteriores al 2026-03-31 tienen este campo en null;
     # el backend aplica derive_etapa_lote() como fallback.
     "etapa_actual":                         "crf21_etapa_actual",
+    # ultimo_cambio_estado_at: timestamp UTC del ultimo cambio real de etapa operativa.
+    # Se escribe en cada use case que transiciona etapa_actual.
+    # Columna crf21_ultimo_cambio_estado_at debe existir en crf21_lote_plantas (Power Apps).
+    # Registros anteriores al deploy de este campo tienen null; se aplica fallback
+    # a fecha_conformacion en vistas y exportaciones.
+    "ultimo_cambio_estado_at":              "crf21_ultimo_cambio_estado_at",
     # codigo_productor: copiado desde el primer bin al cerrar el lote (cerrar_lote_recepcion).
     # Campo crf21_codigo_productor agregado a crf21_lote_plantas en Power Apps el 2026-04-04.
     "codigo_productor":                     "crf21_codigo_productor",
@@ -188,6 +194,9 @@ PALLET_FIELDS = {
     "operator_code":    "crf21_operator_code",
     "created_at":       "createdon",
     "updated_at":       "modifiedon",
+    # ultimo_cambio_estado_at: timestamp UTC del ultimo cambio real de etapa del pallet.
+    # Columna crf21_ultimo_cambio_estado_at debe existir en crf21_pallets (Power Apps).
+    "ultimo_cambio_estado_at":  "crf21_ultimo_cambio_estado_at",
     # Nota: temporada no existe en Dataverse.
 }
 
