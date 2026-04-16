@@ -87,6 +87,7 @@ def agregar_bin_a_lote_abierto(payload: dict, *, repos: Repositories | None = No
     # Construir extra con todos los atributos del bin
     campos_bin = [
         "fecha_cosecha", "codigo_productor", "nombre_productor",
+        "tipo_cultivo",
         "variedad_fruta", "numero_cuartel", "nombre_cuartel",
         "predio", "sector", "lote_productor", "color", "estado_fisico",
         "a_o_r", "n_guia", "transporte", "capataz", "codigo_contratista",

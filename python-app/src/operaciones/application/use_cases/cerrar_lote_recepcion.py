@@ -12,6 +12,8 @@ Flujo:
     → registra evento de cierre
     → retorna lote_id, lote_code y estado final
 """
+import datetime
+
 from django.db import transaction
 
 from operaciones.application.results import UseCaseResult
@@ -86,6 +88,7 @@ def cerrar_lote_recepcion(payload: dict, *, repos: Repositories | None = None) -
         "estado":                  LotePlantaEstado.CERRADO,
         "etapa_actual":            "Pesaje",   # persiste etapa en Dataverse desde 2026-03-31
         "ultimo_cambio_estado_at": ahora_utc(),
+        "fecha_conformacion":      datetime.date.today(),
     }
     for campo in ["requiere_desverdizado", "disponibilidad_camara_desverdizado",
                   "kilos_bruto_conformacion", "kilos_neto_conformacion"]:
