@@ -604,6 +604,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             if not current.get("fecha_cosecha") and cd.get("fecha_cosecha"):
                 current["fecha_cosecha"] = _serialize_form_value(cd["fecha_cosecha"])
             request.session["lote_activo_campos_base"] = current
+            _consulta_cache_invalidate()
             messages.success(
                 request,
                 f"Bin {result.data['bin_code']} agregado al lote {lote_code}.",
@@ -720,6 +721,7 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             request.session.pop("lote_activo_code", None)
             request.session.pop("lote_activo_campos_base", None)
             request.session.pop("pesajes_cierre", None)
+            _consulta_cache_invalidate()
             messages.success(request, result.message)
         else:
             for err in result.errors:
@@ -899,6 +901,8 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 }
                 result = registrar_camara_mantencion(payload)
                 _handle_result(request, result)
+                if result.ok:
+                    _consulta_cache_invalidate()
             else:
                 messages.error(request, "Formulario de camara mantencion invalido.")
 
@@ -922,6 +926,8 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 }
                 result = registrar_desverdizado(payload)
                 _handle_result(request, result)
+                if result.ok:
+                    _consulta_cache_invalidate()
             else:
                 messages.error(request, "Formulario de desverdizado invalido.")
 
@@ -994,13 +1000,14 @@ def _lote_info(temporada: str, lote_code: str) -> dict:
                         kilos_neto = float(ip.kilos_neto_ingreso_packing)
             except Exception:
                 pass
-            # B4: obtener variedad/color/tipo_cultivo/fecha_cosecha desde primer bin
-            primer_bin_dv = None
+            # B4: obtener campos heredables desde TODOS los bins (fallback por campo)
+            bins_dv: list = []
             try:
-                primer_bin_map = repos.bins.first_bin_by_lotes([lote.id])
-                primer_bin_dv = primer_bin_map.get(lote.id)
+                bins_map = repos.bins.all_bins_by_lotes([lote.id])
+                bins_dv = bins_map.get(lote.id) or []
             except Exception:
                 pass
+            merged_dv = _merge_bin_fields(bins_dv)
             return {
                 "lote_code": lote.lote_code,
                 "estado": lote.etapa_actual or lote.estado,
@@ -1009,19 +1016,11 @@ def _lote_info(temporada: str, lote_code: str) -> dict:
                 "kilos_neto": kilos_neto,
                 "via_desverdizado": via_desv,
                 "requiere_desverdizado": lote.requiere_desverdizado,
-                "productor": (
-                    getattr(primer_bin_dv, "codigo_productor", None)
-                    or getattr(lote, "codigo_productor", "")
-                    or ""
-                ),
-                "variedad":     getattr(primer_bin_dv, "variedad_fruta", "") or "",
-                "color":        getattr(primer_bin_dv, "color", "") or "",
-                "fecha_cosecha": (
-                    str(primer_bin_dv.fecha_cosecha)
-                    if primer_bin_dv and getattr(primer_bin_dv, "fecha_cosecha", None)
-                    else ""
-                ),
-                "tipo_cultivo": getattr(primer_bin_dv, "tipo_cultivo", "") or "",
+                "productor": merged_dv["codigo_productor"] or getattr(lote, "codigo_productor", "") or "",
+                "variedad":     merged_dv["variedad_fruta"] or "",
+                "color":        merged_dv["color"] or "",
+                "fecha_cosecha": str(merged_dv["fecha_cosecha"]) if merged_dv["fecha_cosecha"] else "",
+                "tipo_cultivo": merged_dv["tipo_cultivo"] or "",
             }
         except Exception:
             return {}
@@ -1116,27 +1115,67 @@ def _lotes_data_json(temporada: str, lotes: list) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------------------
+# Campos heredables desde bins hacia el lote (para reportería y enriquecimiento)
+# ---------------------------------------------------------------------------
+_HEREDABLE_FIELDS = (
+    "codigo_productor",
+    "variedad_fruta",
+    "tipo_cultivo",
+    "color",
+    "fecha_cosecha",
+    "codigo_sag_csg",
+    "codigo_sag_csp",
+    "codigo_sdp",
+    "numero_cuartel",
+    "nombre_cuartel",
+)
+
+
+def _merge_bin_fields(bins: list) -> dict:
+    """
+    Para cada campo heredable, retorna el primer valor NO vacío de la lista de bins
+    (en el orden en que vienen — estable desde la query: createdon asc en Dataverse,
+    id asc en SQLite).
+
+    Garantía: si al menos un bin del lote tiene el dato, este helper lo devuelve.
+    No devuelve vacío si el dato existe en cualquier bin del lote.
+    """
+    merged: dict = {f: None for f in _HEREDABLE_FIELDS}
+    for b in bins:
+        for field in _HEREDABLE_FIELDS:
+            if merged[field]:
+                continue
+            val = getattr(b, field, None)
+            if val:
+                merged[field] = val
+        if all(merged[f] for f in _HEREDABLE_FIELDS):
+            break
+    return merged
+
+
 def _lotes_json_from_records(lotes, repos=None) -> str:
     """
     Serializa LoteRecord objects como JSON para autocomplete del template.
     Usado en modo Dataverse donde los lotes ya fueron cargados via repos.
-    Si se pasa repos, obtiene el primer bin, desverdizado e ingreso packing
+    Si se pasa repos, obtiene todos los bins, desverdizado e ingreso packing
     de cada lote en batch (≤3 queries totales, sin N+1).
+    Usa _merge_bin_fields para garantizar fallback entre bins por campo.
     """
     import logging
     _log = logging.getLogger(__name__)
 
     # Batch pre-load: 3 queries totales independientemente del número de lotes
-    primer_bin_por_lote: dict = {}
+    todos_bins_por_lote: dict = {}
     desvs_map: dict = {}
     ips_map: dict = {}
     if repos is not None and lotes:
         lote_ids = [l.id for l in lotes if l.id]
         _log.debug("_lotes_json_from_records: batch fetch para %d lotes", len(lote_ids))
         try:
-            primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids)
+            todos_bins_por_lote = repos.bins.all_bins_by_lotes(lote_ids)
         except Exception as exc:
-            _log.warning("_lotes_json_from_records: error first_bin_by_lotes: %s", exc, exc_info=True)
+            _log.warning("_lotes_json_from_records: error all_bins_by_lotes: %s", exc, exc_info=True)
         try:
             desvs_map = repos.desverdizados.list_by_lotes(lote_ids)
         except Exception as exc:
@@ -1154,7 +1193,8 @@ def _lotes_json_from_records(lotes, repos=None) -> str:
             lote.etapa_actual in ("Desverdizado", "Mantencion")
             if lote.etapa_actual else False
         )
-        primer_bin = primer_bin_por_lote.get(lote.id)
+        bins = todos_bins_por_lote.get(lote.id) or []
+        merged = _merge_bin_fields(bins)
 
         # Resolver kilos mas recientes: conformacion → desverdizado salida → ingreso packing
         kilos_bruto = float(lote.kilos_bruto_conformacion) if lote.kilos_bruto_conformacion else None
@@ -1182,11 +1222,11 @@ def _lotes_json_from_records(lotes, repos=None) -> str:
             "via_desverdizado": via_desv,
             "requiere_desverdizado": lote.requiere_desverdizado,
             "disponibilidad_camara": lote.disponibilidad_camara_desverdizado,
-            "productor": (primer_bin.codigo_productor if primer_bin else None) or getattr(lote, "codigo_productor", ""),
-            "variedad": primer_bin.variedad_fruta if primer_bin else "",
-            "color": primer_bin.color if primer_bin else "",
-            "fecha_cosecha": str(primer_bin.fecha_cosecha) if primer_bin and primer_bin.fecha_cosecha else "",
-            "tipo_cultivo": "",
+            "productor": merged["codigo_productor"] or getattr(lote, "codigo_productor", "") or "",
+            "variedad": merged["variedad_fruta"] or "",
+            "color": merged["color"] or "",
+            "fecha_cosecha": str(merged["fecha_cosecha"]) if merged["fecha_cosecha"] else "",
+            "tipo_cultivo": merged["tipo_cultivo"] or "",
         }
     return json.dumps(data, ensure_ascii=False)
 
@@ -1251,23 +1291,24 @@ def _build_pallet_context_map_from_records(pallets, repos=None) -> dict:
             lotes_by_id[lote_id] = lote
 
     try:
-        primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids) if lote_ids else {}
+        todos_bins_por_lote = repos.bins.all_bins_by_lotes(lote_ids) if lote_ids else {}
     except Exception:
-        primer_bin_por_lote = {}
+        todos_bins_por_lote = {}
 
     for pallet in pallets:
         lote_id = pallet_to_lote.get(pallet.id)
         lote = lotes_by_id.get(lote_id)
-        primer_bin = primer_bin_por_lote.get(lote_id) if lote_id else None
+        bins = todos_bins_por_lote.get(lote_id) or [] if lote_id else []
+        merged = _merge_bin_fields(bins)
         data[pallet.pallet_code].update({
             "lote_code": lote.lote_code if lote else "",
-            "productor": (primer_bin.codigo_productor if primer_bin else None) or (getattr(lote, "codigo_productor", "") if lote else ""),
-            "codigo_sag_csg": (getattr(primer_bin, "codigo_sag_csg", None) or "") if primer_bin else "",
-            "codigo_sag_csp": (getattr(primer_bin, "codigo_sag_csp", None) or "") if primer_bin else "",
-            "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
-            "variedad": primer_bin.variedad_fruta if primer_bin else "",
-            "color": primer_bin.color if primer_bin else "",
-            "fecha_cosecha": str(primer_bin.fecha_cosecha) if primer_bin and primer_bin.fecha_cosecha else "",
+            "productor": merged["codigo_productor"] or (getattr(lote, "codigo_productor", "") if lote else "") or "",
+            "codigo_sag_csg": merged["codigo_sag_csg"] or "",
+            "codigo_sag_csp": merged["codigo_sag_csp"] or "",
+            "tipo_cultivo": merged["tipo_cultivo"] or "",
+            "variedad": merged["variedad_fruta"] or "",
+            "color": merged["color"] or "",
+            "fecha_cosecha": str(merged["fecha_cosecha"]) if merged["fecha_cosecha"] else "",
         })
     return data
 
@@ -1451,6 +1492,7 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         }
         result = registrar_ingreso_packing(payload)
         if result.ok:
+            _consulta_cache_invalidate()
             messages.success(request, result.message)
             return redirect("operaciones:ingreso_packing")
         for err in result.errors:
@@ -1697,18 +1739,19 @@ class ControlCalidadDesverdizadoView(LoginRequiredMixin, RolRequiredMixin, Templ
                 from infrastructure.repository_factory import get_repositories
                 repos = get_repositories()
                 lote_ids = [l.id for l in lotes if l.id]
-                primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids) if lote_ids else {}
+                todos_bins_por_lote = repos.bins.all_bins_by_lotes(lote_ids) if lote_ids else {}
             except Exception:
-                primer_bin_por_lote = {}
+                todos_bins_por_lote = {}
             for lote in lotes:
-                b = primer_bin_por_lote.get(lote.id)
+                bins = todos_bins_por_lote.get(lote.id) or []
+                m = _merge_bin_fields(bins)
                 data[lote.lote_code] = {
-                    "productor": (b.codigo_productor if b else None) or getattr(lote, "codigo_productor", ""),
-                    "variedad":  b.variedad_fruta if b else "",
-                    "color":     b.color if b else "",
-                    "fecha_cosecha": str(b.fecha_cosecha) if b and b.fecha_cosecha else "",
+                    "productor": m["codigo_productor"] or getattr(lote, "codigo_productor", "") or "",
+                    "variedad":  m["variedad_fruta"] or "",
+                    "color":     m["color"] or "",
+                    "fecha_cosecha": str(m["fecha_cosecha"]) if m["fecha_cosecha"] else "",
                     "trazabilidad": lote.lote_code,
-                    "cuartel": "",
+                    "cuartel": m["nombre_cuartel"] or m["numero_cuartel"] or "",
                     "sector":  "",
                 }
         else:
@@ -1993,6 +2036,14 @@ class PaletizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             ctx["lotes_data_json"] = _lotes_json_from_records(lotes, repos)
         else:
             ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
+        # Pallets activos para control de calidad y cierre
+        pallets = _pallets_pendientes_calidad(temporada)
+        ctx["pallets_pendientes"] = pallets
+        if backend == "dataverse":
+            ctx["pallets_data_json"] = _pallets_json_from_records(pallets)
+        else:
+            ctx["pallets_data_json"] = _pallets_data_json(temporada, pallets)
+        ctx["form_muestra"] = CalidadPalletMuestraForm()
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -2293,6 +2344,21 @@ def _consulta_cache_is_fresh(payload: dict) -> bool:
         return False
     age = (_consulta_now_utc() - updated_at).total_seconds()
     return age <= _consulta_cache_ttl_seconds()
+
+
+def _consulta_cache_invalidate() -> None:
+    """
+    Invalida la cache JSON de consulta eliminando el archivo.
+    Debe llamarse despues de cualquier mutacion que cambie datos visibles en reporteria
+    (agregar bin, cerrar lote, desverdizado, ingreso packing, pallet).
+    La proxima carga de _consulta_dataset reconstruira la cache desde Dataverse.
+    """
+    try:
+        path = _consulta_cache_file_path()
+        if path.exists():
+            path.unlink()
+    except Exception:
+        pass
 
 
 def _consulta_dataverse_dataset_live(temporada: str) -> dict:
@@ -2671,6 +2737,24 @@ def _cache_last_updated_display(updated_at: datetime.datetime | None) -> str:
     return local_dt.strftime("%d/%m/%Y %H:%M")
 
 
+def _fmt_ultimo_cambio(value) -> str:
+    """
+    Formatea el ultimo cambio de estado para la UI.
+    - datetime → "d/m/Y H:i" (con hora real)
+    - date → "d/m/Y" (solo fecha, fallback cuando no hay timestamp exacto)
+    - None → ""
+    Retorna siempre str para que el template pueda usar |default:"-" sin errores.
+    """
+    import datetime as _dt
+    if value is None:
+        return ""
+    if isinstance(value, _dt.datetime):
+        return value.strftime("%d/%m/%Y %H:%M")
+    if isinstance(value, _dt.date):
+        return value.strftime("%d/%m/%Y")
+    return str(value)
+
+
 def _float_or_none(value):
     if value is None:
         return None
@@ -2846,7 +2930,7 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
         repos = get_repositories()
         lotes = repos.lotes.list_recent(limit=500)
         lote_ids = [l.id for l in lotes if l.id]
-        primer_bin_por_lote = repos.bins.first_bin_by_lotes(lote_ids) if lote_ids else {}
+        todos_bins_por_lote = repos.bins.all_bins_by_lotes(lote_ids) if lote_ids else {}
 
         # Batch fetch: 2 llamadas en lugar de hasta 1,000 llamadas individuales
         desv_por_lote: dict = repos.desverdizados.list_by_lotes(lote_ids) if lote_ids else {}
@@ -2869,8 +2953,9 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
             estado = (lote.estado or "").strip() or etapa
             if not _coincide_filtro_estado_lote(filtro_estado, estado=estado, etapa=etapa):
                 continue
-            primer_bin = primer_bin_por_lote.get(lote.id)
-            productor = (primer_bin.codigo_productor if primer_bin else None) or lote.codigo_productor or ""
+            bins = todos_bins_por_lote.get(lote.id) or []
+            merged = _merge_bin_fields(bins)
+            productor = merged["codigo_productor"] or lote.codigo_productor or ""
             if filtro_productor_lc and filtro_productor_lc not in productor.lower():
                 continue
 
@@ -2903,15 +2988,15 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
                 "kilos_neto": _kn,
                 "cajas_producidas": cajas_por_lote_dv.get(lote.id),
                 "productor": productor,
-                "codigo_sag_csg": (getattr(primer_bin, "codigo_sag_csg", None) or "") if primer_bin else "",
-                "codigo_sag_csp": (getattr(primer_bin, "codigo_sag_csp", None) or "") if primer_bin else "",
-                "codigo_sdp": (getattr(primer_bin, "codigo_sdp", None) or "") if primer_bin else "",
-                "numero_cuartel": (getattr(primer_bin, "numero_cuartel", None) or "") if primer_bin else "",
-                "nombre_cuartel": (getattr(primer_bin, "nombre_cuartel", None) or "") if primer_bin else "",
-                "variedad": primer_bin.variedad_fruta if primer_bin else "",
-                "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
-                "color": primer_bin.color if primer_bin else "",
-                "fecha_cosecha": (str(primer_bin.fecha_cosecha) if primer_bin and getattr(primer_bin, "fecha_cosecha", None) else ""),
+                "codigo_sag_csg": merged["codigo_sag_csg"] or "",
+                "codigo_sag_csp": merged["codigo_sag_csp"] or "",
+                "codigo_sdp": merged["codigo_sdp"] or "",
+                "numero_cuartel": merged["numero_cuartel"] or "",
+                "nombre_cuartel": merged["nombre_cuartel"] or "",
+                "variedad": merged["variedad_fruta"] or "",
+                "tipo_cultivo": merged["tipo_cultivo"] or "",
+                "color": merged["color"] or "",
+                "fecha_cosecha": str(merged["fecha_cosecha"]) if merged["fecha_cosecha"] else "",
                 "fecha": _ultimo,               # usado por _filtrar_por_fecha
                 "fecha_conformacion": lote.fecha_conformacion,
                 "ultimo_cambio_etapa": _ultimo,
@@ -3133,6 +3218,9 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
                 "color": info.get("color", ""),
                 "fecha_cosecha": info.get("fecha_cosecha", ""),
                 "fecha_conformacion": getattr(lote, "fecha_conformacion", None),
+                "ultimo_cambio_etapa": _fmt_ultimo_cambio(
+                    lote.ultimo_cambio_estado_at or lote.fecha_conformacion
+                ),
                 "bins": bins_data,
                 "packing": packing_data_dv,
             }
@@ -3241,6 +3329,9 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
         "color": info.get("color", ""),
         "fecha_cosecha": info.get("fecha_cosecha", ""),
         "fecha_conformacion": lote.fecha_conformacion,
+        "ultimo_cambio_etapa": _fmt_ultimo_cambio(
+            getattr(lote, "ultimo_cambio_estado_at", None) or lote.fecha_conformacion
+        ),
         "bins": bins_data,
         "desverdizado": desv_data,
         "ingreso_packing": ip_data,

@@ -73,7 +73,10 @@ def _bin_to_record(obj) -> BinRecord:
         is_active=obj.is_active,
         id_bin=obj.id_bin or "",
         fecha_cosecha=obj.fecha_cosecha,
+        tipo_cultivo=obj.tipo_cultivo or "",
         variedad_fruta=obj.variedad_fruta or "",
+        numero_cuartel=obj.numero_cuartel or "",
+        nombre_cuartel=obj.nombre_cuartel or "",
         color=obj.color or "",
         kilos_bruto_ingreso=obj.kilos_bruto_ingreso,
         kilos_neto_ingreso=obj.kilos_neto_ingreso,
@@ -389,6 +392,22 @@ class SqliteBinRepository(BinRepository):
             return []
         objs = list(Bin.objects.filter(id__in=bin_ids).order_by("id"))
         return [_bin_to_record(obj) for obj in objs]
+
+    def all_bins_by_lotes(self, lote_ids: list) -> dict:
+        """Retorna {lote_id: [BinRecord, ...]} con todos los bins de cada lote."""
+        from operaciones.models import BinLote
+        if not lote_ids:
+            return {}
+        qs = (
+            BinLote.objects
+            .filter(lote_id__in=lote_ids)
+            .select_related("bin")
+            .order_by("lote_id", "id")
+        )
+        result: dict = {}
+        for bl in qs:
+            result.setdefault(bl.lote_id, []).append(_bin_to_record(bl.bin))
+        return result
 
     def update(self, bin_id: Any, fields: dict) -> BinRecord:
         from operaciones.models import Bin

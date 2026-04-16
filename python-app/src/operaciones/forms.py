@@ -207,7 +207,7 @@ class DesverdizadoForm(forms.Form):
         widget=forms.TextInput(attrs={"placeholder": "3", "inputmode": "numeric", "autocomplete": "off"}),
     )
     horas_desverdizado = forms.IntegerField(
-        required=True, label="Horas de desverdizado",
+        required=False, label="Horas de desverdizado",
         help_text="Horas planificadas (1-240). Reemplaza el campo legacy 'proceso' para este dato.",
         widget=forms.NumberInput(attrs={"placeholder": "72", "min": "1", "max": "240"}),
     )

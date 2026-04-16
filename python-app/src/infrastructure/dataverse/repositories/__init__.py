@@ -220,6 +220,7 @@ def _row_to_lote(row: dict) -> LoteRecord:
         source_event_id=_str(row.get(LOTE_FIELDS["source_event_id"])),
         is_active=row.get("statecode", 0) == 0,
         id_lote_planta=_str(row.get(LOTE_FIELDS["id_lote_planta"])),
+        fecha_conformacion=_parse_date(row.get(LOTE_FIELDS["fecha_conformacion"])),
         cantidad_bins=int(row.get(LOTE_FIELDS["cantidad_bins"]) or 0),
         kilos_bruto_conformacion=_parse_decimal(row.get(LOTE_FIELDS["kilos_bruto_conformacion"])),
         kilos_neto_conformacion=_parse_decimal(row.get(LOTE_FIELDS["kilos_neto_conformacion"])),
@@ -484,9 +485,7 @@ _LOTE_SELECT = [LOTE_FIELDS[k] for k in (
     "source_event_id", "cantidad_bins", "kilos_bruto_conformacion",
     "kilos_neto_conformacion", "requiere_desverdizado",
     "disponibilidad_camara_desverdizado", "etapa_actual", "codigo_productor",
-    # ultimo_cambio_estado_at excluido de $select: OData metadata cache de Dataverse
-    # puede tardar minutos en propagar el campo aunque PublishXml haya respondido OK.
-    # El campo existe en Dataverse pero no es necesario para el flujo de Recepcion.
+    "fecha_conformacion", "ultimo_cambio_estado_at",
 )]
 _BIN_LOTE_SELECT = [BIN_LOTE_FIELDS[k] for k in ("id", "bin_id_value", "lote_id_value")]
 _PALLET_SELECT = [PALLET_FIELDS[k] for k in (
@@ -722,6 +721,77 @@ class DataverseBinRepository(BinRepository):
         _cache.set(_key, resultado, timeout=60)
         return resultado
 
+    def all_bins_by_lotes(self, lote_ids: list) -> dict:
+        """
+        Retorna {lote_id: [BinRecord, ...]} con TODOS los bins de cada lote.
+        Hace dos queries (BIN_LOTE + BIN) independientemente del numero de lotes.
+        Orden dentro de cada lote: createdon asc (el orden de ingreso de bins).
+        """
+        if not lote_ids:
+            return {}
+
+        from django.core.cache import caches
+        _cache = caches["dataverse"]
+        _key = "all_bins_by_lotes:" + ":".join(sorted(str(i) for i in lote_ids))
+        cached = _cache.get(_key)
+        if cached is not None:
+            return cached
+
+        _log = logging.getLogger(__name__)
+
+        # Paso 1: obtener TODAS las asociaciones bin-lote para los lotes dados.
+        ids_filter = " or ".join(
+            f"{BIN_LOTE_FIELDS['lote_id_value']} eq {lid}" for lid in lote_ids
+        )
+        result = self._client.list_rows(
+            ENTITY_SET_BIN_LOTE,
+            filter_expr=f"({ids_filter})",
+            top=len(lote_ids) * 500,
+        )
+        rows = (result or {}).get("value", [])
+        _log.debug("all_bins_by_lotes: paso1 encontro %d filas en join table", len(rows))
+
+        # Para cada lote, recopilar TODOS los bin_ids (en orden de llegada)
+        lote_to_bin_ids: dict = {}
+        for r in rows:
+            lid = r.get(BIN_LOTE_FIELDS["lote_id_value"])
+            bid = r.get(BIN_LOTE_FIELDS["bin_id_value"])
+            if lid and bid:
+                lst = lote_to_bin_ids.setdefault(lid, [])
+                if bid not in lst:
+                    lst.append(bid)
+
+        if not lote_to_bin_ids:
+            _cache.set(_key, {}, timeout=60)
+            return {}
+
+        # Paso 2: obtener los bins en batch (deduplicado, por chunks)
+        all_bin_ids = list({bid for bids in lote_to_bin_ids.values() for bid in bids})
+        _CHUNK = 50
+        bin_by_id: dict = {}
+        for i in range(0, len(all_bin_ids), _CHUNK):
+            chunk = all_bin_ids[i : i + _CHUNK]
+            bins_filter = " or ".join(f"{BIN_FIELDS['id']} eq {bid}" for bid in chunk)
+            result2 = self._client.list_rows(
+                ENTITY_SET_BIN,
+                select=_BIN_SELECT,
+                filter_expr=f"({bins_filter})",
+                top=len(chunk) + 10,
+            )
+            for r in (result2 or {}).get("value", []):
+                bid = r.get(BIN_FIELDS["id"])
+                if bid:
+                    bin_by_id[bid] = _row_to_bin(r)
+
+        _log.debug("all_bins_by_lotes: paso2 encontro %d bins distintos", len(bin_by_id))
+
+        resultado = {
+            lid: [bin_by_id[bid] for bid in bids if bid in bin_by_id]
+            for lid, bids in lote_to_bin_ids.items()
+        }
+        _cache.set(_key, resultado, timeout=60)
+        return resultado
+
     def update(self, bin_id: Any, fields: dict) -> BinRecord:
         _updatable = {
             "numero_cuartel":      BIN_FIELDS["numero_cuartel"],
@@ -825,6 +895,11 @@ class DataverseLoteRepository(LoteRepository):
             body[LOTE_FIELDS["fecha_conformacion"]] = str(extra["fecha_conformacion"])
         if extra.get("etapa_actual"):
             body[LOTE_FIELDS["etapa_actual"]] = str(extra["etapa_actual"])
+        if extra.get("ultimo_cambio_estado_at"):
+            _ts = extra["ultimo_cambio_estado_at"]
+            body[LOTE_FIELDS["ultimo_cambio_estado_at"]] = (
+                _ts.isoformat() if hasattr(_ts, "isoformat") else str(_ts)
+            )
 
         row = self._client.create_row(ENTITY_SET_LOTE, body) or {}
         record = LoteRecord(
@@ -838,6 +913,8 @@ class DataverseLoteRepository(LoteRepository):
             temporada_codigo="",
             correlativo_temporada=None,
             etapa_actual=extra.get("etapa_actual"),
+            fecha_conformacion=extra.get("fecha_conformacion"),
+            ultimo_cambio_estado_at=extra.get("ultimo_cambio_estado_at"),
         )
         # Warm the cache immediately so find_by_code returns this record on the
         # very next request, bypassing Dataverse eventual-consistency delay
@@ -883,8 +960,8 @@ class DataverseLoteRepository(LoteRepository):
             "etapa_actual":                         LOTE_FIELDS["etapa_actual"],
             # codigo_productor: campo crf21_codigo_productor agregado 2026-04-04
             "codigo_productor":                     LOTE_FIELDS["codigo_productor"],
-            # ultimo_cambio_estado_at omitido de PATCH: OData metadata cache de Dataverse
-            # puede tardar minutos en reconocer el campo en escrituras aunque exista.
+            "fecha_conformacion":                   LOTE_FIELDS["fecha_conformacion"],
+            "ultimo_cambio_estado_at":              LOTE_FIELDS["ultimo_cambio_estado_at"],
         }
         body = {}
         for domain_key, dv_field in _updatable.items():
@@ -893,6 +970,10 @@ class DataverseLoteRepository(LoteRepository):
             v = fields[domain_key]
             if domain_key == "disponibilidad_camara_desverdizado" and isinstance(v, str):
                 v = True if v == "disponible" else False
+            elif domain_key == "fecha_conformacion" and v is not None:
+                v = str(v)
+            elif domain_key == "ultimo_cambio_estado_at" and v is not None:
+                v = v.isoformat() if hasattr(v, "isoformat") else str(v)
             body[dv_field] = v
         # Campos no soportados en Dataverse: estado, temporada_codigo,
         # correlativo_temporada — se ignoran silenciosamente.

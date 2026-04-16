@@ -19,6 +19,7 @@
     <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Estado</span>{{ detalle.estado_display|default:"-" }}</div>
     <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Etapa actual</span>{{ detalle.etapa|default:"-" }}</div>
     <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Fecha conformacion</span>{{ detalle.fecha_conformacion|date:"d/m/Y"|default:"-" }}</div>
+    <div><span style="color:var(--text-muted);font-size:.78rem;display:block">Ult. cambio estado</span>{{ detalle.ultimo_cambio_etapa|default:"-" }}</div>
   </div>
 
   <div class="section-divider" style="margin:.4rem 0 .8rem"></div>

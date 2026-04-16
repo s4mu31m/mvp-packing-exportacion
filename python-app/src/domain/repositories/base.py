@@ -566,6 +566,14 @@ class BinRepository(ABC):
         """
         return []
 
+    def all_bins_by_lotes(self, lote_ids: list) -> dict:
+        """
+        Retorna {lote_id: [BinRecord, ...]} con TODOS los bins de cada lote.
+        Orden estable: createdon asc (el orden en que los bins fueron agregados).
+        Implementacion por defecto: dict vacio. Dataverse y SQLite sobreescriben.
+        """
+        return {}
+
     def update(self, bin_id: Any, fields: dict) -> "BinRecord":
         """
         Actualiza campos variables de un bin.

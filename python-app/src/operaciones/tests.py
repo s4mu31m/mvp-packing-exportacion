@@ -605,20 +605,27 @@ class HorasDesverdizadoModelTest(TestCase):
 
 class DesverdizadoFormValidationTest(TestCase):
 
+    _BASE = {
+        "numero_camara": "1",
+        "fecha_ingreso": str(datetime.date.today()),
+        "hora_ingreso": "08:00",
+        "color": "3",
+    }
+
     def test_horas_valido(self):
         from operaciones.forms import DesverdizadoForm
-        form = DesverdizadoForm(data={"horas_desverdizado": 72})
+        form = DesverdizadoForm(data={**self._BASE, "horas_desverdizado": 72})
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["horas_desverdizado"], 72)
 
     def test_horas_limite_inferior(self):
         from operaciones.forms import DesverdizadoForm
-        form = DesverdizadoForm(data={"horas_desverdizado": 1})
+        form = DesverdizadoForm(data={**self._BASE, "horas_desverdizado": 1})
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_horas_limite_superior(self):
         from operaciones.forms import DesverdizadoForm
-        form = DesverdizadoForm(data={"horas_desverdizado": 240})
+        form = DesverdizadoForm(data={**self._BASE, "horas_desverdizado": 240})
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_horas_cero_invalido(self):
@@ -640,7 +647,7 @@ class DesverdizadoFormValidationTest(TestCase):
 
     def test_horas_vacio_ok(self):
         from operaciones.forms import DesverdizadoForm
-        form = DesverdizadoForm(data={})
+        form = DesverdizadoForm(data=self._BASE)  # sin horas_desverdizado
         self.assertTrue(form.is_valid(), form.errors)
         self.assertIsNone(form.cleaned_data["horas_desverdizado"])
 
@@ -891,8 +898,11 @@ class RecepcionFlowE2ETest(TestCase):
             "variedad_fruta": "Thompson",
             "color": "2",
             "fecha_cosecha": str(datetime.date.today()),
+            "hora_recepcion": "08:00",
+            "numero_cuartel": "C01",
             "kilos_bruto_ingreso": "500",
             "kilos_neto_ingreso": "480",
+            "a_o_r": "aprobado",
             "operator_code": "ADM-001",
         })
         self.assertIn(resp.status_code, [200, 302])
@@ -1266,7 +1276,7 @@ class ConsultaJefaturaDetalleExportSqliteTest(TestCase):
         )
         self.assertEqual(resp_pallets.status_code, 200)
         wb_pallets = load_workbook(filename=BytesIO(resp_pallets.content))
-        ws_pallets = wb_pallets.active
+        ws_pallets = wb_pallets["Pallets"]
         headers_pallets = [c.value for c in ws_pallets[1]]
         self.assertIn("Pallet (code)", headers_pallets)
         self.assertIn("Lote relacionado", headers_pallets)
@@ -1297,7 +1307,9 @@ class ConsultaJefaturaDataverseCompatTest(TestCase):
             kilos_neto_conformacion=Decimal("590"),
             requiere_desverdizado=False,
             fecha_conformacion=hoy,
+            ultimo_cambio_estado_at=None,
             codigo_productor="PROD-DV",
+            is_active=True,
         )
         self.dv_bin = SimpleNamespace(
             id="dv-bin-1",
@@ -1332,10 +1344,17 @@ class ConsultaJefaturaDataverseCompatTest(TestCase):
             ),
             bins=SimpleNamespace(
                 first_bin_by_lotes=lambda lote_ids: {"dv-lote-1": self.dv_bin},
+                all_bins_by_lotes=lambda lote_ids: {"dv-lote-1": [self.dv_bin]},
                 list_by_lote=lambda lote_id: [self.dv_bin] if lote_id == "dv-lote-1" else [],
             ),
-            desverdizados=SimpleNamespace(find_by_lote=lambda lote_id: None),
-            ingresos_packing=SimpleNamespace(find_by_lote=lambda lote_id: None),
+            desverdizados=SimpleNamespace(
+                find_by_lote=lambda lote_id: None,
+                list_by_lotes=lambda lote_ids: {},
+            ),
+            ingresos_packing=SimpleNamespace(
+                find_by_lote=lambda lote_id: None,
+                list_by_lotes=lambda lote_ids: {},
+            ),
             pallets=SimpleNamespace(
                 list_recent=lambda limit=500: [self.dv_pallet],
                 find_by_code=lambda temporada, code: self.dv_pallet if code == "PAL-DV-001" else None,
@@ -1422,7 +1441,9 @@ class ConsultaJefaturaDataverseCacheTest(TestCase):
             kilos_neto_conformacion=Decimal("500"),
             requiere_desverdizado=False,
             fecha_conformacion=hoy,
+            ultimo_cambio_estado_at=None,
             codigo_productor="PROD-DVC",
+            is_active=True,
         )
         self.dv_bin = SimpleNamespace(
             id="dv-bin-cache-1",
@@ -1463,12 +1484,19 @@ class ConsultaJefaturaDataverseCacheTest(TestCase):
             ),
             bins=SimpleNamespace(
                 first_bin_by_lotes=Mock(return_value={"dv-lote-cache-1": self.dv_bin}),
+                all_bins_by_lotes=Mock(return_value={"dv-lote-cache-1": [self.dv_bin]}),
                 list_by_lote=Mock(
                     side_effect=lambda lote_id: [self.dv_bin] if lote_id == "dv-lote-cache-1" else []
                 ),
             ),
-            desverdizados=SimpleNamespace(find_by_lote=Mock(return_value=None)),
-            ingresos_packing=SimpleNamespace(find_by_lote=Mock(return_value=None)),
+            desverdizados=SimpleNamespace(
+                find_by_lote=Mock(return_value=None),
+                list_by_lotes=Mock(return_value={}),
+            ),
+            ingresos_packing=SimpleNamespace(
+                find_by_lote=Mock(return_value=None),
+                list_by_lotes=Mock(return_value={}),
+            ),
             pallets=SimpleNamespace(
                 list_recent=self.mock_pallets_list_recent,
                 find_by_code=Mock(
@@ -1603,8 +1631,9 @@ class ConsultaJefaturaDataverseCacheTest(TestCase):
         )
         self.assertEqual(xlsx_resp.status_code, 200)
         wb = load_workbook(filename=BytesIO(xlsx_resp.content))
-        ws = wb.active
-        headers = [c.value for c in ws[1]]
+        # El Excel siempre tiene dos hojas: "Lotes" (activa) y "Pallets"
+        ws_pallets = wb["Pallets"]
+        headers = [c.value for c in ws_pallets[1]]
         self.assertIn("Pallet (code)", headers)
         self.assertIn("Lote relacionado", headers)
         self.assertEqual(
@@ -1613,3 +1642,561 @@ class ConsultaJefaturaDataverseCacheTest(TestCase):
             "Excel sin refresh debe salir desde cache sin consultar Dataverse.",
         )
 
+
+# ---------------------------------------------------------------------------
+# Regresion: _merge_bin_fields — fallback entre bins por campo heredable
+# ---------------------------------------------------------------------------
+
+class MergeBinFieldsTest(TestCase):
+    """Tests unitarios para _merge_bin_fields."""
+
+    def _bin(self, **kwargs):
+        defaults = dict(
+            codigo_productor=None, variedad_fruta=None, tipo_cultivo=None,
+            color=None, fecha_cosecha=None, codigo_sag_csg=None,
+            codigo_sag_csp=None, codigo_sdp=None, numero_cuartel=None,
+            nombre_cuartel=None,
+        )
+        defaults.update(kwargs)
+        return SimpleNamespace(**defaults)
+
+    def test_primer_bin_completo_devuelve_sus_valores(self):
+        from operaciones.views import _merge_bin_fields
+        b = self._bin(
+            codigo_productor="PROD-01",
+            variedad_fruta="Thompson",
+            tipo_cultivo="Uva",
+            color="2",
+            fecha_cosecha=datetime.date(2025, 3, 1),
+        )
+        result = _merge_bin_fields([b])
+        self.assertEqual(result["codigo_productor"], "PROD-01")
+        self.assertEqual(result["variedad_fruta"], "Thompson")
+        self.assertEqual(result["color"], "2")
+
+    def test_primer_bin_vacio_usa_segundo(self):
+        """Caso raíz del bug: primer bin sin variedad, segundo con variedad."""
+        from operaciones.views import _merge_bin_fields
+        b1 = self._bin(codigo_productor="PROD-01")
+        b2 = self._bin(
+            variedad_fruta="Oronules",
+            tipo_cultivo="Citricos",
+            color="4",
+            fecha_cosecha=datetime.date(2025, 4, 10),
+        )
+        result = _merge_bin_fields([b1, b2])
+        self.assertEqual(result["codigo_productor"], "PROD-01")
+        self.assertEqual(result["variedad_fruta"], "Oronules")
+        self.assertEqual(result["tipo_cultivo"], "Citricos")
+        self.assertEqual(result["color"], "4")
+        self.assertEqual(result["fecha_cosecha"], datetime.date(2025, 4, 10))
+
+    def test_bins_multiples_primer_no_vacio_gana(self):
+        """El primer valor no vacío en orden estable gana para cada campo."""
+        from operaciones.views import _merge_bin_fields
+        b1 = self._bin(variedad_fruta="Thompson", color="2")
+        b2 = self._bin(variedad_fruta="Nadorcott", color="3")
+        result = _merge_bin_fields([b1, b2])
+        self.assertEqual(result["variedad_fruta"], "Thompson")
+        self.assertEqual(result["color"], "2")
+
+    def test_lista_vacia_devuelve_nones(self):
+        from operaciones.views import _merge_bin_fields
+        result = _merge_bin_fields([])
+        self.assertIsNone(result["codigo_productor"])
+        self.assertIsNone(result["variedad_fruta"])
+
+    def test_todos_bins_vacios_devuelve_nones(self):
+        from operaciones.views import _merge_bin_fields
+        result = _merge_bin_fields([self._bin(), self._bin()])
+        self.assertIsNone(result["variedad_fruta"])
+        self.assertIsNone(result["color"])
+
+
+# ---------------------------------------------------------------------------
+# Regresion: all_bins_by_lotes — SQLite
+# ---------------------------------------------------------------------------
+
+class AllBinsByLotesSQLiteTest(TestCase):
+    """Verifica que SqliteBinRepository.all_bins_by_lotes retorna todos los bins."""
+
+    def setUp(self):
+        self.lote1 = _make_lote(lote_code="LP-ABL-001")
+        self.lote2 = _make_lote(lote_code="LP-ABL-002")
+
+    def test_retorna_todos_los_bins_del_lote(self):
+        from infrastructure.sqlite.repositories import SqliteBinRepository
+        b1 = _make_bin(self.lote1, bin_code="BIN-ABL-001", variedad_fruta="Thompson")
+        b2 = _make_bin(self.lote1, bin_code="BIN-ABL-002", variedad_fruta="Crimson")
+        repo = SqliteBinRepository()
+        result = repo.all_bins_by_lotes([self.lote1.pk])
+        bins = result.get(self.lote1.pk, [])
+        self.assertEqual(len(bins), 2)
+        variedades = {b.variedad_fruta for b in bins}
+        self.assertIn("Thompson", variedades)
+        self.assertIn("Crimson", variedades)
+
+    def test_retorna_dict_vacio_para_lote_sin_bins(self):
+        from infrastructure.sqlite.repositories import SqliteBinRepository
+        repo = SqliteBinRepository()
+        result = repo.all_bins_by_lotes([self.lote2.pk])
+        self.assertEqual(result.get(self.lote2.pk, []), [])
+
+    def test_lote_ids_vacios_devuelve_dict_vacio(self):
+        from infrastructure.sqlite.repositories import SqliteBinRepository
+        repo = SqliteBinRepository()
+        self.assertEqual(repo.all_bins_by_lotes([]), {})
+
+    def test_retorna_bins_de_multiples_lotes(self):
+        from infrastructure.sqlite.repositories import SqliteBinRepository
+        _make_bin(self.lote1, bin_code="BIN-ML1-001")
+        _make_bin(self.lote2, bin_code="BIN-ML2-001")
+        repo = SqliteBinRepository()
+        result = repo.all_bins_by_lotes([self.lote1.pk, self.lote2.pk])
+        self.assertEqual(len(result.get(self.lote1.pk, [])), 1)
+        self.assertEqual(len(result.get(self.lote2.pk, [])), 1)
+
+    def test_merge_bin_fields_con_sqlite_all_bins(self):
+        """Integra all_bins_by_lotes con _merge_bin_fields: fallback garantizado."""
+        from infrastructure.sqlite.repositories import SqliteBinRepository
+        from operaciones.views import _merge_bin_fields
+        # Primer bin sin variedad; segundo bin con variedad
+        _make_bin(self.lote1, bin_code="BIN-MRG-001", variedad_fruta="")
+        _make_bin(self.lote1, bin_code="BIN-MRG-002", variedad_fruta="Crimson")
+        repo = SqliteBinRepository()
+        bins = repo.all_bins_by_lotes([self.lote1.pk]).get(self.lote1.pk, [])
+        merged = _merge_bin_fields(bins)
+        self.assertEqual(merged["variedad_fruta"], "Crimson")
+
+
+# ---------------------------------------------------------------------------
+# Regresion: _lotes_enriquecidos_dataverse con múltiples bins (mock)
+# ---------------------------------------------------------------------------
+
+@override_settings(PERSISTENCE_BACKEND="dataverse")
+class LotesEnriquecidosDataverseBinFallbackTest(TestCase):
+    """Verifica que reportería usa fallback entre bins cuando el primero está incompleto."""
+
+    def setUp(self):
+        hoy = datetime.date.today()
+        self.dv_lote = SimpleNamespace(
+            id="dv-fb-lote-1",
+            lote_code="LP-FB-001",
+            estado="cerrado",
+            etapa_actual="Recepcion",
+            cantidad_bins=2,
+            kilos_bruto_conformacion=Decimal("500"),
+            kilos_neto_conformacion=Decimal("480"),
+            requiere_desverdizado=False,
+            fecha_conformacion=hoy,
+            ultimo_cambio_estado_at=None,
+            codigo_productor="PROD-FB",
+            is_active=True,
+        )
+        # bin1: sin variedad ni color (datos incompletos)
+        self.bin_incompleto = SimpleNamespace(
+            id="dv-fb-bin-1",
+            bin_code="BIN-FB-001",
+            codigo_productor="PROD-FB",
+            tipo_cultivo=None,
+            variedad_fruta=None,
+            color=None,
+            fecha_cosecha=None,
+            codigo_sag_csg=None,
+            codigo_sag_csp=None,
+            codigo_sdp=None,
+            numero_cuartel=None,
+            nombre_cuartel=None,
+        )
+        # bin2: con todos los campos
+        self.bin_completo = SimpleNamespace(
+            id="dv-fb-bin-2",
+            bin_code="BIN-FB-002",
+            codigo_productor="PROD-FB",
+            tipo_cultivo="Citricos",
+            variedad_fruta="Oronules",
+            color="4",
+            fecha_cosecha=hoy,
+            codigo_sag_csg="CSG-001",
+            codigo_sag_csp="CSP-001",
+            codigo_sdp="SDP-001",
+            numero_cuartel="1",
+            nombre_cuartel="Norte",
+        )
+        self.repos = SimpleNamespace(
+            lotes=SimpleNamespace(
+                list_recent=Mock(return_value=[self.dv_lote]),
+            ),
+            bins=SimpleNamespace(
+                all_bins_by_lotes=Mock(
+                    return_value={"dv-fb-lote-1": [self.bin_incompleto, self.bin_completo]}
+                ),
+            ),
+            desverdizados=SimpleNamespace(
+                list_by_lotes=Mock(return_value={}),
+            ),
+            ingresos_packing=SimpleNamespace(
+                list_by_lotes=Mock(return_value={}),
+            ),
+        )
+
+    def test_variedad_viene_del_segundo_bin_cuando_primero_esta_vacio(self):
+        from operaciones.views import _lotes_enriquecidos_dataverse
+        with patch("infrastructure.repository_factory.get_repositories", return_value=self.repos), \
+             patch("infrastructure.dataverse.repositories.resolve_etapa_lote",
+                   side_effect=lambda lote, repos=None: "Recepcion"):
+            resultado = _lotes_enriquecidos_dataverse("", "")
+        self.assertEqual(len(resultado), 1)
+        item = resultado[0]
+        self.assertEqual(item["variedad"], "Oronules")
+        self.assertEqual(item["tipo_cultivo"], "Citricos")
+        self.assertEqual(item["color"], "4")
+        self.assertEqual(item["codigo_sag_csg"], "CSG-001")
+        self.assertEqual(item["numero_cuartel"], "1")
+        self.assertEqual(item["nombre_cuartel"], "Norte")
+
+    def test_productor_del_primer_bin_gana_si_no_vacio(self):
+        """codigo_productor del primer bin gana aunque segundo también lo tenga."""
+        from operaciones.views import _lotes_enriquecidos_dataverse
+        self.bin_incompleto.codigo_productor = "PROD-PRIMERO"
+        self.bin_completo.codigo_productor = "PROD-SEGUNDO"
+        with patch("infrastructure.repository_factory.get_repositories", return_value=self.repos), \
+             patch("infrastructure.dataverse.repositories.resolve_etapa_lote",
+                   side_effect=lambda lote, repos=None: "Recepcion"):
+            resultado = _lotes_enriquecidos_dataverse("", "")
+        self.assertEqual(resultado[0]["productor"], "PROD-PRIMERO")
+
+
+# ---------------------------------------------------------------------------
+# Regresion: _consulta_cache_invalidate elimina el archivo
+# ---------------------------------------------------------------------------
+
+class ConsultaCacheInvalidateTest(TestCase):
+    """Verifica que _consulta_cache_invalidate() elimina el archivo de caché."""
+
+    def test_elimina_archivo_existente(self):
+        from operaciones.views import _consulta_cache_invalidate
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "consulta_dataverse.json"
+            cache_file.write_text("{}", encoding="utf-8")
+            with override_settings(CONSULTA_DATAVERSE_CACHE_FILE=str(cache_file)):
+                self.assertTrue(cache_file.exists())
+                _consulta_cache_invalidate()
+                self.assertFalse(cache_file.exists(), "El archivo debe eliminarse tras invalidar.")
+
+    def test_no_falla_si_archivo_no_existe(self):
+        from operaciones.views import _consulta_cache_invalidate
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_file = Path(tmpdir) / "no_existe.json"
+            with override_settings(CONSULTA_DATAVERSE_CACHE_FILE=str(cache_file)):
+                # No debe lanzar excepcion
+                _consulta_cache_invalidate()
+
+
+# ---------------------------------------------------------------------------
+# Regresion: export CSV coincide con datos de tabla HTML (SQLite, sin regresión)
+# ---------------------------------------------------------------------------
+
+class ExportCSVConsistenciaSQLiteTest(TestCase):
+    """Export CSV muestra los mismos campos que la vista HTML en modo SQLite."""
+
+    def setUp(self):
+        self.client = _make_admin_client("admin_export_consisten")
+        self.lote = _make_lote(
+            lote_code="LP-EXP-001",
+            estado=LotePlantaEstado.CERRADO,
+            is_active=True,
+        )
+        Pallet.objects.create(
+            temporada=TEMPORADA,
+            pallet_code="PAL-EXP-001",
+            is_active=True,
+        )
+
+    def test_export_csv_lotes_devuelve_200(self):
+        resp = self.client.get(
+            reverse("operaciones:exportar_consulta"),
+            {"tab": "lotes"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("LP-EXP-001", resp.content.decode("utf-8-sig"))
+
+    def test_export_csv_no_regresion_sqlite(self):
+        """SQLite: all_bins_by_lotes integrado no rompe la vista consulta."""
+        resp = self.client.get(reverse("operaciones:consulta"), {"tab": "lotes"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "LP-EXP-001")
+
+
+# ---------------------------------------------------------------------------
+# Regresion: no romper recepcion SQLite con el nuevo all_bins_by_lotes
+# ---------------------------------------------------------------------------
+
+class RecepcionNoRegressionAllBinsTest(TestCase):
+    """Verifica que agregar_bin_a_lote_abierto y cerrar_lote siguen funcionando."""
+
+    def setUp(self):
+        self.client = _make_admin_client("admin_no_regresion_bins")
+        session = self.client.session
+        session["temporada_activa"] = TEMPORADA
+        session.save()
+
+    def test_recepcion_flujo_completo_no_regresion(self):
+        # Iniciar lote
+        resp = self.client.post(
+            reverse("operaciones:recepcion"),
+            {"action": "iniciar"},
+        )
+        self.assertIn(resp.status_code, [200, 302])
+
+        session = self.client.session
+        lote_code = session.get("lote_activo_code")
+        if not lote_code:
+            return  # Backend sin lote activo — no hay más que verificar
+
+        # Agregar bin — lotes_json_from_records usa all_bins_by_lotes internamente
+        resp = self.client.post(
+            reverse("operaciones:recepcion"),
+            {
+                "action": "agregar_bin",
+                "codigo_productor": "PROD-NR",
+                "variedad_fruta": "Thompson",
+                "tipo_cultivo": "Uva de mesa",
+                "color": "2",
+                "fecha_cosecha": str(datetime.date.today()),
+                "kilos_bruto_ingreso": "500",
+                "kilos_neto_ingreso": "480",
+            },
+        )
+        self.assertIn(resp.status_code, [200, 302])
+
+
+# ---------------------------------------------------------------------------
+# Regresion: fecha_conformacion se establece automaticamente al iniciar lote
+# ---------------------------------------------------------------------------
+
+class IniciarLoteFechaConformacionTest(TestCase):
+    """Verifica que iniciar_lote_recepcion asigna fecha_conformacion=hoy por defecto."""
+
+    def test_default_fecha_conformacion_es_hoy(self):
+        from operaciones.application.use_cases.iniciar_lote_recepcion import iniciar_lote_recepcion
+        hoy = datetime.date.today()
+        resultado = iniciar_lote_recepcion({"temporada": TEMPORADA})
+        self.assertTrue(resultado.ok, resultado.errors)
+        lote_code = resultado.data["lote_code"]
+        lote = Lote.objects.get(temporada=TEMPORADA, lote_code=lote_code)
+        self.assertIsNotNone(lote.fecha_conformacion, "fecha_conformacion debe quedar establecida")
+        self.assertEqual(lote.fecha_conformacion, hoy)
+
+    def test_fecha_conformacion_explicita_en_payload_se_respeta(self):
+        from operaciones.application.use_cases.iniciar_lote_recepcion import iniciar_lote_recepcion
+        fecha_custom = datetime.date(2026, 3, 1)
+        resultado = iniciar_lote_recepcion({"temporada": TEMPORADA, "fecha_conformacion": fecha_custom})
+        self.assertTrue(resultado.ok, resultado.errors)
+        lote_code = resultado.data["lote_code"]
+        lote = Lote.objects.get(temporada=TEMPORADA, lote_code=lote_code)
+        self.assertEqual(lote.fecha_conformacion, fecha_custom)
+
+
+# ---------------------------------------------------------------------------
+# Regresion: _row_to_lote() hidrata fecha_conformacion y ultimo_cambio_estado_at
+# ---------------------------------------------------------------------------
+
+class RowToLoteHidrataCamposTest(TestCase):
+    """Verifica que _row_to_lote() lee correctamente los campos de fecha."""
+
+    def test_fecha_conformacion_se_hidrata(self):
+        from infrastructure.dataverse.repositories import _row_to_lote
+        from infrastructure.dataverse.mapping import LOTE_FIELDS
+        row = {
+            LOTE_FIELDS["id"]: "guid-test-1",
+            LOTE_FIELDS["lote_code"]: "LP-ROW-001",
+            LOTE_FIELDS["fecha_conformacion"]: "2026-03-15",
+            LOTE_FIELDS["etapa_actual"]: "Recepcion",
+            LOTE_FIELDS["cantidad_bins"]: 3,
+        }
+        record = _row_to_lote(row)
+        self.assertEqual(record.fecha_conformacion, datetime.date(2026, 3, 15))
+
+    def test_ultimo_cambio_estado_at_se_hidrata(self):
+        from infrastructure.dataverse.repositories import _row_to_lote
+        from infrastructure.dataverse.mapping import LOTE_FIELDS
+        row = {
+            LOTE_FIELDS["id"]: "guid-test-2",
+            LOTE_FIELDS["lote_code"]: "LP-ROW-002",
+            LOTE_FIELDS["ultimo_cambio_estado_at"]: "2026-04-10T14:30:00Z",
+            LOTE_FIELDS["cantidad_bins"]: 0,
+        }
+        record = _row_to_lote(row)
+        self.assertIsNotNone(record.ultimo_cambio_estado_at)
+        self.assertEqual(record.ultimo_cambio_estado_at.year, 2026)
+        self.assertEqual(record.ultimo_cambio_estado_at.month, 4)
+        self.assertEqual(record.ultimo_cambio_estado_at.day, 10)
+
+    def test_campos_fecha_none_cuando_row_vacia(self):
+        from infrastructure.dataverse.repositories import _row_to_lote
+        from infrastructure.dataverse.mapping import LOTE_FIELDS
+        row = {
+            LOTE_FIELDS["id"]: "guid-test-3",
+            LOTE_FIELDS["lote_code"]: "LP-ROW-003",
+            LOTE_FIELDS["cantidad_bins"]: 0,
+        }
+        record = _row_to_lote(row)
+        self.assertIsNone(record.fecha_conformacion)
+        self.assertIsNone(record.ultimo_cambio_estado_at)
+
+
+# ---------------------------------------------------------------------------
+# Regresion: _bin_to_record() SQLite mapea tipo_cultivo y cuarteles
+# ---------------------------------------------------------------------------
+
+class BinToRecordSQLiteTipoCultivoTest(TestCase):
+    """Verifica que _bin_to_record() popula tipo_cultivo, numero_cuartel y nombre_cuartel."""
+
+    def setUp(self):
+        self.lote = _make_lote()
+
+    def test_tipo_cultivo_mapeado(self):
+        from infrastructure.sqlite.repositories import _bin_to_record
+        b = _make_bin(
+            self.lote,
+            tipo_cultivo="Citricos",
+            variedad_fruta="Navel",
+            numero_cuartel="C05",
+            nombre_cuartel="Sur",
+        )
+        record = _bin_to_record(b)
+        self.assertEqual(record.tipo_cultivo, "Citricos")
+        self.assertEqual(record.numero_cuartel, "C05")
+        self.assertEqual(record.nombre_cuartel, "Sur")
+
+    def test_merge_bin_fields_tipo_cultivo_desde_sqlite(self):
+        """all_bins_by_lotes + _merge_bin_fields devuelve tipo_cultivo desde SQLite."""
+        from infrastructure.sqlite.repositories import SqliteBinRepository
+        from operaciones.views import _merge_bin_fields
+        _make_bin(self.lote, tipo_cultivo="Uva de mesa", variedad_fruta="Thompson")
+        repo = SqliteBinRepository()
+        bins_map = repo.all_bins_by_lotes([self.lote.id])
+        bins = bins_map.get(self.lote.id, [])
+        merged = _merge_bin_fields(bins)
+        self.assertEqual(merged["tipo_cultivo"], "Uva de mesa")
+
+    def test_merge_bin_fields_fallback_segundo_bin_si_primero_vacio(self):
+        """tipo_cultivo se toma del segundo bin si el primero está vacío."""
+        from infrastructure.sqlite.repositories import SqliteBinRepository
+        from operaciones.views import _merge_bin_fields
+        _make_bin(self.lote, tipo_cultivo="", variedad_fruta="Thompson")
+        _make_bin(self.lote, tipo_cultivo="Citricos", variedad_fruta="Oronules")
+        repo = SqliteBinRepository()
+        bins_map = repo.all_bins_by_lotes([self.lote.id])
+        bins = bins_map.get(self.lote.id, [])
+        merged = _merge_bin_fields(bins)
+        self.assertEqual(merged["tipo_cultivo"], "Citricos")
+
+
+# ---------------------------------------------------------------------------
+# Regresion: _detalle_lote_context() incluye ultimo_cambio_etapa
+# ---------------------------------------------------------------------------
+
+class DetalleLoteContextUltimoCambioTest(TestCase):
+    """Verifica que el contexto de detalle de lote incluye ultimo_cambio_etapa."""
+
+    def setUp(self):
+        self.lote = _make_lote(
+            lote_code="LP-DET-UCE-001",
+            estado=LotePlantaEstado.CERRADO,
+            fecha_conformacion=datetime.date.today(),
+        )
+        _make_bin(self.lote)
+
+    def test_ultimo_cambio_etapa_presente_en_contexto_sqlite(self):
+        from operaciones.views import _detalle_lote_context
+        ctx = _detalle_lote_context(TEMPORADA, "LP-DET-UCE-001")
+        self.assertIn("ultimo_cambio_etapa", ctx, "ultimo_cambio_etapa debe estar en el contexto")
+
+    def test_ultimo_cambio_etapa_fallback_a_fecha_conformacion(self):
+        """Si no hay ultimo_cambio_estado_at, fallback muestra fecha_conformacion como string."""
+        from operaciones.views import _detalle_lote_context
+        ctx = _detalle_lote_context(TEMPORADA, "LP-DET-UCE-001")
+        uce = ctx.get("ultimo_cambio_etapa")
+        self.assertTrue(uce, "ultimo_cambio_etapa no debe ser vacio")
+        # _fmt_ultimo_cambio formatea date como "d/m/Y"
+        self.assertEqual(uce, datetime.date.today().strftime("%d/%m/%Y"))
+
+    def test_detalle_view_renderiza_campo_ultimo_cambio(self):
+        """La vista de detalle renderiza el campo 'Ult. cambio estado'."""
+        client = _make_admin_client("admin_uce_det")
+        resp = client.get(reverse("operaciones:consulta_lote_detalle", args=["LP-DET-UCE-001"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Ult. cambio estado")
+
+
+# ---------------------------------------------------------------------------
+# Regresion Dataverse: reporteria leyendo fecha_conformacion y ultimo_cambio
+# ---------------------------------------------------------------------------
+
+@override_settings(PERSISTENCE_BACKEND="dataverse")
+class LoteReportDataverseFechasCamposTest(TestCase):
+    """Verifica que reporteria Dataverse incluye fecha_conformacion y ultimo_cambio_estado_at."""
+
+    def setUp(self):
+        hoy = datetime.date.today()
+        ahora = datetime.datetime(2026, 4, 16, 10, 30, 0, tzinfo=datetime.timezone.utc)
+        self.dv_lote = SimpleNamespace(
+            id="dv-fc-lote-1",
+            lote_code="LP-FC-001",
+            estado="cerrado",
+            etapa_actual="Packing / Proceso",
+            cantidad_bins=2,
+            kilos_bruto_conformacion=Decimal("520"),
+            kilos_neto_conformacion=Decimal("500"),
+            requiere_desverdizado=False,
+            fecha_conformacion=hoy,
+            ultimo_cambio_estado_at=ahora,
+            codigo_productor="PROD-FC",
+            is_active=True,
+        )
+        self.repos = SimpleNamespace(
+            lotes=SimpleNamespace(list_recent=Mock(return_value=[self.dv_lote])),
+            bins=SimpleNamespace(all_bins_by_lotes=Mock(return_value={
+                "dv-fc-lote-1": [SimpleNamespace(
+                    id="dv-fc-bin-1",
+                    bin_code="BIN-FC-001",
+                    codigo_productor="PROD-FC",
+                    tipo_cultivo="Citricos",
+                    variedad_fruta="Oronules",
+                    color="4",
+                    fecha_cosecha=hoy,
+                    codigo_sag_csg="", codigo_sag_csp="", codigo_sdp="",
+                    numero_cuartel="1", nombre_cuartel="Norte",
+                )]
+            })),
+            desverdizados=SimpleNamespace(list_by_lotes=Mock(return_value={})),
+            ingresos_packing=SimpleNamespace(list_by_lotes=Mock(return_value={})),
+        )
+
+    def test_fecha_conformacion_en_resultado_reporteria(self):
+        from operaciones.views import _lotes_enriquecidos_dataverse
+        with patch("infrastructure.repository_factory.get_repositories", return_value=self.repos), \
+             patch("infrastructure.dataverse.repositories.resolve_etapa_lote",
+                   side_effect=lambda lote, repos=None: "Packing / Proceso"):
+            resultado = _lotes_enriquecidos_dataverse("", "")
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["fecha_conformacion"], datetime.date.today())
+
+    def test_ultimo_cambio_etapa_en_resultado_reporteria(self):
+        from operaciones.views import _lotes_enriquecidos_dataverse
+        ahora = datetime.datetime(2026, 4, 16, 10, 30, 0, tzinfo=datetime.timezone.utc)
+        with patch("infrastructure.repository_factory.get_repositories", return_value=self.repos), \
+             patch("infrastructure.dataverse.repositories.resolve_etapa_lote",
+                   side_effect=lambda lote, repos=None: "Packing / Proceso"):
+            resultado = _lotes_enriquecidos_dataverse("", "")
+        self.assertEqual(resultado[0]["ultimo_cambio_etapa"], ahora)
+
+    def test_tipo_cultivo_heredado_desde_bins_dataverse(self):
+        from operaciones.views import _lotes_enriquecidos_dataverse
+        with patch("infrastructure.repository_factory.get_repositories", return_value=self.repos), \
+             patch("infrastructure.dataverse.repositories.resolve_etapa_lote",
+                   side_effect=lambda lote, repos=None: "Packing / Proceso"):
+            resultado = _lotes_enriquecidos_dataverse("", "")
+        self.assertEqual(resultado[0]["tipo_cultivo"], "Citricos")

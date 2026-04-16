@@ -11,6 +11,8 @@ Flujo:
     → registra evento LOTE_CREADO
     → retorna lote_id y lote_code al operador
 """
+import datetime
+
 from django.db import transaction
 
 from operaciones.application.results import UseCaseResult
@@ -65,16 +67,22 @@ def iniciar_lote_recepcion(payload: dict, *, repos: Repositories | None = None) 
     # Generar lote_code con correlativo por temporada
     lote_code, correlativo = next_lote_correlativo(temporada_codigo)
 
+    # fecha_conformacion: fecha operativa de conformacion del lote en recepcion.
+    # Regla de negocio: es la fecha en que el operador inicia la sesion de recepcion.
+    # Si el payload la provee explicitamente (ej: tests de integracion o flujos futuros)
+    # se respeta; de lo contrario se establece automaticamente como hoy (UTC local).
+    fecha_conformacion = payload.get("fecha_conformacion") or datetime.date.today()
+
     extra = {
         "temporada_codigo":      temporada_codigo,
         "correlativo_temporada": correlativo,
         "estado":                LotePlantaEstado.ABIERTO,
         "etapa_actual":          "Recepcion",   # persiste en Dataverse desde 2026-03-31
         "ultimo_cambio_estado_at": ahora_utc(),
+        "fecha_conformacion":    fecha_conformacion,
     }
-    # Propagar campos opcionales de conformacion
-    for campo in ["fecha_conformacion", "requiere_desverdizado",
-                  "disponibilidad_camara_desverdizado", "rol"]:
+    # Propagar campos opcionales adicionales de conformacion
+    for campo in ["requiere_desverdizado", "disponibilidad_camara_desverdizado", "rol"]:
         if payload.get(campo) not in [None, ""]:
             extra[campo] = payload[campo]
 
