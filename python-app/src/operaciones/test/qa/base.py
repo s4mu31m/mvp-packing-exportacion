@@ -162,7 +162,6 @@ def build_bin_payload(variedad=None, temporada=TEMPORADA, **kwargs):
 
 def build_cierre_lote_payload(
     requiere_desverdizado=False,
-    disponibilidad="",
     temporada=TEMPORADA,
     **kwargs,
 ):
@@ -170,7 +169,6 @@ def build_cierre_lote_payload(
         "action": "cerrar",
         "temporada": temporada,
         "requiere_desverdizado": "on" if requiere_desverdizado else "",
-        "disponibilidad_camara_desverdizado": disponibilidad,
         "kilos_bruto_conformacion": "520",
         "kilos_neto_conformacion":  "498",
     }

@@ -83,6 +83,7 @@ from operaciones.models import (
     Lote,
     LotePlantaEstado,
     Pallet,
+    RegistroEtapa,
     RegistroPacking,
 )
 
@@ -459,6 +460,10 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         bins_pesados = sum(p["cantidad_bins"] for p in pesajes_cierre)
         bins_pendientes = (lote.cantidad_bins - bins_pesados) if lote else 0
 
+        from decimal import Decimal as D
+        neto_acumulado = sum(D(str(p["kilos_netos"])) for p in pesajes_cierre)
+        bruto_acumulado = sum(D(str(p["kilos_brutos"])) for p in pesajes_cierre)
+
         ctx = {
             "page_title": "Recepcion de Bins",
             "lote": lote,
@@ -472,6 +477,8 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "pesajes_cierre": pesajes_cierre,
             "bins_pesados": bins_pesados,
             "bins_pendientes": bins_pendientes,
+            "neto_acumulado": neto_acumulado,
+            "bruto_acumulado": bruto_acumulado,
             "campos_base_keys": self.CAMPOS_BASE,
         }
         return render(request, self.template_name, ctx)
@@ -705,7 +712,6 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
             "requiere_desverdizado": cd.get("requiere_desverdizado") or False,
-            "disponibilidad_camara_desverdizado": cd.get("disponibilidad_camara_desverdizado") or None,
             "kilos_bruto_conformacion": float(kilos_bruto_total),
             "kilos_neto_conformacion": float(kilos_neto_total),
         }
@@ -905,6 +911,7 @@ class DesverdizadoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                     "lote_code": lote_code,
                     "operator_code": request.session.get("crf21_codigooperador", ""),
                     "source_system": "web",
+                    "disponibilidad_camara_desverdizado": cd.get("disponibilidad_camara_desverdizado") or None,
                     "extra": {
                         "numero_camara": cd.get("numero_camara"),
                         "fecha_ingreso": _serialize_form_value(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
@@ -987,6 +994,13 @@ def _lote_info(temporada: str, lote_code: str) -> dict:
                         kilos_neto = float(ip.kilos_neto_ingreso_packing)
             except Exception:
                 pass
+            # B4: obtener variedad/color/tipo_cultivo/fecha_cosecha desde primer bin
+            primer_bin_dv = None
+            try:
+                primer_bin_map = repos.bins.first_bin_by_lotes([lote.id])
+                primer_bin_dv = primer_bin_map.get(lote.id)
+            except Exception:
+                pass
             return {
                 "lote_code": lote.lote_code,
                 "estado": lote.etapa_actual or lote.estado,
@@ -995,11 +1009,19 @@ def _lote_info(temporada: str, lote_code: str) -> dict:
                 "kilos_neto": kilos_neto,
                 "via_desverdizado": via_desv,
                 "requiere_desverdizado": lote.requiere_desverdizado,
-                "productor": getattr(lote, "codigo_productor", ""),
-                "variedad": "",
-                "color": "",
-                "fecha_cosecha": str(lote.fecha_conformacion) if lote.fecha_conformacion else "",
-                "tipo_cultivo": "",
+                "productor": (
+                    getattr(primer_bin_dv, "codigo_productor", None)
+                    or getattr(lote, "codigo_productor", "")
+                    or ""
+                ),
+                "variedad":     getattr(primer_bin_dv, "variedad_fruta", "") or "",
+                "color":        getattr(primer_bin_dv, "color", "") or "",
+                "fecha_cosecha": (
+                    str(primer_bin_dv.fecha_cosecha)
+                    if primer_bin_dv and getattr(primer_bin_dv, "fecha_cosecha", None)
+                    else ""
+                ),
+                "tipo_cultivo": getattr(primer_bin_dv, "tipo_cultivo", "") or "",
             }
         except Exception:
             return {}
@@ -2081,34 +2103,42 @@ CONSULTA_TAB_DEFAULT = CONSULTA_TAB_LOTES
 CONSULTA_ESTADO_EN_CAMARA_FRIO = "en_camara_frio"
 
 CONSULTA_COLUMNAS_LOTES = [
-    ("Temporada", "temporada"),
-    ("Lote (code)", "lote_code"),
-    ("Estado", "estado_display"),
-    ("Etapa actual", "etapa"),
-    ("Productor (SAC)", "productor"),
-    ("CSG", "codigo_sag_csg"),
-    ("CSP", "codigo_sag_csp"),
-    ("SDP", "codigo_sdp"),
-    ("N° Cuartel", "numero_cuartel"),
-    ("Nombre Cuartel", "nombre_cuartel"),
-    ("Tipo cultivo", "tipo_cultivo"),
-    ("Variedad", "variedad"),
-    ("Bins", "cantidad_bins"),
-    ("Kg neto", "kilos_neto"),
-    ("Cajas producidas", "cajas_producidas"),
-    ("Últ. Cambio Etapa", "fecha"),
+    ("Temporada",          "temporada"),
+    ("Lote (code)",        "lote_code"),
+    ("Estado",             "estado_display"),
+    ("Etapa actual",       "etapa"),
+    ("Fecha conformacion", "fecha_conformacion"),
+    ("Ult. Cambio Etapa",  "ultimo_cambio_etapa"),
+    ("Productor (SAC)",    "productor"),
+    ("CSG",                "codigo_sag_csg"),
+    ("CSP",                "codigo_sag_csp"),
+    ("SDP",                "codigo_sdp"),
+    ("N Cuartel",          "numero_cuartel"),
+    ("Nombre Cuartel",     "nombre_cuartel"),
+    ("Tipo cultivo",       "tipo_cultivo"),
+    ("Variedad",           "variedad"),
+    ("Color",              "color"),
+    ("Fecha cosecha",      "fecha_cosecha"),
+    ("Bins",               "cantidad_bins"),
+    ("Kg bruto",           "kilos_bruto"),
+    ("Kg neto",            "kilos_neto"),
+    ("Cajas producidas",   "cajas_producidas"),
 ]
 
 CONSULTA_COLUMNAS_PALLETS = [
-    ("Temporada", "temporada"),
-    ("Pallet (code)", "pallet_code"),
+    ("Temporada",        "temporada"),
+    ("Pallet (code)",    "pallet_code"),
     ("Lote relacionado", "lote_code"),
-    ("Tipo caja", "tipo_caja"),
-    ("Peso total (kg)", "peso_total"),
-    ("Productor", "productor"),
-    ("CSG", "codigo_sag_csg"),
-    ("CSP", "codigo_sag_csp"),
-    ("Variedad", "variedad"),
+    ("Tipo caja",        "tipo_caja"),
+    ("Cajas x pallet",   "cajas_por_pallet"),
+    ("Peso total (kg)",  "peso_total"),
+    ("Fecha pallet",     "fecha"),
+    ("Productor",        "productor"),
+    ("CSG",              "codigo_sag_csg"),
+    ("CSP",              "codigo_sag_csp"),
+    ("Variedad",         "variedad"),
+    ("Color",            "color"),
+    ("Fecha cosecha",    "fecha_cosecha"),
 ]
 
 CONSULTA_CACHE_VERSION = 1
@@ -2458,6 +2488,53 @@ def _consulta_estado_choices() -> list[tuple[str, str]]:
     return choices
 
 
+def _consulta_kpis(lotes: list, pallets: list) -> dict:
+    """
+    Calcula KPIs de kilos por etapa para la vista Control de Gestion.
+    Opera sobre la lista ya filtrada, por lo que respeta los filtros activos.
+    """
+    kg_recepcionados = kg_mantencion = kg_desverdizado = kg_packing = 0.0
+    kg_camara_frio = 0.0
+    lotes_recepcionados = lotes_mantencion = lotes_desverdizado = lotes_packing = 0
+    pallets_camara = cajas_camara = 0
+
+    for item in lotes:
+        kn    = float(item.get("kilos_neto") or 0)
+        etapa = item.get("etapa", "")
+        if etapa == "Recepcion":
+            kg_recepcionados += kn
+            lotes_recepcionados += 1
+        elif etapa == "Mantencion":
+            kg_mantencion += kn
+            lotes_mantencion += 1
+        elif etapa == "Desverdizado":
+            kg_desverdizado += kn
+            lotes_desverdizado += 1
+        elif etapa in ("Ingreso Packing", "Packing / Proceso"):
+            kg_packing += kn
+            lotes_packing += 1
+
+    for item in pallets:
+        if item.get("estado") == CONSULTA_ESTADO_EN_CAMARA_FRIO:
+            kg_camara_frio += float(item.get("peso_total") or 0)
+            cajas_camara   += int(item.get("cajas_por_pallet") or 0)
+            pallets_camara += 1
+
+    return {
+        "kg_recepcionados":    round(kg_recepcionados, 1),
+        "lotes_recepcionados": lotes_recepcionados,
+        "kg_mantencion":       round(kg_mantencion, 1),
+        "lotes_mantencion":    lotes_mantencion,
+        "kg_desverdizado":     round(kg_desverdizado, 1),
+        "lotes_desverdizado":  lotes_desverdizado,
+        "kg_packing":          round(kg_packing, 1),
+        "lotes_packing":       lotes_packing,
+        "kg_camara_frio":      round(kg_camara_frio, 1),
+        "cajas_camara_frio":   cajas_camara,
+        "pallets_camara_frio": pallets_camara,
+    }
+
+
 def _estado_display_consulta(estado: str, *, fallback: str = "") -> str:
     if estado == CONSULTA_ESTADO_EN_CAMARA_FRIO:
         return "En Camara de Frio"
@@ -2634,8 +2711,9 @@ def _campos_base_lote_prefetch(lote: Lote | None) -> dict:
         return dict(_CAMPOS_BASE_LOTE_VACIO)
     primer_bin = None
     try:
-        primer_rel = lote.bin_lotes.select_related("bin").first()
-        primer_bin = primer_rel.bin if primer_rel else None
+        # list() usa el prefetch cache en lugar de emitir una query extra por lote
+        bin_rels = list(lote.bin_lotes.all())
+        primer_bin = bin_rels[0].bin if bin_rels else None
     except Exception:
         primer_bin = None
     if not primer_bin:
@@ -2676,7 +2754,15 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
     lotes_raw = list(
         Lote.objects
         .filter(temporada=temporada, is_active=True)
-        .prefetch_related("desverdizado", "ingreso_packing", "bin_lotes__bin")
+        .prefetch_related(
+            "desverdizado",
+            "ingreso_packing",
+            "camara_mantencion",
+            "bin_lotes__bin",
+            "pallet_lotes__pallet__camara_frio",
+            "registros_packing",
+            "control_proceso_packing",
+        )
         .order_by("-created_at")[:500]
     )
     lote_ids = [l.id for l in lotes_raw]
@@ -2688,6 +2774,18 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
             .values("lote_id")
             .annotate(total=Sum("cantidad_cajas_producidas"))
             .values_list("lote_id", "total")
+        )
+
+    # B3: batch query para obtener la fecha del último evento de trazabilidad por lote
+    from django.db.models import Max as _Max
+    ultimo_evento_por_lote: dict = {}
+    if lote_ids:
+        ultimo_evento_por_lote = dict(
+            RegistroEtapa.objects
+            .filter(lote_id__in=lote_ids)
+            .values("lote_id")
+            .annotate(ultimo=_Max("occurred_at"))
+            .values_list("lote_id", "ultimo")
         )
 
     resultado = []
@@ -2702,7 +2800,14 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
         if filtro_productor_lc and filtro_productor_lc not in productor.lower():
             continue
 
-        _, kilos_neto = _kilos_recientes_lote(lote, include_bin_fallback=False)
+        kilos_bruto, kilos_neto = _kilos_recientes_lote(lote, include_bin_fallback=False)
+
+        # B3: fecha = último cambio de etapa real; fecha_conformacion separado
+        _ultimo_dt = ultimo_evento_por_lote.get(lote.id)
+        _ultimo_date = (
+            _ultimo_dt.date() if isinstance(_ultimo_dt, datetime.datetime) else _ultimo_dt
+        ) or lote.fecha_conformacion or (lote.created_at.date() if lote.created_at else None)
+
         resultado.append({
             "lote": lote,
             "lote_code": lote.lote_code,
@@ -2710,6 +2815,7 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
             "estado_display": lote.get_estado_display(),
             "etapa": etapa,
             "cantidad_bins": lote.cantidad_bins,
+            "kilos_bruto": kilos_bruto,
             "kilos_neto": kilos_neto,
             "cajas_producidas": cajas_por_lote.get(lote.id),
             "productor": productor,
@@ -2721,7 +2827,10 @@ def _lotes_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estado:
             "variedad": campos["variedad"],
             "tipo_cultivo": campos["tipo_cultivo"],
             "color": campos["color"],
-            "fecha": lote.fecha_conformacion or (lote.created_at.date() if lote.created_at else None),
+            "fecha_cosecha": campos["fecha_cosecha"],
+            "fecha": _ultimo_date,               # usado por _filtrar_por_fecha
+            "fecha_conformacion": lote.fecha_conformacion,
+            "ultimo_cambio_etapa": _ultimo_date,
         })
     return resultado
 
@@ -2743,6 +2852,16 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
         desv_por_lote: dict = repos.desverdizados.list_by_lotes(lote_ids) if lote_ids else {}
         ip_por_lote: dict = repos.ingresos_packing.list_by_lotes(lote_ids) if lote_ids else {}
 
+        # B5: cajas producidas por lote (guardado: sum_cajas_by_lotes es Fase 2)
+        cajas_por_lote_dv: dict = {}
+        try:
+            if (lote_ids
+                    and hasattr(repos, "registros_packing")
+                    and hasattr(repos.registros_packing, "sum_cajas_by_lotes")):
+                cajas_por_lote_dv = repos.registros_packing.sum_cajas_by_lotes(lote_ids)
+        except Exception:
+            pass
+
         resultado = []
         filtro_productor_lc = (filtro_productor or "").lower()
         for lote in lotes:
@@ -2755,13 +2874,23 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
             if filtro_productor_lc and filtro_productor_lc not in productor.lower():
                 continue
 
+            _kb = _float_or_none(lote.kilos_bruto_conformacion)
             _kn = _float_or_none(lote.kilos_neto_conformacion)
             _d = desv_por_lote.get(lote.id)
-            if _d and _d.kilos_neto_salida is not None:
-                _kn = float(_d.kilos_neto_salida)
+            if _d:
+                if _d.kilos_bruto_salida is not None:
+                    _kb = float(_d.kilos_bruto_salida)
+                if _d.kilos_neto_salida is not None:
+                    _kn = float(_d.kilos_neto_salida)
             _ip = ip_por_lote.get(lote.id)
-            if _ip and _ip.kilos_neto_ingreso_packing is not None:
-                _kn = float(_ip.kilos_neto_ingreso_packing)
+            if _ip:
+                if _ip.kilos_bruto_ingreso_packing is not None:
+                    _kb = float(_ip.kilos_bruto_ingreso_packing)
+                if _ip.kilos_neto_ingreso_packing is not None:
+                    _kn = float(_ip.kilos_neto_ingreso_packing)
+
+            # B3: fecha_conformacion separada de ultimo_cambio_etapa
+            _ultimo = lote.ultimo_cambio_estado_at or lote.fecha_conformacion
 
             resultado.append({
                 "lote": lote,
@@ -2770,8 +2899,9 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
                 "estado_display": _estado_display_consulta(estado, fallback=etapa),
                 "etapa": etapa,
                 "cantidad_bins": lote.cantidad_bins,
+                "kilos_bruto": _kb,
                 "kilos_neto": _kn,
-                "cajas_producidas": None,
+                "cajas_producidas": cajas_por_lote_dv.get(lote.id),
                 "productor": productor,
                 "codigo_sag_csg": (getattr(primer_bin, "codigo_sag_csg", None) or "") if primer_bin else "",
                 "codigo_sag_csp": (getattr(primer_bin, "codigo_sag_csp", None) or "") if primer_bin else "",
@@ -2781,10 +2911,10 @@ def _lotes_enriquecidos_dataverse(filtro_productor: str, filtro_estado: str) -> 
                 "variedad": primer_bin.variedad_fruta if primer_bin else "",
                 "tipo_cultivo": primer_bin.tipo_cultivo if primer_bin else "",
                 "color": primer_bin.color if primer_bin else "",
-                # "fecha" es la fuente oficial para filtros, exportaciones y consulta jefatura.
-                # Usa ultimo_cambio_estado_at (timestamp de transicion real de etapa).
-                # Fallback para registros historicos: fecha_conformacion.
-                "fecha": lote.ultimo_cambio_estado_at or lote.fecha_conformacion,
+                "fecha_cosecha": (str(primer_bin.fecha_cosecha) if primer_bin and getattr(primer_bin, "fecha_cosecha", None) else ""),
+                "fecha": _ultimo,               # usado por _filtrar_por_fecha
+                "fecha_conformacion": lote.fecha_conformacion,
+                "ultimo_cambio_etapa": _ultimo,
             })
         return resultado
     except Exception as exc:
@@ -2846,6 +2976,7 @@ def _pallets_enriquecidos_qs(temporada: str, filtro_productor: str, filtro_estad
             "pallet_code": pallet.pallet_code,
             "lote_code": lote.lote_code if lote else "",
             "tipo_caja": pallet.tipo_caja or "",
+            "cajas_por_pallet": getattr(pallet, "cajas_por_pallet", None),
             "peso_total": _float_or_none(pallet.peso_total_kg),
             "productor": productor,
             "codigo_sag_csg": campos["codigo_sag_csg"],
@@ -2918,6 +3049,7 @@ def _pallets_enriquecidos_dataverse(temporada: str, filtro_productor: str, filtr
                 "pallet_code": pallet.pallet_code,
                 "lote_code": lote_code,
                 "tipo_caja": pallet.tipo_caja or "",
+                "cajas_por_pallet": getattr(pallet, "cajas_por_pallet", None),
                 "peso_total": _float_or_none(pallet.peso_total_kg),
                 "productor": productor,
                 "codigo_sag_csg": base.get("codigo_sag_csg", ""),
@@ -2968,6 +3100,23 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
 
             etapa = resolve_etapa_lote(lote, repos)
             estado = info.get("estado") or getattr(lote, "estado", "") or etapa
+
+            # B9: packing data (guardado: requiere list_by_lote en repos, Fase 2)
+            packing_data_dv = {}
+            try:
+                if (hasattr(repos, "registros_packing")
+                        and hasattr(repos.registros_packing, "list_by_lote")):
+                    registros_dv = repos.registros_packing.list_by_lote(lote.id) or []
+                    if registros_dv:
+                        packing_data_dv = {
+                            "cajas_producidas": sum(getattr(r, "cantidad_cajas_producidas", 0) or 0 for r in registros_dv),
+                            "merma_kg":         round(sum(float(getattr(r, "merma_seleccion_kg", 0) or 0) for r in registros_dv), 2),
+                            "kg_comercial":     round(sum(float(getattr(r, "kilos_fruta_comercial", 0) or 0) for r in registros_dv), 2),
+                            "registros": [],
+                        }
+            except Exception:
+                pass
+
             return {
                 "lote_code": lote.lote_code,
                 "estado": estado,
@@ -2985,6 +3134,7 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
                 "fecha_cosecha": info.get("fecha_cosecha", ""),
                 "fecha_conformacion": getattr(lote, "fecha_conformacion", None),
                 "bins": bins_data,
+                "packing": packing_data_dv,
             }
         except Exception:
             return {}
@@ -3049,6 +3199,32 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
     except Exception:
         pass
 
+    # B9: resultados de packing (cajas, merma, kg comercial)
+    packing_data = {}
+    try:
+        registros = list(lote.registros_packing.all())
+        if registros:
+            packing_data = {
+                "cajas_producidas":  sum(r.cantidad_cajas_producidas or 0 for r in registros),
+                "merma_kg":          round(sum(float(r.merma_seleccion_kg or 0) for r in registros), 2),
+                "kg_comercial":      round(sum(float(r.kilos_fruta_comercial or 0) for r in registros), 2),
+                "registros": [
+                    {
+                        "fecha":        r.fecha,
+                        "linea":        r.linea_proceso or "",
+                        "categoria":    r.categoria_calidad or "",
+                        "calibre":      r.calibre or "",
+                        "cajas":        r.cantidad_cajas_producidas,
+                        "peso_prom_kg": _float_or_none(r.peso_promedio_caja_kg),
+                        "merma_kg":     _float_or_none(r.merma_seleccion_kg),
+                        "kg_comercial": _float_or_none(r.kilos_fruta_comercial),
+                    }
+                    for r in registros
+                ],
+            }
+    except Exception:
+        pass
+
     return {
         "lote_code": lote.lote_code,
         "estado": lote.estado,
@@ -3068,6 +3244,7 @@ def _detalle_lote_context(temporada: str, lote_code: str) -> dict:
         "bins": bins_data,
         "desverdizado": desv_data,
         "ingreso_packing": ip_data,
+        "packing": packing_data,
         "pallet_code": pallet_code,
     }
 
@@ -3254,6 +3431,7 @@ class ConsultaJefaturaView(LoginRequiredMixin, JefaturaRequiredMixin, TemplateVi
         ctx["pallets"] = pallets
         ctx["lotes_count"] = len(lotes)
         ctx["pallets_count"] = len(pallets)
+        ctx["kpis"] = _consulta_kpis(lotes, pallets)
         ctx["estados_choices"] = _consulta_estado_choices()
         ctx["query_consulta"] = query_consulta
         ctx["tab_lotes_url"] = _url_consulta(CONSULTA_TAB_LOTES, filtro_productor, filtro_estado, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
@@ -3402,15 +3580,15 @@ class ExportarConsultaExcelView(LoginRequiredMixin, JefaturaRequiredMixin, View)
 
     def get(self, request):
         temporada = request.session.get("temporada_activa") or str(datetime.date.today().year)
-        tab, filtro_productor, filtro_estado = _filtros_consulta_request(
+        _, filtro_productor, filtro_estado = _filtros_consulta_request(
             request,
             CONSULTA_TAB_DEFAULT,
         )
         fecha_desde, fecha_hasta = _fechas_consulta_request(request)
         force_refresh = _refresh_consulta_request(request)
-        columnas, rows, tab_norm, _ = _consulta_export_bundle(
+
+        lotes, pallets, _ = _consulta_dataset(
             temporada,
-            tab,
             filtro_productor,
             filtro_estado,
             fecha_desde=fecha_desde,
@@ -3420,30 +3598,40 @@ class ExportarConsultaExcelView(LoginRequiredMixin, JefaturaRequiredMixin, View)
 
         try:
             from openpyxl import Workbook
+            from openpyxl.styles import Font
             from openpyxl.utils import get_column_letter
         except Exception:
             messages.error(
                 request,
                 "No fue posible generar Excel porque openpyxl no esta instalado en este entorno.",
             )
-            return redirect(_url_consulta(tab, filtro_productor, filtro_estado))
+            return redirect(_url_consulta("lotes", filtro_productor, filtro_estado))
+
+        def _write_sheet(ws, columnas, rows):
+            headers = [header for header, _ in columnas]
+            ws.append(headers)
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+            for item in rows:
+                ws.append([_export_cell_value(item.get(key, "")) for _, key in columnas])
+            for idx, (header, _) in enumerate(columnas, start=1):
+                width = min(max(len(header) + 4, 12), 40)
+                ws.column_dimensions[get_column_letter(idx)].width = width
 
         wb = Workbook()
-        ws = wb.active
-        ws.title = "Consulta"
-        ws.append([header for header, _ in columnas])
-        for item in rows:
-            ws.append([_export_cell_value(item.get(key, "")) for _, key in columnas])
+        ws_lotes = wb.active
+        ws_lotes.title = "Lotes"
+        _write_sheet(ws_lotes, CONSULTA_COLUMNAS_LOTES, lotes)
 
-        for idx, _ in enumerate(columnas, start=1):
-            ws.column_dimensions[get_column_letter(idx)].width = 20
+        ws_pallets = wb.create_sheet(title="Pallets")
+        _write_sheet(ws_pallets, CONSULTA_COLUMNAS_PALLETS, pallets)
 
         buffer = BytesIO()
         wb.save(buffer)
         buffer.seek(0)
 
         fecha_hoy = datetime.date.today().strftime("%Y%m%d")
-        filename = f"consulta_{tab_norm}_{temporada}_{fecha_hoy}.xlsx"
+        filename = f"control_gestion_{temporada}_{fecha_hoy}.xlsx"
         response = HttpResponse(
             buffer.getvalue(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

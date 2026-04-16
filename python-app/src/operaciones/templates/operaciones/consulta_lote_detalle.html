@@ -75,6 +75,59 @@
 </div>
 {% endif %}
 
+{% if detalle.packing %}
+<div class="card" style="margin-bottom:1rem">
+  <div class="card-title" style="margin-bottom:.8rem">Resultados Packing</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem .9rem;font-size:.88rem;margin-bottom:1rem">
+    <div>
+      <span style="color:var(--text-muted);font-size:.78rem;display:block">Cajas producidas</span>
+      <strong style="font-size:1.1rem">{{ detalle.packing.cajas_producidas|default:"0" }}</strong>
+    </div>
+    <div>
+      <span style="color:var(--text-muted);font-size:.78rem;display:block">Kg comercial</span>
+      {% if detalle.packing.kg_comercial %}<strong style="color:var(--teal-400,#2dd4bf)">{{ detalle.packing.kg_comercial|floatformat:2 }} kg</strong>{% else %}-{% endif %}
+    </div>
+    <div>
+      <span style="color:var(--text-muted);font-size:.78rem;display:block">Merma en kilos</span>
+      {% if detalle.packing.merma_kg %}{{ detalle.packing.merma_kg|floatformat:2 }} kg{% else %}-{% endif %}
+    </div>
+  </div>
+
+  {% if detalle.packing.registros %}
+  <div style="overflow-x:auto">
+    <table class="table" style="font-size:.82rem">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Linea</th>
+          <th>Categoria</th>
+          <th>Calibre</th>
+          <th style="text-align:right">Cajas</th>
+          <th style="text-align:right">Peso prom. (kg)</th>
+          <th style="text-align:right">Merma (kg)</th>
+          <th style="text-align:right">Kg comercial</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in detalle.packing.registros %}
+        <tr>
+          <td style="white-space:nowrap">{{ r.fecha|date:"d/m/Y"|default:"-" }}</td>
+          <td>{{ r.linea|default:"-" }}</td>
+          <td>{{ r.categoria|default:"-" }}</td>
+          <td>{{ r.calibre|default:"-" }}</td>
+          <td style="text-align:right">{{ r.cajas|default:"-" }}</td>
+          <td style="text-align:right">{% if r.peso_prom_kg %}{{ r.peso_prom_kg|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td style="text-align:right">{% if r.merma_kg %}{{ r.merma_kg|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td style="text-align:right">{% if r.kg_comercial %}{{ r.kg_comercial|floatformat:2 }}{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">
     <h3 style="margin:0;font-size:1rem">Bins relacionados</h3>

@@ -33,6 +33,16 @@
   <form method="get" id="form-filtros">
     <input type="hidden" name="tab" value="{{ tab_actual }}">
     <div style="display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-end">
+      <div class="form-group" style="margin-bottom:0;min-width:140px">
+        <label class="form-label">Fecha desde</label>
+        <input type="date" class="form-control" name="fecha_desde" value="{{ fecha_desde }}">
+      </div>
+
+      <div class="form-group" style="margin-bottom:0;min-width:140px">
+        <label class="form-label">Fecha hasta</label>
+        <input type="date" class="form-control" name="fecha_hasta" value="{{ fecha_hasta }}">
+      </div>
+
       <div class="form-group" style="margin-bottom:0;min-width:180px">
         <label class="form-label">Productor / codigo</label>
         <input type="text" class="form-control" name="productor"
@@ -47,16 +57,6 @@
             <option value="{{ value }}" {% if filtro_estado == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
-      </div>
-
-      <div class="form-group" style="margin-bottom:0;min-width:140px">
-        <label class="form-label">Fecha desde</label>
-        <input type="date" class="form-control" name="fecha_desde" value="{{ fecha_desde }}">
-      </div>
-
-      <div class="form-group" style="margin-bottom:0;min-width:140px">
-        <label class="form-label">Fecha hasta</label>
-        <input type="date" class="form-control" name="fecha_hasta" value="{{ fecha_hasta }}">
       </div>
 
       <div style="display:flex;gap:.5rem;padding-bottom:1px">
@@ -99,6 +99,54 @@
     </div>
   {% endif %}
 </div>
+
+{% if kpis %}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.7rem;margin-bottom:1rem">
+
+  <div class="card" style="margin-bottom:0;padding:.85rem 1rem">
+    <div style="font-size:.7rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.3rem">Recepcion</div>
+    <div style="font-size:1.45rem;font-weight:700;color:var(--text-primary);line-height:1.1">
+      {% if kpis.kg_recepcionados %}{{ kpis.kg_recepcionados|floatformat:0 }} <span style="font-size:.85rem;font-weight:400">kg</span>{% else %}&mdash;{% endif %}
+    </div>
+    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">{{ kpis.lotes_recepcionados }} lote{{ kpis.lotes_recepcionados|pluralize:"s" }}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:0;padding:.85rem 1rem">
+    <div style="font-size:.7rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.3rem">Mantencion</div>
+    <div style="font-size:1.45rem;font-weight:700;color:var(--text-primary);line-height:1.1">
+      {% if kpis.kg_mantencion %}{{ kpis.kg_mantencion|floatformat:0 }} <span style="font-size:.85rem;font-weight:400">kg</span>{% else %}&mdash;{% endif %}
+    </div>
+    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">{{ kpis.lotes_mantencion }} lote{{ kpis.lotes_mantencion|pluralize:"s" }}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:0;padding:.85rem 1rem">
+    <div style="font-size:.7rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.3rem">Desverdizado</div>
+    <div style="font-size:1.45rem;font-weight:700;color:var(--text-primary);line-height:1.1">
+      {% if kpis.kg_desverdizado %}{{ kpis.kg_desverdizado|floatformat:0 }} <span style="font-size:.85rem;font-weight:400">kg</span>{% else %}&mdash;{% endif %}
+    </div>
+    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">{{ kpis.lotes_desverdizado }} lote{{ kpis.lotes_desverdizado|pluralize:"s" }}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:0;padding:.85rem 1rem">
+    <div style="font-size:.7rem;font-weight:600;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.3rem">Packing / Proceso</div>
+    <div style="font-size:1.45rem;font-weight:700;color:var(--text-primary);line-height:1.1">
+      {% if kpis.kg_packing %}{{ kpis.kg_packing|floatformat:0 }} <span style="font-size:.85rem;font-weight:400">kg</span>{% else %}&mdash;{% endif %}
+    </div>
+    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">{{ kpis.lotes_packing }} lote{{ kpis.lotes_packing|pluralize:"s" }}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:0;padding:.85rem 1rem;border-color:var(--teal-400,#2dd4bf)">
+    <div style="font-size:.7rem;font-weight:600;color:var(--teal-400,#2dd4bf);letter-spacing:.05em;text-transform:uppercase;margin-bottom:.3rem">Camara de Frio</div>
+    <div style="font-size:1.45rem;font-weight:700;color:var(--teal-400,#2dd4bf);line-height:1.1">
+      {% if kpis.kg_camara_frio %}{{ kpis.kg_camara_frio|floatformat:0 }} <span style="font-size:.85rem;font-weight:400">kg</span>{% else %}&mdash;{% endif %}
+    </div>
+    <div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">
+      {% if kpis.cajas_camara_frio %}{{ kpis.cajas_camara_frio }} caja{{ kpis.cajas_camara_frio|pluralize:"s" }} &middot; {% endif %}{{ kpis.pallets_camara_frio }} pallet{{ kpis.pallets_camara_frio|pluralize:"s" }}
+    </div>
+  </div>
+
+</div>
+{% endif %}
 
 <div class="card">
   {% if tab_actual == 'pallets' %}

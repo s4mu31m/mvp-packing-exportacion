@@ -21,14 +21,11 @@ class CerrarLoteForm(forms.Form):
     """
     Confirma el cierre del lote. Los kilos de conformacion se calculan
     automaticamente desde los pesajes parciales registrados en sesion.
+    Solo se define si el lote requiere desverdizado (si/no).
+    La disponibilidad de camara desverdizado se gestiona en la etapa de desverdizado.
     """
     requiere_desverdizado = forms.BooleanField(
         required=False, label="Requiere desverdizado",
-    )
-    disponibilidad_camara_desverdizado = forms.ChoiceField(
-        choices=[("", "— no aplica —")] + list(DisponibilidadCamara.choices),
-        required=False, label="Disponibilidad camara desverdizado",
-        help_text="Solo si requiere desverdizado",
     )
 
 
@@ -213,6 +210,11 @@ class DesverdizadoForm(forms.Form):
         required=True, label="Horas de desverdizado",
         help_text="Horas planificadas (1-240). Reemplaza el campo legacy 'proceso' para este dato.",
         widget=forms.NumberInput(attrs={"placeholder": "72", "min": "1", "max": "240"}),
+    )
+    disponibilidad_camara_desverdizado = forms.ChoiceField(
+        choices=[("", "— seleccione —")] + list(DisponibilidadCamara.choices),
+        required=False, label="Disponibilidad camara",
+        help_text="Confirmar si la camara esta disponible para iniciar el proceso",
     )
 
     def clean_horas_desverdizado(self):

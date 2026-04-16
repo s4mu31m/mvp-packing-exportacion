@@ -211,12 +211,9 @@
         <!-- Totales acumulados -->
         <div style="display:flex;justify-content:flex-end;gap:1.5rem;
                     font-size:.85rem;margin-top:.5rem;font-weight:600">
-          <span>Brutos acum.: {{ pesajes_cierre|length|add:"0" }}
-            {# sum en template no existe nativamente, se muestra en footer del lote #}
-          </span>
+          <span>Brutos acum.: <strong>{{ bruto_acumulado|floatformat:2 }} kg</strong></span>
           <span style="color:var(--teal-400)">
-            Netos acum.: —
-            {# el total real se muestra al cerrar #}
+            Netos acum.: <strong>{{ neto_acumulado|floatformat:2 }} kg</strong>
           </span>
         </div>
         {% endif %}

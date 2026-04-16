@@ -52,6 +52,14 @@ def registrar_desverdizado(
             errors=["Desverdizado solo aplica si requiere_desverdizado=True"],
         )
 
+    # Si viene disponibilidad en el payload (definida en la etapa de desverdizado),
+    # actualizar el lote antes del check. Esto permite que la disponibilidad se
+    # gestione aqui y no en el cierre de pesaje.
+    nueva_disponibilidad = payload.get("disponibilidad_camara_desverdizado")
+    if nueva_disponibilidad:
+        repos.lotes.update(lote.id, {"disponibilidad_camara_desverdizado": nueva_disponibilidad})
+        lote = repos.lotes.find_by_code(temporada, lote_code)
+
     if lote.disponibilidad_camara_desverdizado == DisponibilidadCamara.NO_DISPONIBLE:
         return UseCaseResult.reject(
             code="CAMARA_NO_DISPONIBLE",

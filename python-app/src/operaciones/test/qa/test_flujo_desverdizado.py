@@ -90,10 +90,7 @@ class FlujoConDesverdizadoE2ETest(TestCase):
 
         resp = client.post(
             reverse("operaciones:recepcion"),
-            build_cierre_lote_payload(
-                requiere_desverdizado=True,
-                disponibilidad="no_disponible",
-            ),
+            build_cierre_lote_payload(requiere_desverdizado=True),
         )
         self.assertIn(resp.status_code, [200, 302],
             msg=f"Paso 3 — cierre con desverdizado para lote {lote_code}")
@@ -103,10 +100,10 @@ class FlujoConDesverdizadoE2ETest(TestCase):
             msg="Lote debe quedar CERRADO")
         self.assertTrue(lote.requiere_desverdizado,
             msg="Lote debe tener requiere_desverdizado=True")
-        self.assertEqual(
+        # La disponibilidad ya no se define en cierre de pesaje — queda None
+        self.assertIsNone(
             lote.disponibilidad_camara_desverdizado,
-            DisponibilidadCamara.NO_DISPONIBLE,
-            msg="disponibilidad_camara debe quedar como no_disponible",
+            msg="disponibilidad_camara no debe definirse en cierre de pesaje",
         )
 
     # ----- Paso 4: Mantención -----
@@ -286,7 +283,6 @@ class FlujoConDesverdizadoE2ETest(TestCase):
         cerrar_lote_recepcion({
             **base, "lote_code": lote_code,
             "requiere_desverdizado": True,
-            "disponibilidad_camara_desverdizado": DisponibilidadCamara.NO_DISPONIBLE,
         })
         return lote_code
 
@@ -301,12 +297,10 @@ class FlujoConDesverdizadoE2ETest(TestCase):
             "operator_code": "QA-SETUP-DV", "source_system": "test",
             "extra": {"camara_numero": "CM-1"},
         })
-        Lote.objects.filter(
-            temporada=TEMPORADA, lote_code=lote_code
-        ).update(disponibilidad_camara_desverdizado=DisponibilidadCamara.DISPONIBLE)
         registrar_desverdizado({
             "temporada": TEMPORADA, "lote_code": lote_code,
             "operator_code": "QA-SETUP-DV", "source_system": "test",
+            "disponibilidad_camara_desverdizado": DisponibilidadCamara.DISPONIBLE,
             "extra": {"horas_desverdizado": 72, "color_salida": "4"},
         })
         return lote_code
@@ -333,14 +327,11 @@ class CoherenciaEntreEtapasTest(TestCase):
             "variedad_fruta": "Red Globe", "kilos_neto_ingreso": "300",
             "kilos_bruto_ingreso": "315"})
         cerrar_lote_recepcion({**base, "lote_code": lote_code,
-            "requiere_desverdizado": True,
-            "disponibilidad_camara_desverdizado": DisponibilidadCamara.NO_DISPONIBLE})
+            "requiere_desverdizado": True})
         registrar_camara_mantencion({**base, "lote_code": lote_code,
             "extra": {"camara_numero": "CM-2"}})
-        Lote.objects.filter(
-            temporada=TEMPORADA, lote_code=lote_code
-        ).update(disponibilidad_camara_desverdizado=DisponibilidadCamara.DISPONIBLE)
         registrar_desverdizado({**base, "lote_code": lote_code,
+            "disponibilidad_camara_desverdizado": DisponibilidadCamara.DISPONIBLE,
             "extra": {"horas_desverdizado": 48, "color_salida": "3"}})
         registrar_ingreso_packing({**base, "lote_code": lote_code,
             "via_desverdizado": True, "extra": {}})
@@ -394,14 +385,11 @@ class TraceabilityDesverdizadoTest(TestCase):
             "variedad_fruta": "Red Globe", "kilos_neto_ingreso": "500",
             "kilos_bruto_ingreso": "520"})
         cerrar_lote_recepcion({**base, "lote_code": lote_code,
-            "requiere_desverdizado": True,
-            "disponibilidad_camara_desverdizado": DisponibilidadCamara.NO_DISPONIBLE})
+            "requiere_desverdizado": True})
         registrar_camara_mantencion({**base, "lote_code": lote_code,
             "extra": {"camara_numero": "CM-3"}})
-        Lote.objects.filter(
-            temporada=TEMPORADA, lote_code=lote_code
-        ).update(disponibilidad_camara_desverdizado=DisponibilidadCamara.DISPONIBLE)
         registrar_desverdizado({**base, "lote_code": lote_code,
+            "disponibilidad_camara_desverdizado": DisponibilidadCamara.DISPONIBLE,
             "extra": {"horas_desverdizado": 72, "color_salida": "4"}})
         registrar_ingreso_packing({**base, "lote_code": lote_code,
             "via_desverdizado": True, "extra": {}})
