@@ -79,6 +79,57 @@ class PesajeParcialCierreForm(forms.Form):
         return cleaned
 
 
+class PesajeParcialIngresoPackingForm(forms.Form):
+    """
+    Registro de un pesaje parcial durante el ingreso a packing.
+    Logica identica a PesajeParcialCierreForm; IDs de widget prefijados id-pp-
+    para coexistir en la misma pagina sin colisiones.
+    kilos_netos = kilos_brutos - (cantidad_bins x tara).
+    """
+    cantidad_bins = forms.IntegerField(
+        min_value=1, required=True, label="Cantidad de bins",
+        widget=forms.NumberInput(attrs={
+            "id": "id-pp-cantidad-bins",
+            "min": "1",
+            "inputmode": "numeric",
+            "autocomplete": "off",
+        }),
+    )
+    kilos_brutos_grupo = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=True, label="Kilos brutos del grupo",
+        widget=forms.NumberInput(attrs={
+            "id": "id-pp-kilos-brutos",
+            "step": "0.01",
+            "min": "0.01",
+        }),
+    )
+    tara = forms.DecimalField(
+        max_digits=8, decimal_places=2, required=True,
+        min_value=Decimal("0.01"), label="Tara del tipo de bin (kg)",
+        widget=forms.NumberInput(attrs={
+            "id": "id-pp-tara",
+            "step": "0.01",
+            "min": "0.01",
+        }),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        cantidad = cleaned.get("cantidad_bins")
+        brutos = cleaned.get("kilos_brutos_grupo")
+        tara = cleaned.get("tara")
+        if cantidad and brutos is not None and tara is not None:
+            from decimal import Decimal as D
+            netos = brutos - D(str(cantidad)) * tara
+            if netos < 0:
+                raise forms.ValidationError(
+                    "Los kilos netos resultan negativos con estos valores. "
+                    "Verifique kilos brutos y tara."
+                )
+            cleaned["kilos_netos_grupo"] = netos
+        return cleaned
+
+
 class BinForm(forms.Form):
     """Registro de bin en recepcion. El bin_code se genera automaticamente en backend."""
     # --- Campos base del lote (se bloquean tras el primer bin) ---
@@ -227,7 +278,8 @@ class DesverdizadoForm(forms.Form):
 
 
 class IngresoPackingForm(forms.Form):
-    """Ingreso al area de packing."""
+    """Datos de fecha/hora/observaciones para el ingreso a packing.
+    Los kilos se calculan desde los pesajes parciales registrados en sesion."""
     fecha_ingreso = forms.DateField(
         required=False, label="Fecha ingreso",
         widget=forms.DateInput(attrs={"type": "date"}),
@@ -235,14 +287,6 @@ class IngresoPackingForm(forms.Form):
     hora_ingreso = forms.TimeField(
         required=False, label="Hora ingreso",
         widget=forms.TimeInput(attrs={"type": "time", "class": "campo-hora"}),
-    )
-    kilos_bruto_ingreso_packing = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True,
-        label="Kilos bruto",
-    )
-    kilos_neto_ingreso_packing = forms.DecimalField(
-        max_digits=10, decimal_places=2, required=True,
-        label="Kilos neto",
     )
     via_desverdizado = forms.BooleanField(
         required=False, label="Via desverdizado",
@@ -252,14 +296,6 @@ class IngresoPackingForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones",
     )
-
-    def clean(self):
-        cleaned = super().clean()
-        kb = cleaned.get("kilos_bruto_ingreso_packing")
-        kn = cleaned.get("kilos_neto_ingreso_packing")
-        if kb is not None and kn is not None and kn > kb:
-            raise forms.ValidationError("Kilos neto no puede superar kilos bruto.")
-        return cleaned
 
 
 class RegistroPackingForm(forms.Form):
@@ -393,7 +429,10 @@ class ControlProcesoPackingForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         required=False, label="Observaciones generales",
     )
-    rol = forms.CharField(max_length=50, required=False, label="Responsable turno")
+    rol = forms.CharField(
+        max_length=50, required=False, label="Responsable turno",
+        widget=forms.TextInput(attrs={"readonly": True})
+    )
 
 
 class CalidadPalletForm(forms.Form):

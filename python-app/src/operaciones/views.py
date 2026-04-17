@@ -42,6 +42,7 @@ from operaciones.forms import (
     IniciarLoteForm,
     CerrarLoteForm,
     PesajeParcialCierreForm,
+    PesajeParcialIngresoPackingForm,
     BinForm,
     EditBinVariableForm,
     CamaraMantencionForm,
@@ -1345,7 +1346,7 @@ def _lotes_para_paletizar(temporada: str) -> list:
             from infrastructure.repository_factory import get_repositories
             repos = get_repositories()
             lotes = repos.lotes.list_recent(limit=200)
-            return [l for l in lotes if l.is_active and l.etapa_actual in ("Proceso", "Ingreso Packing")]
+            return [l for l in lotes if l.is_active and l.etapa_actual in ("Packing / Proceso", "Ingreso Packing")]
         except Exception:
             return []
     from operaciones.models import IngresoAPacking, PalletLote
@@ -1444,63 +1445,225 @@ class IngresoPackingView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
     template_name = "operaciones/ingreso_packing.html"
     login_url = reverse_lazy("usuarios:login")
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["page_title"] = "Ingreso a Packing"
-        ctx["form"] = IngresoPackingForm()
+    # ------------------------------------------------------------------
+    # Context helper
+    # ------------------------------------------------------------------
+
+    def _build_context_base(self, request):
         temporada = (
-            self.request.session.get("temporada_activa")
+            request.session.get("temporada_activa")
             or str(datetime.date.today().year)
         )
         lotes = _lotes_pendientes_ingreso_packing(temporada)
-        ctx["lotes_pendientes"] = lotes
+
         from django.conf import settings
         if getattr(settings, "PERSISTENCE_BACKEND", "sqlite").lower().strip() == "dataverse":
             from infrastructure.repository_factory import get_repositories
-            ctx["lotes_data_json"] = _lotes_json_from_records(lotes, get_repositories())
+            lotes_data_json = _lotes_json_from_records(lotes, get_repositories())
         else:
-            ctx["lotes_data_json"] = _lotes_data_json(temporada, lotes)
-        ctx["lote_info"] = {}
-        return ctx
+            lotes_data_json = _lotes_data_json(temporada, lotes)
+
+        lote_activo_code = request.session.get("lote_activo_ingreso_packing")
+        pesajes = request.session.get("pesajes_ingreso_packing", [])
+
+        lote_info = {}
+        bins_pesados = 0
+        bins_pendientes = 0
+        from decimal import Decimal as D
+        bruto_acumulado = D("0")
+        neto_acumulado = D("0")
+
+        if lote_activo_code:
+            lote_info = _lote_info(temporada, lote_activo_code) or {}
+            bins_pesados = sum(p["cantidad_bins"] for p in pesajes)
+            cantidad_bins_lote = lote_info.get("cantidad_bins", 0) or 0
+            bins_pendientes = cantidad_bins_lote - bins_pesados
+            bruto_acumulado = sum(D(str(p["kilos_brutos"])) for p in pesajes)
+            neto_acumulado = sum(D(str(p["kilos_netos"])) for p in pesajes)
+
+        return {
+            "page_title": "Ingreso a Packing",
+            "lotes_pendientes": lotes,
+            "lotes_data_json": lotes_data_json,
+            "lote_activo_code": lote_activo_code,
+            "lote_info": lote_info,
+            "pesajes_ingreso_packing": pesajes,
+            "bins_pesados": bins_pesados,
+            "bins_pendientes": bins_pendientes,
+            "bruto_acumulado": bruto_acumulado,
+            "neto_acumulado": neto_acumulado,
+            "form_pesaje_parcial": PesajeParcialIngresoPackingForm(),
+            "form_datos": IngresoPackingForm(),
+            "codigo_operador": request.session.get("crf21_codigooperador", ""),
+        }
+
+    # ------------------------------------------------------------------
+    # GET
+    # ------------------------------------------------------------------
+
+    def get(self, request, *args, **kwargs):
+        ctx = self._build_context_base(request)
+        return render(request, self.template_name, ctx)
+
+    # ------------------------------------------------------------------
+    # POST dispatcher
+    # ------------------------------------------------------------------
 
     def post(self, request, *args, **kwargs):
-        form = IngresoPackingForm(request.POST)
+        action = request.POST.get("action", "")
+        dispatch = {
+            "seleccionar_lote":       self._handle_seleccionar_lote,
+            "agregar_pesaje_packing": self._handle_agregar_pesaje_packing,
+            "eliminar_pesaje_packing": self._handle_eliminar_pesaje_packing,
+            "registrar_ingreso":      self._handle_registrar_ingreso,
+        }
+        handler = dispatch.get(action)
+        if not handler:
+            messages.error(request, "Accion desconocida.")
+            return redirect("operaciones:ingreso_packing")
+        return handler(request)
+
+    # ------------------------------------------------------------------
+    # Action handlers
+    # ------------------------------------------------------------------
+
+    def _handle_seleccionar_lote(self, request):
+        lote_code = request.POST.get("lote_code", "").strip()
+        if not lote_code:
+            request.session.pop("lote_activo_ingreso_packing", None)
+            request.session.pop("pesajes_ingreso_packing", None)
+            return redirect("operaciones:ingreso_packing")
+        temporada = _temporada(request)
+        info = _lote_info(temporada, lote_code)
+        if not info:
+            messages.error(request, f"Lote {lote_code} no encontrado.")
+            return redirect("operaciones:ingreso_packing")
+        request.session["lote_activo_ingreso_packing"] = lote_code
+        request.session["pesajes_ingreso_packing"] = []
+        messages.success(request, f"Lote {lote_code} seleccionado. Registre los pesajes parciales.")
+        return redirect("operaciones:ingreso_packing")
+
+    def _handle_agregar_pesaje_packing(self, request):
+        lote_code = request.session.get("lote_activo_ingreso_packing")
+        if not lote_code:
+            messages.error(request, "No hay lote activo. Seleccione un lote primero.")
+            return redirect("operaciones:ingreso_packing")
+
+        form = PesajeParcialIngresoPackingForm(request.POST)
         if not form.is_valid():
-            messages.error(request, "Formulario invalido.")
-            ctx = self.get_context_data()
-            ctx["form"] = form
-            return render(request, self.template_name, ctx)
+            for errs in form.errors.values():
+                for e in errs:
+                    messages.error(request, e)
+            return redirect("operaciones:ingreso_packing")
 
         cd = form.cleaned_data
-        lote_code = request.POST.get("lote_code", "").strip()
+        cantidad = cd["cantidad_bins"]
+        kilos_brutos = float(cd["kilos_brutos_grupo"])
+        tara = float(cd["tara"])
+        kilos_netos = float(cd["kilos_netos_grupo"])
+
         temporada = _temporada(request)
-        info = _lote_info(temporada, lote_code) if lote_code else {}
+        lote_info = _lote_info(temporada, lote_code) or {}
+        cantidad_bins_lote = lote_info.get("cantidad_bins", 0) or 0
+
+        if cantidad_bins_lote == 0:
+            messages.error(request, "No se pudo determinar la cantidad de bins del lote. Intente nuevamente.")
+            return redirect("operaciones:ingreso_packing")
+
+        pesajes = list(request.session.get("pesajes_ingreso_packing", []))
+        bins_pesados = sum(p["cantidad_bins"] for p in pesajes)
+        bins_pendientes = cantidad_bins_lote - bins_pesados
+
+        if cantidad > bins_pendientes:
+            messages.error(
+                request,
+                f"No puede registrar {cantidad} bin(s): solo quedan {bins_pendientes} pendiente(s) de pesar.",
+            )
+            return redirect("operaciones:ingreso_packing")
+
+        pesajes.append({
+            "cantidad_bins": cantidad,
+            "kilos_brutos": kilos_brutos,
+            "tara": tara,
+            "kilos_netos": round(kilos_netos, 2),
+        })
+        request.session["pesajes_ingreso_packing"] = pesajes
+        messages.success(
+            request,
+            f"Pesaje registrado: {cantidad} bin(s) — {kilos_netos:.2f} kg netos.",
+        )
+        return redirect("operaciones:ingreso_packing")
+
+    def _handle_eliminar_pesaje_packing(self, request):
+        try:
+            idx = int(request.POST.get("pesaje_idx", -1))
+        except (ValueError, TypeError):
+            idx = -1
+        pesajes = list(request.session.get("pesajes_ingreso_packing", []))
+        if 0 <= idx < len(pesajes):
+            pesajes.pop(idx)
+            request.session["pesajes_ingreso_packing"] = pesajes
+            messages.success(request, "Pesaje eliminado.")
+        else:
+            messages.error(request, "Pesaje no encontrado.")
+        return redirect("operaciones:ingreso_packing")
+
+    def _handle_registrar_ingreso(self, request):
+        lote_code = request.session.get("lote_activo_ingreso_packing")
+        if not lote_code:
+            messages.error(request, "No hay lote activo.")
+            return redirect("operaciones:ingreso_packing")
+
+        temporada = _temporada(request)
+        lote_info = _lote_info(temporada, lote_code) or {}
+        cantidad_bins_lote = lote_info.get("cantidad_bins", 0) or 0
+
+        pesajes = request.session.get("pesajes_ingreso_packing", [])
+        bins_pesados = sum(p["cantidad_bins"] for p in pesajes)
+
+        if bins_pesados != cantidad_bins_lote:
+            pendientes = cantidad_bins_lote - bins_pesados
+            messages.error(
+                request,
+                f"Quedan {pendientes} bin(s) pendientes de pesar. "
+                "Complete el pesaje antes de registrar el ingreso.",
+            )
+            return redirect("operaciones:ingreso_packing")
+
+        form = IngresoPackingForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Formulario de datos invalido.")
+            return redirect("operaciones:ingreso_packing")
+
+        cd = form.cleaned_data
+        from decimal import Decimal as D
+        kilos_bruto_total = float(sum(D(str(p["kilos_brutos"])) for p in pesajes))
+        kilos_neto_total = float(sum(D(str(p["kilos_netos"])) for p in pesajes))
 
         payload = {
             "temporada": temporada,
             "lote_code": lote_code,
             "operator_code": request.session.get("crf21_codigooperador", ""),
             "source_system": "web",
-            "via_desverdizado": cd.get("via_desverdizado") or info.get("via_desverdizado", False),
+            "via_desverdizado": cd.get("via_desverdizado") or lote_info.get("via_desverdizado", False),
             "extra": {
                 "fecha_ingreso": _serialize_form_value(cd["fecha_ingreso"]) if cd.get("fecha_ingreso") else None,
                 "hora_ingreso": _serialize_form_value(cd["hora_ingreso"]) if cd.get("hora_ingreso") else None,
-                "kilos_bruto_ingreso_packing": float(cd["kilos_bruto_ingreso_packing"]) if cd.get("kilos_bruto_ingreso_packing") else None,
-                "kilos_neto_ingreso_packing": float(cd["kilos_neto_ingreso_packing"]) if cd.get("kilos_neto_ingreso_packing") else None,
+                "kilos_bruto_ingreso_packing": kilos_bruto_total,
+                "kilos_neto_ingreso_packing": kilos_neto_total,
                 "observaciones": cd.get("observaciones"),
             },
         }
         result = registrar_ingreso_packing(payload)
         if result.ok:
+            request.session.pop("lote_activo_ingreso_packing", None)
+            request.session.pop("pesajes_ingreso_packing", None)
             _consulta_cache_invalidate()
             messages.success(request, result.message)
             return redirect("operaciones:ingreso_packing")
         for err in result.errors:
             messages.error(request, err)
-        ctx = self.get_context_data()
-        ctx["form"] = form
-        ctx["lote_info"] = info
-        return render(request, self.template_name, ctx)
+        return redirect("operaciones:ingreso_packing")
 
 
 # ---------------------------------------------------------------------------
@@ -1592,7 +1755,9 @@ class ControlProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "Control Proceso Packing"
-        ctx["form"] = ControlProcesoPackingForm()
+        form = ControlProcesoPackingForm()
+        form.fields['rol'].initial = self.request.session.get("crf21_codigooperador", "")
+        ctx["form"] = form
         temporada = (
             self.request.session.get("temporada_activa")
             or str(datetime.date.today().year)
@@ -1675,7 +1840,7 @@ class ControlProcesoView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
                 "n_cajas_producidas": cd.get("n_cajas_producidas"),
                 "rendimiento_lote_pct": _dec("rendimiento_lote_pct"),
                 "observaciones_generales": cd.get("observaciones_generales"),
-                "rol": cd.get("rol"),
+                "rol": request.session.get("crf21_codigooperador", ""),
             },
         }
         result = registrar_control_proceso_packing(payload)
