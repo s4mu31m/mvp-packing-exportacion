@@ -1475,13 +1475,16 @@ def _pallet_info(temporada: str, pallet_code: str) -> dict:
         lote_code = ""
         campos = {}
         peso_total = None
-        pl = pallet.pallet_lotes.select_related("lote").first()
+        pl = pallet.pallet_lotes.select_related("lote", "lote__ingreso_packing").first()
         if pl:
             lote_code = pl.lote.lote_code
             campos = _campos_base_lote(pl.lote)
-            ingreso = pl.lote.ingreso_packing
-            if ingreso and ingreso.kilos_neto_ingreso_packing:
-                peso_total = float(ingreso.kilos_neto_ingreso_packing)
+            try:
+                ingreso = pl.lote.ingreso_packing
+                if ingreso.kilos_neto_ingreso_packing:
+                    peso_total = float(ingreso.kilos_neto_ingreso_packing)
+            except Exception:
+                pass
         if peso_total is None:
             peso_total = float(pallet.peso_total_kg) if pallet.peso_total_kg else None
         return {
