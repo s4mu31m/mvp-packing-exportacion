@@ -683,13 +683,54 @@ input[type="checkbox"]:focus {
   user-select: none;
 }
 
-/* ============ LAYOUT UTILITIES ============ */
-.flex-row  { display: flex; align-items: center; gap: 12px; }
-.flex-col  { display: flex; flex-direction: column; gap: 12px; }
-.mt-4      { margin-top: 16px; }
-.ml-auto   { margin-left: auto; }
-.grid-2    { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.grid-3    { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+/* Layout utilities — definidas en base.css */
+
+/* ============ LOGIN ============ */
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 48px 32px 36px;
+  box-shadow: var(--shadow-lg);
+}
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 32px;
+}
+.login-logo-mark { font-size: 1.4rem; }
+.login-brand-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Input con error de credenciales — borde rojo sin cambiar tamaño */
+.form-input.input-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.15);
+}
+/* Mini-alerta de credenciales incorrectas */
+.login-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
 
 /* ============ FORM HELPERS ============ */
 .form-hint {

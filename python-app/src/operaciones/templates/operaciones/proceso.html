@@ -2,7 +2,7 @@
 
 {% block title %}Proceso Packing — CaliPro{% endblock %}
 {% block page_title %}Proceso Packing{% endblock %}
-{% block page_subtitle %}Registro de produccion en linea{% endblock %}
+{% block page_subtitle %}Registro de producción en línea{% endblock %}
 
 {% block page_body %}
 {% if messages %}
@@ -21,7 +21,7 @@
       {% if lotes_pendientes %}
         <div class="form-group">
           <label class="form-label">Lotes con ingreso a packing</label>
-          <select id="lote-selector" class="form-control">
+          <select id="lote-selector" class="form-select">
             <option value="">— Seleccione un lote —</option>
             {% for lote in lotes_pendientes %}
               <option value="{{ lote.lote_code }}">
@@ -34,15 +34,15 @@
         <p style="color:var(--text-muted);font-size:.85rem">Sin lotes con ingreso a packing en temporada actual.</p>
       {% endif %}
       <div class="form-group" style="margin-top:.5rem">
-        <label class="form-label">Codigo de lote</label>
-        <input type="text" class="form-control" id="lote-code-input"
+        <label class="form-label">Código de lote</label>
+        <input type="text" class="form-input" id="lote-code-input"
                placeholder="Ej: LP-2026-001" style="font-family:monospace">
       </div>
     </div>
 
     <!-- Panel contexto -->
     <div class="card" id="lote-context-panel" style="margin-bottom:1rem;display:none;
-         background:var(--surface-0);border:1px solid var(--teal-400,#2dd4bf)">
+         background:var(--bg-base);border:1px solid var(--teal-400,#2dd4bf)">
       <div class="card-title" style="font-size:.85rem;margin-bottom:.8rem;color:var(--teal-400,#2dd4bf)">
         Contexto del lote
       </div>
@@ -59,20 +59,22 @@
 
     <!-- Formulario -->
     <div class="card">
-      <div class="card-title" style="margin-bottom:1rem">Registro de produccion</div>
+      <div class="card-title" style="margin-bottom:1rem">Registro de producción</div>
       <form method="post" id="form-proceso">
         {% csrf_token %}
         <input type="hidden" name="temporada" value="">
         <input type="hidden" name="lote_code" id="lote-code-hidden" value="">
 
-        {% for field in form %}
-          <div class="form-group">
-            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
-            {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
-          </div>
-        {% endfor %}
+        <div style="display:flex;flex-direction:column;gap:1rem;margin-bottom:1rem">
+          {% for field in form %}
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+              {% for err in field.errors %}<div class="form-error">{{ err }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
 
         <div class="flex-row mt-4">
           <button type="reset" class="btn btn-ghost">Limpiar</button>

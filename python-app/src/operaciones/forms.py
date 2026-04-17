@@ -332,18 +332,12 @@ class RegistroPackingForm(forms.Form):
         max_length=50, required=False, label="Linea de proceso",
     )
     categoria_calidad = forms.CharField(
-        max_length=50, required=False, label="Categoria calidad",
-        help_text="Texto libre — pendiente definicion",
+        max_length=50, required=False, label="Categoría calidad",
     )
     calibre = forms.CharField(max_length=20, required=False, label="Calibre")
     tipo_envase = forms.CharField(max_length=50, required=False, label="Tipo envase")
     cantidad_cajas_producidas = forms.IntegerField(
         required=False, label="Cantidad cajas producidas",
-    )
-    merma_seleccion_pct = forms.DecimalField(
-        max_digits=5, decimal_places=2, required=False,
-        label="Merma seleccion (%) — deprecated",
-        help_text="Usar merma_seleccion_kg",
     )
     merma_seleccion_kg = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False,
