@@ -3,6 +3,7 @@ import os
 from .base import *
 
 DEBUG = False
+ENABLE_DEV_DIAGNOSTICS = False
 
 # Falla en startup si SECRET_KEY no fue configurada como variable de entorno real.
 # Nunca debe desplegarse con el valor por defecto "dev-only-change-me".

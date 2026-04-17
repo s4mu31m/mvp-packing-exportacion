@@ -58,7 +58,7 @@ def make_user(transactional_db, test_backend):
     """
 
     if test_backend == "sqlite":
-        from usuarios.test.helpers import make_profile
+        from tests.unit.usuarios.helpers import make_profile
 
         def _make(
             username: str,

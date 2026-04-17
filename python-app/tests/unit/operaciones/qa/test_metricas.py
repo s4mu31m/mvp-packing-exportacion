@@ -16,7 +16,7 @@ from collections import defaultdict
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 
-from operaciones.test.qa.base import (
+from tests.unit.operaciones.qa.base import (
     QASetupMixin,
     TEMPORADA,
     VARIEDAD_BLANCA,

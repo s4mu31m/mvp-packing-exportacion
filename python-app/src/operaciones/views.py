@@ -2733,13 +2733,13 @@ def _consulta_dataset(
             logging.getLogger(__name__).warning("Refresco manual consulta fallo: %s", exc)
             if cache_rows:
                 meta["warning_message"] = (
-                    "No fue posible sincronizar Dataverse. Se muestra cache disponible."
+                    "No fue posible actualizar la informacion. Se muestra la ultima version disponible."
                 )
                 lotes = _filtrar_por_fecha(_filtrar_lotes_consulta(cache_rows.get("lotes", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
                 pallets = _filtrar_por_fecha(_filtrar_pallets_consulta(cache_rows.get("pallets", []), filtro_productor, filtro_estado), fecha_desde, fecha_hasta)
                 return lotes, pallets, meta
             meta["warning_message"] = (
-                "No fue posible sincronizar Dataverse y no existe cache disponible."
+                "No fue posible actualizar la informacion y no hay datos disponibles."
             )
             return [], [], meta
 
@@ -2765,7 +2765,7 @@ def _consulta_dataset(
     except Exception as exc:
         logging.getLogger(__name__).warning("Carga inicial Dataverse para consulta fallo: %s", exc)
         meta["warning_message"] = (
-            "No fue posible consultar Dataverse y no hay cache disponible."
+            "No fue posible cargar la informacion y no hay datos disponibles."
         )
         return [], [], meta
 
@@ -3778,7 +3778,7 @@ class ConsultaJefaturaView(LoginRequiredMixin, JefaturaRequiredMixin, TemplateVi
         if warning_message:
             messages.warning(self.request, warning_message)
         elif force_refresh and cache_meta.get("refreshed_now"):
-            messages.success(self.request, "Consulta sincronizada desde Dataverse.")
+            messages.success(self.request, "Informacion actualizada.")
         return ctx
 
 

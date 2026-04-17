@@ -16,7 +16,7 @@ import datetime
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from operaciones.test.qa.base import (
+from tests.unit.operaciones.qa.base import (
     QASetupMixin,
     TEMPORADA,
     assert_acceso_bloqueado,

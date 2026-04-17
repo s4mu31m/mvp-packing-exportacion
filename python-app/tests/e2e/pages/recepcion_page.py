@@ -55,10 +55,6 @@ class RecepcionPage:
     def agregar_bin(self) -> None:
         self.page.get_by_role("button", name="Agregar Bin").click()
 
-    def simular_scan(self, code: str) -> None:
-        """Simula la lectura de un escáner de código de barras usando scan.js."""
-        self.page.evaluate("code => window.simularScan(code)", code)
-
     def cerrar_lote(self) -> None:
         # El texto del botón incluye la cantidad de bins: "Cerrar Lote (N bins)"
         self.page.get_by_role("button", name="Cerrar Lote").click()

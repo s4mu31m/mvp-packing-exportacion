@@ -1,99 +1,58 @@
-# Configuración del Entorno de Desarrollo
+﻿# Setup de Desarrollo
 
-## Para trabajar con este proyecto:
+Guia de configuracion local para ejecutar el backend Django.
 
-### 1. Configurar credenciales de Dataverse
+## 1) Preparar Python y dependencias
 
-#### IMPORTANTE: La aplicación Azure ya está configurada
+Desde `python-app/`:
 
-La aplicación **"MVP-Packing-Backend"** ya está registrada en Azure AD y configurada en Power Platform. **NO necesitas crear una nueva aplicación**.
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-#### A. Obtener credenciales de la aplicación existente
+## 2) Configurar variables de entorno
 
-1. Ve al **Azure Portal** (portal.azure.com)
-2. Navega a **Azure Active Directory** > **App registrations**  
-3. **Busca y selecciona** la aplicación existente: **"MVP-Packing-Backend"**
-4. En la página **Overview**, copia:
-   - **Application (client) ID**
-   - **Directory (tenant) ID**
-5. Ve a **Certificates & secrets**
-6. Si hay un client secret existente, úsalo. Si no o ha expirado:
-   - Haz clic en **"New client secret"**
-   - Anota el **Client secret** (¡guárdalo inmediatamente!)
+Crear archivo `python-app/.env` con estos valores minimos:
 
-#### B. Verificar configuración en Power Platform (Opcional)
+```env
+PERSISTENCE_BACKEND=sqlite
+DATAVERSE_URL=https://<org>.crm.dynamics.com
+DATAVERSE_TENANT_ID=<tenant-id>
+DATAVERSE_CLIENT_ID=<client-id>
+DATAVERSE_CLIENT_SECRET=<client-secret>
+DATAVERSE_API_VERSION=v9.2
+DATAVERSE_TIMEOUT=30
+```
 
-La aplicación ya debería estar configurada, pero puedes verificar:
-1. Ve al **Power Platform Admin Center** (admin.powerplatform.microsoft.com)
-2. **Environments** > Tu entorno > **Users + permissions** > **Application users**
-3. Verifica que **"MVP-Packing-Backend"** aparece en la lista con roles asignados
+Notas:
 
-#### C. Configurar archivo .env
+- usa `PERSISTENCE_BACKEND=sqlite` para desarrollo local sin dependencia externa;
+- cambia a `PERSISTENCE_BACKEND=dataverse` cuando quieras probar integracion real.
 
-1. Copia el archivo `.env.example` como `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Obtén la **DATAVERSE_URL** del Power Platform Admin Center:
-   - Environments > Tu entorno > **Environment URL**
-   - Formato: `https://[tu-org].api.crm.dynamics.com`
-
-3. Completa el archivo `.env` con las credenciales obtenidas:
-   - `DATAVERSE_URL`: URL del entorno Dataverse
-   - `DATAVERSE_TENANT_ID`: Directory (tenant) ID de la app MVP-Packing-Backend
-   - `DATAVERSE_CLIENT_ID`: Application (client) ID de la app MVP-Packing-Backend  
-   - `DATAVERSE_CLIENT_SECRET`: Client secret de la app MVP-Packing-Backend
-
-**Nota:** Si otro desarrollador ya configuró y tienes las credenciales funcionando, puedes usar las mismas en lugar de buscarlas en Azure.
-   
-### 2. Configurar entorno Python
-
-1. Crear entorno virtual:
-   ```bash
-   python -m venv .venv
-   ```
-
-2. Activar entorno:
-   ```bash
-   # Windows
-   .venv\Scripts\activate
-   
-   # Linux/Mac
-   source .venv/bin/activate
-   ```
-
-3. Instalar dependencias:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-### 3. Configurar base de datos
+## 3) Migrar base local
 
 ```bash
 cd src
 python manage.py migrate
 ```
 
-### 4. Ejecutar servidor
+## 4) Levantar servidor
 
 ```bash
 python manage.py runserver
 ```
 
-### 5. Probar conectividad
+## 5) Verificaciones basicas
 
-Visita estos endpoints para verificar que la conexión funciona:
-- http://127.0.0.1:8000/api/dataverse/ping/
-- http://127.0.0.1:8000/api/dataverse/check_tables/
-- http://127.0.0.1:8000/api/dataverse/save_first_bin_code/  (POST)
-- http://127.0.0.1:8000/api/dataverse/get_first_bin_code/
+- Login: <http://127.0.0.1:8000/usuarios/login/>
+- Dashboard: <http://127.0.0.1:8000/operaciones/>
+- Ping Dataverse: <http://127.0.0.1:8000/api/dataverse/ping/>
+- Check tables Dataverse: <http://127.0.0.1:8000/api/dataverse/check_tables/>
 
-Las vistas operativas (`/operaciones/...`) requieren autenticación.
-Usa http://127.0.0.1:8000/usuarios/login/ para iniciar sesión antes de acceder a ellas.
+## Seguridad
 
-## Notas de Seguridad
-
-- **NUNCA** subas el archivo `.env` al repositorio
-- Las credenciales deben compartirse por canales seguros (Teams, email corporativo, etc.)
-- El archivo `.env` está en `.gitignore` para protección automática
+- no commitear `python-app/.env`;
+- compartir secretos solo por canales seguros;
+- rotar secretos comprometidos inmediatamente.

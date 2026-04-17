@@ -1,10 +1,10 @@
-"""
+﻿"""
 Implementaciones Dataverse de los repositorios de dominio.
 
 Cada repositorio usa DataverseClient para realizar operaciones OData v4 contra
 el ambiente configurado en las variables de entorno DATAVERSE_*.
 
-ADAPTACIONES BACKEND → DATAVERSE (schema real validado 2026-03-29):
+ADAPTACIONES BACKEND â†’ DATAVERSE (schema real validado 2026-03-29):
   - Los nombres de tabla y campo provienen del esquema real (prefijo crf21_).
   - ``temporada`` no existe en Dataverse; se filtra por rango de fechas cuando
     sea necesario, o se ignora si el filtro por codigo es suficientemente
@@ -16,7 +16,7 @@ ADAPTACIONES BACKEND → DATAVERSE (schema real validado 2026-03-29):
   - No existe tabla registro_etapas; DataverseRegistroEtapaRepository es no-op
     (registra en log local sin persistir en Dataverse).
   - DataverseSequenceCounterRepository genera correlativos contando registros
-    existentes en Dataverse — no requiere tabla dedicada. No es atomico, pero
+    existentes en Dataverse â€” no requiere tabla dedicada. No es atomico, pero
     es aceptable para la escala del MVP.
 
 ESTADO (derivado en Dataverse):
@@ -27,7 +27,7 @@ ESTADO (derivado en Dataverse):
   - La vista RecepcionView limpia la sesion activa al cerrar (session pop), por
     lo que el usuario no puede seguir agregando bins aunque el estado en
     Dataverse no cambie formalmente.
-  - Esta es una limitacion conocida del modelo Dataverse. Ver TECHNICAL_CHANGES.md.
+  - Esta es una limitacion conocida del modelo Dataverse y se mantiene documentada en las guias operativas vigentes.
 
 TRANSACCIONES:
   Dataverse Web API no soporta transacciones ACID. En error parcial en
@@ -157,7 +157,7 @@ def _parse_datetime(val: Any) -> Optional[datetime.datetime]:
         return None
     try:
         s = str(val).strip()
-        # Normalizar zona horaria: "2026-04-15T10:30:00Z" → aware UTC
+        # Normalizar zona horaria: "2026-04-15T10:30:00Z" â†’ aware UTC
         if s.endswith("Z"):
             s = s[:-1] + "+00:00"
         return datetime.datetime.fromisoformat(s)
@@ -181,7 +181,7 @@ def _str(val: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Helpers: OData row → record type
+# Helpers: OData row â†’ record type
 # ---------------------------------------------------------------------------
 
 def _row_to_bin(row: dict) -> BinRecord:
@@ -235,7 +235,7 @@ def _row_to_lote(row: dict) -> LoteRecord:
             else None
         ),
         # estado, temporada_codigo, correlativo_temporada no existen en Dataverse.
-        # etapa_actual se lee desde crf21_etapa_actual; None si no ha sido escrito aún.
+        # etapa_actual se lee desde crf21_etapa_actual; None si no ha sido escrito aÃºn.
         estado="abierto",
         temporada_codigo="",
         correlativo_temporada=None,
@@ -823,7 +823,7 @@ class DataverseBinRepository(BinRepository):
             )
             if row:
                 return _row_to_bin(row)
-        # Fallback a GET (body vacío o sin cambios)
+        # Fallback a GET (body vacÃ­o o sin cambios)
         result = self._client.list_rows(
             ENTITY_SET_BIN,
             select=_BIN_SELECT,
@@ -984,14 +984,14 @@ class DataverseLoteRepository(LoteRepository):
                 v = v.isoformat() if hasattr(v, "isoformat") else str(v)
             body[dv_field] = v
         # Campos no soportados en Dataverse: estado, temporada_codigo,
-        # correlativo_temporada — se ignoran silenciosamente.
+        # correlativo_temporada â€” se ignoran silenciosamente.
         if body:
             row = self._client.update_row(
                 ENTITY_SET_LOTE, str(lote_id), body, return_representation=True
             )
-            # Invalidar cachés de list_recent para que el cambio de etapa_actual
+            # Invalidar cachÃ©s de list_recent para que el cambio de etapa_actual
             # sea visible de inmediato sin esperar el TTL de 30s.
-            # Se invalidan todos los límites conocidos (dashboard=50, desverdizado=200).
+            # Se invalidan todos los lÃ­mites conocidos (dashboard=50, desverdizado=200).
             try:
                 from django.core.cache import caches
                 _dv_cache = caches["dataverse"]
@@ -1011,7 +1011,7 @@ class DataverseLoteRepository(LoteRepository):
                     pass
                 return record
 
-        # Fallback a GET (body vacío o PATCH sin cambios → 204)
+        # Fallback a GET (body vacÃ­o o PATCH sin cambios â†’ 204)
         result = self._client.list_rows(
             ENTITY_SET_LOTE,
             select=_LOTE_SELECT,
@@ -1351,7 +1351,7 @@ class DataversePalletLoteRepository(PalletLoteRepository):
 
 
 # ---------------------------------------------------------------------------
-# RegistroEtapaRepository — no-op (no existe tabla en Dataverse)
+# RegistroEtapaRepository â€” no-op (no existe tabla en Dataverse)
 # ---------------------------------------------------------------------------
 
 class DataverseRegistroEtapaRepository(RegistroEtapaRepository):
@@ -1430,13 +1430,13 @@ class DataverseRegistroEtapaRepository(RegistroEtapaRepository):
 
 
 # ---------------------------------------------------------------------------
-# SequenceCounterRepository — conteo de registros existentes en Dataverse
+# SequenceCounterRepository â€” conteo de registros existentes en Dataverse
 # ---------------------------------------------------------------------------
 
 class DataverseSequenceCounterRepository(SequenceCounterRepository):
     """
     Genera correlativos contando registros existentes en Dataverse.
-    No es atomico — race conditions posibles bajo alta concurrencia.
+    No es atomico â€” race conditions posibles bajo alta concurrencia.
     Aceptable para la escala del MVP.
     """
 
@@ -1640,7 +1640,7 @@ class DataverseDesverdizadoRepository(DesverdizadoRepository):
                     if lid and lid not in resultado:
                         resultado[lid] = _row_to_desverdizado(row, lid)
             except Exception:
-                logger.warning("list_by_lotes desverdizado chunk %d falló", i // _CHUNK)
+                logger.warning("list_by_lotes desverdizado chunk %d fallÃ³", i // _CHUNK)
         return resultado
 
     def create(
@@ -1811,7 +1811,7 @@ class DataverseIngresoAPackingRepository(IngresoAPackingRepository):
                     if lid and lid not in resultado:
                         resultado[lid] = _row_to_ingreso_packing(row, lid)
             except Exception:
-                logger.warning("list_by_lotes ingresos_packing chunk %d falló", i // _CHUNK)
+                logger.warning("list_by_lotes ingresos_packing chunk %d fallÃ³", i // _CHUNK)
         return resultado
 
     def create(
@@ -2240,7 +2240,7 @@ class DataverseMedicionTemperaturaSalidaRepository(MedicionTemperaturaSalidaRepo
 
 
 # ---------------------------------------------------------------------------
-# Resolver de etapa actual — fuente principal: campo persistido en Dataverse
+# Resolver de etapa actual â€” fuente principal: campo persistido en Dataverse
 # ---------------------------------------------------------------------------
 
 def resolve_etapa_lote(lote, repos=None) -> str:
@@ -2321,7 +2321,7 @@ def resolve_etapa_lote(lote, repos=None) -> str:
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Dataverse repositories — Planillas de Control de Calidad
+# Dataverse repositories â€” Planillas de Control de Calidad
 # ---------------------------------------------------------------------------
 
 def _parse_int(value) -> Optional[int]:
@@ -2750,3 +2750,4 @@ def build_dataverse_repositories() -> Repositories:
         planillas_calidad_packing=DataversePlanillaCalidadPackingRepository(client),
         planillas_calidad_camara=DataversePlanillaCalidadCamaraRepository(client),
     )
+

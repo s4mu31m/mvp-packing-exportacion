@@ -122,10 +122,4 @@
     }
   }
 
-  /* ── Exponer función pública para simular scan en desarrollo ─ */
-  window.simularScan = function (code) {
-    code = code || 'BIN-' + Math.floor(1000 + Math.random() * 9000);
-    processScan(code);
-  };
-
 })();

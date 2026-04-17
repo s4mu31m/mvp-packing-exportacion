@@ -20,7 +20,7 @@ from operaciones.models import (
     LotePlantaEstado,
     RegistroEtapa,
 )
-from operaciones.test.qa.base import (
+from tests.unit.operaciones.qa.base import (
     QASetupMixin,
     TEMPORADA,
     VARIEDAD_BLANCA,
@@ -147,7 +147,7 @@ class EntidadesInexistentesTest(TestCase):
             msg="pallet_code inexistente en paletizado no debe devolver 500")
 
     def test_camara_frio_pallet_inexistente(self):
-        from operaciones.test.qa.base import build_camara_frio_payload
+        from tests.unit.operaciones.qa.base import build_camara_frio_payload
         resp = self.client_cam.post(
             reverse("operaciones:camaras"),
             build_camara_frio_payload("PAL-NOEXISTE-QA"),

@@ -33,7 +33,7 @@ from usuarios.permissions import (
     get_roles, is_admin, is_jefatura, has_role, puede_acceder_modulo,
     parsear_roles, normalizar_roles, SESSION_KEY_ROL,
 )
-from usuarios.test.helpers import make_profile  # fuente única de verdad
+from tests.unit.usuarios.helpers import make_profile  # fuente única de verdad
 
 User = get_user_model()
 

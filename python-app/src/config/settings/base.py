@@ -40,6 +40,13 @@ DATAVERSE_TIMEOUT = int(os.getenv("DATAVERSE_TIMEOUT", "30"))
 #   "dataverse" → Microsoft Dataverse vía Web API OData v4
 PERSISTENCE_BACKEND = os.getenv("PERSISTENCE_BACKEND", "sqlite")
 
+# Endpoints de diagnóstico internos.
+# Siempre deshabilitados por defecto: se habilitan solo con flag explícito.
+ENABLE_DEV_DIAGNOSTICS = os.getenv(
+    "ENABLE_DEV_DIAGNOSTICS",
+    "false",
+).lower() == "true"
+
 # Cache JSON para consulta jefatura en backend Dataverse
 try:
     CONSULTA_DATAVERSE_CACHE_TTL_SECONDS = int(

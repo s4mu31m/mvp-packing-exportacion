@@ -23,7 +23,7 @@ from django.urls import reverse
 
 from domain.repositories.base import LoteRecord
 from operaciones.application.results import UseCaseResult
-from operaciones.test.qa.base import QASetupMixin, TEMPORADA
+from tests.unit.operaciones.qa.base import QASetupMixin, TEMPORADA
 
 # Lote ficticio que representa un lote recién creado en Recepcion
 LOTE_CODE = "LP-2025-2026-0001"

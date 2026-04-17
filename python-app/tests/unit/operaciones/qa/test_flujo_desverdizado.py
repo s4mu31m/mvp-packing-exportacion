@@ -32,7 +32,7 @@ from operaciones.models import (
     TipoEvento,
     DisponibilidadCamara,
 )
-from operaciones.test.qa.base import (
+from tests.unit.operaciones.qa.base import (
     QASetupMixin,
     TEMPORADA,
     VARIEDAD_ROJA,

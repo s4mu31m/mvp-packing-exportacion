@@ -5,11 +5,6 @@
 {% block page_subtitle %}Trazabilidad y estado - Temporada {{ temporada }}{% endblock %}
 
 {% block page_actions %}
-  {% if is_dataverse_backend %}
-    <a href="{{ refresh_url }}" class="btn btn-ghost btn-sm" title="Sincronizar datos desde Dataverse">
-      Refrescar
-    </a>
-  {% endif %}
   <a href="{{ export_csv_url }}" class="btn btn-ghost btn-sm" title="Exportar vista actual a CSV">
     Exportar CSV
   </a>
@@ -85,19 +80,6 @@
       <span style="color:var(--teal-400,#2dd4bf)">Filtros activos</span>
     {% endif %}
   </div>
-  {% if is_dataverse_backend %}
-    <div style="margin-top:.3rem;font-size:.78rem;color:var(--text-dim);display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-      <span>Cache Dataverse:
-        {% if cache_last_updated_display %}actualizada {{ cache_last_updated_display }}{% else %}sin inicializar{% endif %}
-      </span>
-      {% if cache_is_stale %}
-        <span style="color:var(--warning,#f59e0b)">· cache vencido</span>
-      {% endif %}
-      {% if background_refresh_started %}
-        <span style="color:var(--teal-400,#2dd4bf)">· refrescando...</span>
-      {% endif %}
-    </div>
-  {% endif %}
 </div>
 
 {% if kpis %}

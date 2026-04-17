@@ -26,7 +26,7 @@ from operaciones.models import (
     PalletLote,
     TipoEvento,
 )
-from operaciones.test.qa.base import (
+from tests.unit.operaciones.qa.base import (
     QASetupMixin,
     TEMPORADA,
     VARIEDAD_BLANCA,

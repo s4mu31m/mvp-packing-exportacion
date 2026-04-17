@@ -10,7 +10,7 @@ from operaciones.application.use_cases import (
     cerrar_lote_recepcion,
 )
 from operaciones.models import Lote, LotePlantaEstado
-from operaciones.test.helpers import base_payload
+from tests.unit.operaciones.helpers import base_payload
 
 
 class IniciarLoteRecepcionTest(TestCase):
