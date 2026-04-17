@@ -259,6 +259,13 @@
     <!-- PANEL LATERAL: bins del lote -->
     <div class="op-sidebar-panel">
       <div class="op-sidebar-title">Bins en {{ lote.lote_code }}</div>
+      {% if lote_campos_unicos_display %}
+        <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:.6rem;display:flex;flex-wrap:wrap;gap:.5rem">
+          {% for item in lote_campos_unicos_display %}
+            <span><strong>{{ item.label }}:</strong> {{ item.values }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
 
       <!-- Resumen campos base -->
       {% if campos_base %}

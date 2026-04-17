@@ -44,6 +44,10 @@ class BinRecord:
     cantidad_bins_grupo: Optional[int] = None
     tara_bin: Optional[Decimal] = None
     codigo_productor: str = ""
+    codigo_sag_csg: str = ""
+    codigo_sag_csp: str = ""
+    codigo_sdp: str = ""
+    lote_productor: str = ""
 
 
 @dataclass

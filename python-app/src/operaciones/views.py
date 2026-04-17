@@ -455,6 +455,15 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
         if lote:
             bins = self._bins_de_lote(lote)
             total_peso_neto = sum((b.kilos_neto_ingreso or 0) for b in bins)
+        lote_campos_unicos = _unique_lote_field_values(bins) if bins else {}
+        lote_campos_unicos_display = [
+            {
+                "label": label,
+                "values": ", ".join(lote_campos_unicos.get(key, [])),
+            }
+            for label, key in _MULTI_VALUE_FIELD_LABELS
+            if lote_campos_unicos.get(key)
+        ]
 
         # Pesajes parciales de cierre (acumulados en sesion)
         pesajes_cierre = request.session.get("pesajes_cierre", [])
@@ -481,6 +490,8 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "neto_acumulado": neto_acumulado,
             "bruto_acumulado": bruto_acumulado,
             "campos_base_keys": self.CAMPOS_BASE,
+            "lote_campos_unicos": lote_campos_unicos,
+            "lote_campos_unicos_display": lote_campos_unicos_display,
         }
         return render(request, self.template_name, ctx)
 
@@ -586,6 +597,11 @@ class RecepcionView(LoginRequiredMixin, RolRequiredMixin, TemplateView):
             "codigo_productor": cd.get("codigo_productor") or "",
             "tipo_cultivo": cd.get("tipo_cultivo") or "",
             "numero_cuartel": cd.get("numero_cuartel") or "",
+            "nombre_cuartel": cd.get("nombre_cuartel") or "",
+            "codigo_sag_csg": cd.get("codigo_sag_csg") or "",
+            "codigo_sag_csp": cd.get("codigo_sag_csp") or "",
+            "codigo_sdp": cd.get("codigo_sdp") or "",
+            "lote_productor": cd.get("lote_productor") or "",
             "color": cd.get("color") or "",
             "hora_recepcion": _serialize_form_value(cd["hora_recepcion"]) if cd.get("hora_recepcion") else "",
             "kilos_bruto_ingreso": float(cd["kilos_bruto_ingreso"]) if cd.get("kilos_bruto_ingreso") else None,
@@ -1130,6 +1146,7 @@ _HEREDABLE_FIELDS = (
     "codigo_sdp",
     "numero_cuartel",
     "nombre_cuartel",
+    "lote_productor",
 )
 
 
@@ -1153,6 +1170,33 @@ def _merge_bin_fields(bins: list) -> dict:
         if all(merged[f] for f in _HEREDABLE_FIELDS):
             break
     return merged
+
+
+_MULTI_VALUE_FIELDS = (
+    "codigo_sag_csg",
+    "codigo_sag_csp",
+    "codigo_sdp",
+    "nombre_cuartel",
+    "lote_productor",
+)
+_MULTI_VALUE_FIELD_LABELS = (
+    ("CSG", "codigo_sag_csg"),
+    ("CSP", "codigo_sag_csp"),
+    ("SDP", "codigo_sdp"),
+    ("Nombre Cuartel", "nombre_cuartel"),
+    ("Lote campo", "lote_productor"),
+)
+
+
+def _unique_lote_field_values(bins: list, fields=_MULTI_VALUE_FIELDS) -> dict:
+    """Devuelve, por campo, la lista ordenada de valores únicos no vacíos de los bins del lote."""
+    result = {f: [] for f in fields}
+    for b in bins:
+        for f in fields:
+            v = getattr(b, f, None)
+            if v and v not in result[f]:
+                result[f].append(v)
+    return result
 
 
 def _lotes_json_from_records(lotes, repos=None) -> str:
@@ -1296,13 +1340,27 @@ def _build_pallet_context_map_from_records(pallets, repos=None) -> dict:
     except Exception:
         todos_bins_por_lote = {}
 
+    ingreso_packing_by_lote = {}
+    for lote_id in lote_ids:
+        try:
+            ingreso = repos.ingresos_packing.find_by_lote(lote_id)
+            if ingreso:
+                ingreso_packing_by_lote[lote_id] = ingreso
+        except Exception:
+            pass
+
     for pallet in pallets:
         lote_id = pallet_to_lote.get(pallet.id)
         lote = lotes_by_id.get(lote_id)
         bins = todos_bins_por_lote.get(lote_id) or [] if lote_id else []
         merged = _merge_bin_fields(bins)
+        peso_total = data[pallet.pallet_code]["peso_total"]
+        ingreso = ingreso_packing_by_lote.get(lote_id)
+        if ingreso and ingreso.kilos_neto_ingreso_packing:
+            peso_total = float(ingreso.kilos_neto_ingreso_packing)
         data[pallet.pallet_code].update({
             "lote_code": lote.lote_code if lote else "",
+            "peso_total": peso_total,
             "productor": merged["codigo_productor"] or (getattr(lote, "codigo_productor", "") if lote else "") or "",
             "codigo_sag_csg": merged["codigo_sag_csg"] or "",
             "codigo_sag_csp": merged["codigo_sag_csp"] or "",
@@ -1416,15 +1474,21 @@ def _pallet_info(temporada: str, pallet_code: str) -> dict:
         pallet = Pallet.objects.get(temporada=temporada, pallet_code=pallet_code)
         lote_code = ""
         campos = {}
+        peso_total = None
         pl = pallet.pallet_lotes.select_related("lote").first()
         if pl:
             lote_code = pl.lote.lote_code
             campos = _campos_base_lote(pl.lote)
+            ingreso = pl.lote.ingreso_packing
+            if ingreso and ingreso.kilos_neto_ingreso_packing:
+                peso_total = float(ingreso.kilos_neto_ingreso_packing)
+        if peso_total is None:
+            peso_total = float(pallet.peso_total_kg) if pallet.peso_total_kg else None
         return {
             "pallet_code": pallet.pallet_code,
             "lote_code":   lote_code,
             "tipo_caja":   pallet.tipo_caja,
-            "peso_total":  float(pallet.peso_total_kg) if pallet.peso_total_kg else None,
+            "peso_total":  peso_total,
             **campos,
         }
     except Pallet.DoesNotExist:

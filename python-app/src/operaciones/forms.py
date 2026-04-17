@@ -159,6 +159,26 @@ class BinForm(forms.Form):
         max_length=20, required=True, label="Cuartel",
         widget=forms.TextInput(attrs={"placeholder": "C01", "autocomplete": "off"}),
     )
+    nombre_cuartel = forms.CharField(
+        max_length=100, required=True, label="Nombre Cuartel",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    codigo_sag_csg = forms.CharField(
+        max_length=50, required=True, label="CSG",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    codigo_sag_csp = forms.CharField(
+        max_length=50, required=True, label="CSP",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    codigo_sdp = forms.CharField(
+        max_length=50, required=True, label="SDP",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    lote_productor = forms.CharField(
+        max_length=100, required=True, label="Lote campo",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
     # --- Campos operativos adicionales ---
     hora_recepcion = forms.TimeField(
         required=True, label="Hora recepcion",

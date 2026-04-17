@@ -54,5 +54,10 @@ def base_payload(temporada="2026", **kwargs):
         "temporada": temporada,
         "operator_code": "OP-TEST",
         "source_system": "test",
+        "nombre_cuartel": "Cuartel Test",
+        "codigo_sag_csg": "CSG-TEST",
+        "codigo_sag_csp": "CSP-TEST",
+        "codigo_sdp": "SDP-TEST",
+        "lote_productor": "Lote-Test",
         **kwargs,
     }

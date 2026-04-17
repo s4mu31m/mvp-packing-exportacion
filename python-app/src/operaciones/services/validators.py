@@ -87,6 +87,7 @@ def validate_bin_payload(payload: dict) -> dict:
             k: payload[k]
             for k in [
                 "fecha_cosecha", "codigo_productor", "nombre_productor",
+                "codigo_sag_csg", "codigo_sag_csp", "codigo_sdp",
                 "variedad_fruta", "numero_cuartel", "nombre_cuartel",
                 "predio", "sector", "lote_productor", "color", "estado_fisico",
                 "a_o_r", "n_guia", "transporte", "capataz", "codigo_contratista",

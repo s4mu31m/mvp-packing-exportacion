@@ -45,7 +45,18 @@ def agregar_bin_a_lote_abierto(payload: dict, *, repos: Repositories | None = No
         repos = get_repositories()
 
     try:
-        require_fields(payload, ["temporada", "lote_code"])
+        require_fields(
+            payload,
+            [
+                "temporada",
+                "lote_code",
+                "nombre_cuartel",
+                "codigo_sag_csg",
+                "codigo_sag_csp",
+                "codigo_sdp",
+                "lote_productor",
+            ],
+        )
     except PayloadValidationError as exc:
         return UseCaseResult.reject(
             code="INVALID_PAYLOAD",
@@ -87,7 +98,7 @@ def agregar_bin_a_lote_abierto(payload: dict, *, repos: Repositories | None = No
     # Construir extra con todos los atributos del bin
     campos_bin = [
         "fecha_cosecha", "codigo_productor", "nombre_productor",
-        "tipo_cultivo",
+        "tipo_cultivo", "codigo_sag_csg", "codigo_sag_csp", "codigo_sdp",
         "variedad_fruta", "numero_cuartel", "nombre_cuartel",
         "predio", "sector", "lote_productor", "color", "estado_fisico",
         "a_o_r", "n_guia", "transporte", "capataz", "codigo_contratista",

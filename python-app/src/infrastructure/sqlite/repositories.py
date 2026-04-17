@@ -81,6 +81,10 @@ def _bin_to_record(obj) -> BinRecord:
         kilos_bruto_ingreso=obj.kilos_bruto_ingreso,
         kilos_neto_ingreso=obj.kilos_neto_ingreso,
         codigo_productor=obj.codigo_productor or "",
+        codigo_sag_csg=obj.codigo_sag_csg or "",
+        codigo_sag_csp=obj.codigo_sag_csp or "",
+        codigo_sdp=obj.codigo_sdp or "",
+        lote_productor=obj.lote_productor or "",
     )
 
 
